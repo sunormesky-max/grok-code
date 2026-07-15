@@ -24,12 +24,61 @@
         global.toast?.(e.message || String(e), 'err');
       }
     };
-    commands = [
+    commands = [];
+
+    // Dynamic: switch project / task
+    try {
+      const projects = global.ProjectStore?.list?.() || [];
+      for (const p of projects) {
+        commands.push({
+          id: `goto.project.${p.id}`,
+          title: t('cmd.goto.project', '项目 · {name}', { name: p.name }),
+          hint: '⌘P',
+          keywords: `project ${p.name} ${p.path} 项目 切换`,
+          group: 'nav',
+          run: run(() => {
+            if (typeof global.switchProject === 'function') global.switchProject(p.id);
+            else {
+              document.querySelector(`.project-tab[data-id="${p.id}"]`)?.click();
+            }
+          }),
+        });
+        for (const task of p.tasks || []) {
+          commands.push({
+            id: `goto.task.${p.id}.${task.id}`,
+            title: t('cmd.goto.task', '任务 · {task}  · {project}', {
+              task: task.title || task.id,
+              project: p.name,
+            }),
+            keywords: `task ${task.title} ${p.name} 任务`,
+            group: 'nav',
+            run: run(async () => {
+              if (global.ProjectStore?.activeId !== p.id) {
+                if (typeof global.switchProject === 'function') await global.switchProject(p.id);
+                else document.querySelector(`.project-tab[data-id="${p.id}"]`)?.click();
+              }
+              global.TaskStore?.setActive?.(task.id);
+              if (typeof global.renderTaskTabs === 'function') global.renderTaskTabs();
+              if (typeof global.syncComposerToTask === 'function') {
+                const tsk = global.TaskStore?.get?.(task.id);
+                if (tsk) global.syncComposerToTask(tsk);
+              }
+              document.getElementById('prompt')?.focus();
+            }),
+          });
+        }
+      }
+    } catch {
+      /* ignore */
+    }
+
+    commands.push(
       {
         id: 'project.open',
         title: t('cmd.project.open', '添加项目'),
         hint: 'Ctrl+O',
         keywords: 'open project workspace folder 项目',
+        group: 'actions',
         run: run(() => document.getElementById('btnOpen')?.click()),
       },
       {
@@ -192,11 +241,12 @@
         id: 'docs.repo',
         title: t('cmd.docs.repo', '打开 GitHub 仓库'),
         keywords: 'github repo',
+        group: 'actions',
         run: run(() =>
           window.grok?.openExternal?.('https://github.com/sunormesky-max/grok-code')
         ),
-      },
-    ];
+      }
+    );
   }
 
   let activeIdx = 0;
@@ -273,17 +323,28 @@
       list.innerHTML = `<div class="cmd-empty">${esc(t('cmd.empty', '无匹配命令'))}</div>`;
       return;
     }
-    list.innerHTML = filtered
-      .map(
-        (c, i) => `
+    // group headers
+    let html = '';
+    let lastGroup = null;
+    filtered.forEach((c, i) => {
+      const g = c.group || 'actions';
+      if (g !== lastGroup) {
+        lastGroup = g;
+        const label =
+          g === 'nav'
+            ? t('cmd.group.nav', '导航')
+            : t('cmd.group.actions', '操作');
+        html += `<div class="cmd-group">${esc(label)}</div>`;
+      }
+      html += `
       <button type="button" class="cmd-item${i === activeIdx ? ' active' : ''}" data-idx="${i}" role="option" aria-selected="${
-          i === activeIdx
-        }">
+        i === activeIdx
+      }">
         <span class="cmd-title">${esc(c.title)}</span>
         ${c.hint ? `<span class="cmd-hint">${esc(c.hint)}</span>` : ''}
-      </button>`
-      )
-      .join('');
+      </button>`;
+    });
+    list.innerHTML = html;
     list.querySelectorAll('.cmd-item').forEach((btn) => {
       btn.onmouseenter = () => {
         activeIdx = Number(btn.dataset.idx);

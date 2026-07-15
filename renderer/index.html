@@ -6,6 +6,7 @@
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'; img-src 'self' data:;" />
   <title>GrokCode</title>
   <link rel="stylesheet" href="styles.css" />
+  <link rel="stylesheet" href="ui-polish.css" />
 </head>
 <body class="theme-grok booting">
   <a class="skip-link" href="#app" data-i18n="a11y.skip">跳到主内容</a>
@@ -460,17 +461,17 @@
         </div>
 
         <label class="field">
-          <span>Grok 可执行文件路径 <em>可留空自动检测</em></span>
+          <span data-i18n="cfg.grokPath">Grok 可执行文件路径 <em>可留空自动检测</em></span>
           <input type="text" id="cfgGrokPath" placeholder="C:\Users\你\.grok\bin\grok.exe" />
         </label>
 
         <div class="field-row">
           <label class="field">
-            <span>模型 <em>留空=CLI 默认</em></span>
+            <span data-i18n="cfg.model">模型 <em>留空=CLI 默认</em></span>
             <input type="text" id="cfgModel" placeholder="grok-build / grok-4.5" />
           </label>
           <label class="field">
-            <span>最大回合</span>
+            <span data-i18n="cfg.rounds">最大回合</span>
             <input type="number" id="cfgRounds" min="1" max="100" value="30" />
           </label>
         </div>
@@ -478,38 +479,38 @@
         <label class="field check">
           <input type="checkbox" id="cfgYolo" checked />
           <span>
-            <strong>自动批准工具</strong>
-            <small>--always-approve（YOLO · 全速前进）</small>
+            <strong data-i18n="cfg.yolo">自动批准工具</strong>
+            <small>--always-approve（YOLO）</small>
           </span>
         </label>
 
         <label class="field">
-          <span>附加规则 <em>--rules</em></span>
-          <textarea id="cfgRules" rows="3" placeholder="例如：优先中文回复；不要 git commit"></textarea>
+          <span data-i18n="cfg.rules">附加规则 <em>--rules</em></span>
+          <textarea id="cfgRules" rows="3" data-i18n-placeholder="cfg.rules.ph" placeholder="例如：优先中文回复；不要 git commit"></textarea>
         </label>
 
         <label class="field">
-          <span>XAI_API_KEY <em>可选</em></span>
+          <span data-i18n="cfg.apikey">XAI_API_KEY <em>可选</em></span>
           <input type="password" id="cfgApiKey" placeholder="xai-… 或留空使用 grok login" />
-          <small>密钥：<a href="#" id="linkConsole">console.x.ai</a> · 本机：<code>grok login</code></small>
+          <small data-i18n="cfg.apikey.hint">密钥：console.x.ai · 本机：grok login</small>
         </label>
 
         <div class="field-row">
           <label class="field">
-            <span>上下文压缩 <em>L1/L2</em></span>
+            <span data-i18n="cfg.context">上下文压缩 <em>L1/L2</em></span>
             <select id="cfgContextMode">
-              <option value="heuristic">启发式（离线、默认）</option>
-              <option value="llm">LLM 摘要（需 API Key）</option>
+              <option value="heuristic" data-i18n="cfg.context.heuristic">启发式（离线、默认）</option>
+              <option value="llm" data-i18n="cfg.context.llm">LLM 摘要（需 API Key）</option>
             </select>
-            <small>LLM 模式会额外调用 xAI 精炼近端摘要与会话脉络</small>
+            <small data-i18n="cfg.context.hint">LLM 模式会额外调用 xAI 精炼近端摘要与会话脉络</small>
           </label>
           <label class="field">
-            <span>外部编辑器</span>
+            <span data-i18n="cfg.editor">外部编辑器</span>
             <select id="cfgPreferredEditor">
-              <option value="auto">自动（Cursor → VS Code）</option>
+              <option value="auto" data-i18n="cfg.editor.auto">自动（Cursor → VS Code）</option>
               <option value="cursor">Cursor</option>
               <option value="code">VS Code</option>
-              <option value="system">系统默认</option>
+              <option value="system" data-i18n="cfg.editor.system">系统默认</option>
             </select>
           </label>
         </div>
@@ -517,31 +518,31 @@
         <label class="field check">
           <input type="checkbox" id="cfgAutoUpdate" checked />
           <span>
-            <strong>自动检查更新</strong>
-            <small>从 GitHub Releases 拉取（仅安装版）</small>
+            <strong data-i18n="cfg.autoupdate">自动检查更新</strong>
+            <small data-i18n="cfg.autoupdate.hint">从 GitHub Releases 拉取（仅安装版）</small>
           </span>
         </label>
 
         <div class="diag-box">
           <div class="diag-head">
-            <strong>环境体检 / 诊断</strong>
+            <strong data-i18n="cfg.doctor">环境体检 / 诊断</strong>
             <span class="muted" id="appVersionLabel"></span>
           </div>
           <div class="diag-actions">
-            <button type="button" class="btn small ghost" id="btnRunDoctor">一键体检</button>
-            <button type="button" class="btn small ghost" id="btnExportDiag">导出诊断包</button>
-            <button type="button" class="btn small ghost" id="btnShowOnboarding">首启向导</button>
+            <button type="button" class="btn small ghost" id="btnRunDoctor" data-i18n="cfg.doctor.run">一键体检</button>
+            <button type="button" class="btn small ghost" id="btnExportDiag" data-i18n="cfg.doctor.export">导出诊断包</button>
+            <button type="button" class="btn small ghost" id="btnShowOnboarding" data-i18n="cfg.doctor.onb">首启向导</button>
           </div>
           <div id="doctorResults" class="doctor-results"></div>
         </div>
 
         <div class="diag-box">
           <div class="diag-head">
-            <strong>软件更新</strong>
+            <strong data-i18n="cfg.update">软件更新</strong>
           </div>
           <div class="diag-actions">
-            <button type="button" class="btn small ghost" id="btnCheckUpdate">检查更新</button>
-            <button type="button" class="btn small primary hidden" id="btnUpdateInstall">重启并安装</button>
+            <button type="button" class="btn small ghost" id="btnCheckUpdate" data-i18n="cfg.update.check">检查更新</button>
+            <button type="button" class="btn small primary hidden" id="btnUpdateInstall" data-i18n="cfg.update.install">重启并安装</button>
           </div>
           <div class="update-status" id="updateStatusText">—</div>
         </div>
@@ -552,12 +553,12 @@
             <button type="button" class="btn small ghost" id="btnProfileExport" data-i18n="profile.export">导出项目配置</button>
             <button type="button" class="btn small ghost" id="btnProfileImport" data-i18n="profile.import">导入项目配置</button>
           </div>
-          <small class="muted">导出规则 / 模型 / 上下文模式等，便于团队共享「飞行配置」</small>
+          <small class="muted" data-i18n="profile.hint">导出规则 / 模型 / 上下文模式等，便于团队共享</small>
         </div>
 
         <div class="modal-foot">
-          <button class="btn ghost" id="btnProbeCli">重新检测</button>
-          <button class="btn primary" id="btnSaveSettings">保存设置</button>
+          <button class="btn ghost" id="btnProbeCli" data-i18n="cfg.probe">重新检测</button>
+          <button class="btn primary" id="btnSaveSettings" data-i18n="cfg.save">保存设置</button>
         </div>
       </div>
 

@@ -125,6 +125,10 @@ async function init() {
   renderContextTiers(T());
   bindPersistHooks();
 
+  // 暴露给命令面板
+  window.switchProject = switchProject;
+  window.renderTaskTabs = renderTaskTabs;
+
   // i18n + theme first paint
   try {
     window.GrokI18n?.applyDom?.();
@@ -473,6 +477,8 @@ function renderProjectTabs() {
 }
 
 async function switchProject(id) {
+  // 供命令面板等模块调用
+  window.switchProject = switchProject;
   // 保存当前项目的 Live / Code / Diff 视图状态
   snapshotActiveProjectView();
 

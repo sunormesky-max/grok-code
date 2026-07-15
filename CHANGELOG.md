@@ -11,6 +11,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 - See [ROADMAP.md](ROADMAP.md)
 
+## [1.2.4] — 2026-07-16
+
+### Added / UI
+
+- **UI polish layer** (`ui-polish.css`): glass edges, tab chips, composer glow, message cards, scrollbars, settings modal
+- **Command palette** navigates open **projects & tasks** (grouped “Navigate / Actions”)
+- Settings general form **full i18n** (labels, options, doctor/update actions)
+
 ## [1.2.3] — 2026-07-16
 
 ### Added
@@ -103,7 +111,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Requires installed Grok CLI + auth (`grok login` or `XAI_API_KEY`)
 - YOLO / always-approve is full workspace trust
 
-[Unreleased]: https://github.com/sunormesky-max/grok-code/compare/v1.2.3...HEAD
+[Unreleased]: https://github.com/sunormesky-max/grok-code/compare/v1.2.4...HEAD
+[1.2.4]: https://github.com/sunormesky-max/grok-code/compare/v1.2.3...v1.2.4
 [1.2.3]: https://github.com/sunormesky-max/grok-code/compare/v1.2.2...v1.2.3
 [1.2.2]: https://github.com/sunormesky-max/grok-code/compare/v1.2.1...v1.2.2
 [1.2.1]: https://github.com/sunormesky-max/grok-code/compare/v1.2.0...v1.2.1
