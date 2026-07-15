@@ -37,11 +37,12 @@
 ## Quick start
 
 ```bash
-git clone https://github.com/<YOUR_GITHUB_USER>/grok-code.git
+git clone https://github.com/sunormesky-max/grok-code.git
 cd grok-code
 npm install
 npm start
 ```
+
 
 1. **＋ 项目** — open one or more workspaces  
 2. Confirm **CLI** is online in the title bar  
