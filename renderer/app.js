@@ -1,7 +1,16 @@
-/* GrokCode 渲染进程 — UI 美化 + 性能优化 */
+/* GrokCode 渲染进程 — 主 UI 编排
+ * 模块拆分：utils / onboarding / settings-extra / external-editor-ui / projects / tasks / diff-util
+ */
 
 const $ = (sel) => document.querySelector(sel);
 const $$ = (sel) => [...document.querySelectorAll(sel)];
+const U = window.GrokUtils || {};
+const esc = U.esc || ((s) => String(s ?? ''));
+const cssEscape = U.cssEscape || ((s) => String(s));
+const loadJson = U.loadJson || ((_, fb) => fb);
+const saveJson = U.saveJson || (() => {});
+const formatBytes = U.formatBytes || ((n) => n + ' B');
+const renderMarkdown = U.renderMarkdown || ((s) => esc(s));
 
 const LAYOUT_KEY = 'grokcode-layout-v1';
 const TERM_HIST_KEY = 'grokcode-term-hist';
@@ -113,6 +122,33 @@ async function init() {
   refreshTaskQueueHint();
   renderContextTiers(T());
   bindPersistHooks();
+
+  // 首启向导（boot 结束后再弹，避免叠层）
+  const showOnb = () => {
+    try {
+      window.GrokOnboarding?.maybeShow?.();
+    } catch (e) {
+      console.warn('onboarding', e);
+    }
+  };
+  if (document.body.classList.contains('booted') || !document.getElementById('bootScreen')) {
+    setTimeout(showOnb, 200);
+  } else {
+    window.addEventListener('grok:booted', () => setTimeout(showOnb, 150), { once: true });
+  }
+
+  // 项目从向导打开时刷新 UI
+  window.addEventListener('grok:project-opened', async (e) => {
+    const info = e.detail;
+    if (!info) return;
+    window.ProjectStore.add(info);
+    window.ProjectStore.setActive(info.id);
+    setWorkspaceLabel(info.path);
+    ensureAtLeastOneTask();
+    await loadTree();
+    renderProjectTabs();
+    renderTaskTabs();
+  });
 }
 
 // ── 持久化 + 四档上下文 ─────────────────────────────────
@@ -318,6 +354,12 @@ function renderContextTiers(task) {
     return;
   }
   const c = task.context || {};
+  const modeHint =
+    c.mode === 'llm'
+      ? '<div class="muted" style="margin-bottom:6px;font-size:11px">模式：LLM 摘要</div>'
+      : c.llm && c.llm.used === false && c.llm.reason
+        ? `<div class="muted" style="margin-bottom:6px;font-size:11px">模式：启发式（LLM 未用：${esc(String(c.llm.reason).slice(0, 40))}）</div>`
+        : '';
   const tiers = task.contextTiers || c.tiers || [
     { id: 'L0', name: '即时原文', chars: 0 },
     { id: 'L1', name: '近端摘要', chars: (c.l1 || '').length },
@@ -335,16 +377,18 @@ function renderContextTiers(task) {
     if (id === 'L3') return c.l3 || '（空）';
     return '';
   };
-  host.innerHTML = tiers
-    .map((t) => {
-      const chars = t.chars ?? bodyOf(t.id).length;
-      return `<div class="tier-card" data-tier="${t.id}">
+  host.innerHTML =
+    modeHint +
+    tiers
+      .map((t) => {
+        const chars = t.chars ?? bodyOf(t.id).length;
+        return `<div class="tier-card" data-tier="${t.id}">
         <div><span class="tier-id">${t.id}</span><span class="tier-name">${esc(t.name || t.id)}</span></div>
         <div class="tier-meta">${chars} chars${t.count != null ? ` · ${t.count} msgs` : ''} · ${esc(t.desc || '')}</div>
         <div class="tier-body"></div>
       </div>`;
-    })
-    .join('');
+      })
+      .join('');
   host.querySelectorAll('.tier-card').forEach((card) => {
     card.onclick = () => {
       const open = card.classList.toggle('open');
@@ -766,22 +810,6 @@ function syncMaxBtn(maximized) {
   btn.classList.toggle('is-max', Boolean(maximized));
 }
 
-function loadJson(key, fallback) {
-  try {
-    return JSON.parse(localStorage.getItem(key)) ?? fallback;
-  } catch {
-    return fallback;
-  }
-}
-
-function saveJson(key, val) {
-  try {
-    localStorage.setItem(key, JSON.stringify(val));
-  } catch {
-    /* ignore */
-  }
-}
-
 function restoreLayout() {
   const L = loadJson(LAYOUT_KEY, null);
   if (!L) return;
@@ -1081,21 +1109,24 @@ function setWorkspaceLabel(dir) {
 function setCliLabel(probe) {
   const pill = $('#cliPill');
   const label = $('#cliLabel');
+  if (!pill || !label) return;
   if (probe?.ok) {
     const ver = (probe.version || 'CLI 已连接').replace(/^grok\s+/i, 'v');
     label.textContent = ver;
     pill.classList.add('open');
     pill.classList.remove('err');
     pill.title = probe.binary || '';
-    $('#sbCli').textContent = probe.version || 'CLI OK';
+    if ($('#sbCli')) $('#sbCli').textContent = probe.version || 'CLI OK';
   } else {
     label.textContent = 'CLI 未找到';
     pill.classList.remove('open');
     pill.classList.add('err');
     pill.title = probe?.error || '';
-    $('#sbCli').textContent = 'CLI 离线';
+    if ($('#sbCli')) $('#sbCli').textContent = 'CLI 离线';
   }
 }
+// 供 settings-extra / 体检 回写顶栏
+window.setCliLabelFromProbe = setCliLabel;
 
 async function loadTree() {
   const root = $('#fileTree');
@@ -1268,6 +1299,7 @@ function updateEditorChrome() {
   $('#dirtyBadge').classList.toggle('hidden', !(P() && P().dirty));
   const hasDiff = hasFile && changesMap().has((P() && P().currentFile));
   if ($('#btnRevealDiff')) $('#btnRevealDiff').disabled = !hasDiff;
+  if ($('#btnOpenExternalCode')) $('#btnOpenExternalCode').disabled = !hasFile;
 
   if (hasFile) {
     $('#editorEmpty')?.classList.add('hidden');
@@ -1281,12 +1313,6 @@ function updateEditorChrome() {
     if (onCode) $('#editorEmpty')?.classList.remove('hidden');
     else $('#editorEmpty')?.classList.add('hidden');
   }
-}
-
-function formatBytes(n) {
-  if (n < 1024) return n + ' B';
-  if (n < 1024 * 1024) return (n / 1024).toFixed(1) + ' KB';
-  return (n / 1024 / 1024).toFixed(1) + ' MB';
 }
 
 function syncGutter() {
@@ -1670,6 +1696,7 @@ function renderDiffPane() {
 
 function setDiffActionsEnabled(on) {
   if ($('#btnOpenFromDiff')) $('#btnOpenFromDiff').disabled = !on;
+  if ($('#btnOpenExternal')) $('#btnOpenExternal').disabled = !on;
   if ($('#btnRestoreFile')) $('#btnRestoreFile').disabled = !on;
   if ($('#btnDismissDiff')) $('#btnDismissDiff').disabled = !on;
 }
@@ -2158,6 +2185,21 @@ async function sendPrompt() {
 
   const text = $('#prompt').value.trim();
   if (!text) return;
+  await runTaskPrompt(task, text, { fromComposer: true });
+}
+
+/**
+ * 执行任务提示（支持重试 / 跳过 resume）
+ * @param {object} task
+ * @param {string} text
+ * @param {{ fromComposer?: boolean, skipResume?: boolean, resetSession?: boolean }} opts
+ */
+async function runTaskPrompt(task, text, opts = {}) {
+  if (!task || !text) return;
+  if (task.running) {
+    toast('当前任务正在运行', 'err');
+    return;
+  }
 
   const cfg = await window.grok.getConfig();
   if (!P()) {
@@ -2168,11 +2210,12 @@ async function sendPrompt() {
   if (!cfg.cli?.ok) {
     appendMessage(
       'assistant',
-      'Grok CLI 不可用。请安装 Grok Build，或在「设置」中填写 grok 路径。未登录可执行 `grok login`。',
+      'Grok CLI 不可用。请安装 Grok Build，或在「设置」中填写 grok 路径。未登录可执行 `grok login`。\n可点设置 → 一键体检。',
       {},
       task
     );
     openSettings();
+    window.GrokSettingsExtra?.runDoctorUi?.();
     return;
   }
 
@@ -2185,11 +2228,20 @@ async function sendPrompt() {
     if (named) task.title = named;
   }
 
-  $('#prompt').value = '';
-  autoResizePrompt();
-  updateCharCount();
-  appendMessage('user', text, { persist: true }, task);
+  if (opts.fromComposer) {
+    $('#prompt').value = '';
+    autoResizePrompt();
+    updateCharCount();
+  }
 
+  // 重试时不重复追加相同 user 消息
+  const lastUser = [...(task.messages || [])].reverse().find((m) => m.role === 'user');
+  const skipUserAppend = opts.skipResume || opts.isRetry;
+  if (!skipUserAppend || !lastUser || lastUser.content !== text) {
+    appendMessage('user', text, { persist: true }, task);
+  }
+
+  task.lastPrompt = text;
   task.running = true;
   task.turnId = `turn-${Date.now()}`;
   task.streamBuf = '';
@@ -2197,6 +2249,7 @@ async function sendPrompt() {
   task.liveAssistantEl = null;
   task.liveThoughtEl = null;
   task.toolCount = 0;
+  task.lastError = null;
   setRunningUi(true);
   setAgentStatus('grokking…', true);
   startElapsed(task);
@@ -2204,7 +2257,11 @@ async function sendPrompt() {
   renderTaskTabs();
 
   if (state.followAgent || state.activeTab === 'live') switchTab('live');
-  pushLiveEvent({ kind: 'status', title: `${task.title} 开始`, sub: text.slice(0, 100) });
+  pushLiveEvent({
+    kind: 'status',
+    title: `${task.title} ${opts.isRetry ? '重试' : '开始'}`,
+    sub: text.slice(0, 100),
+  });
   setLivePhase('grokking…', `${task.title}: ${text.slice(0, 60)}`);
   updateLiveStats();
 
@@ -2215,10 +2272,13 @@ async function sendPrompt() {
       message: text,
       projectId: pid(),
       taskId: task.id,
-      sessionId: task.sessionId,
+      sessionId: opts.resetSession || opts.skipResume ? null : task.sessionId,
+      resetSession: Boolean(opts.resetSession),
+      skipResume: Boolean(opts.skipResume),
       taskTitle: task.title,
       messages: task.messages || [],
       prevContext: task.context || null,
+      contextMode: cfg.contextMode,
     });
     flushStreamPaint(task);
 
@@ -2228,10 +2288,12 @@ async function sendPrompt() {
       task.context = result.context;
       task.contextTiers = result.contextTiers || result.context.tiers;
     }
+    if (result?.resumedFallback) {
+      toast('原会话已失效，已自动无 resume 重跑', 'ok');
+    }
     if (finalText) {
       task.streamBuf = finalText;
       upsertAssistant(finalText, true, task);
-      // 写入消息日志（assistant）
       if (!Array.isArray(task.messages)) task.messages = [];
       task.messages.push({ role: 'assistant', content: finalText, ts: Date.now() });
     } else if (!result?.stopped) {
@@ -2242,13 +2304,16 @@ async function sendPrompt() {
     schedulePersist(true);
     if (isActiveTask(task)) renderContextTiers(task);
   } catch (err) {
-    upsertAssistant(`错误：${err.message || err}`, true, task);
+    const msg = err.message || String(err);
+    task.lastError = msg;
+    upsertAssistant(`错误：${msg}`, true, task);
     finalizeLiveMessages(task);
+    appendRetryBar(task, text, msg);
     if (isActiveTask(task)) {
       setAgentStatus('出错', false, true);
-      setLivePhase('出错', err.message || String(err));
+      setLivePhase('出错', msg);
     }
-    toast(err.message || '运行失败', 'err');
+    toast(msg || '运行失败', 'err');
   } finally {
     clearInterval(liveTick);
     task.running = false;
@@ -2279,6 +2344,40 @@ async function sendPrompt() {
     updateLiveStats();
     scheduleTreeRefresh(true);
   }
+}
+
+/** 失败后可一键重试 / 清空 session 重试 / 导出诊断 */
+function appendRetryBar(task, promptText, errMsg) {
+  if (!task?.pane) return;
+  task.pane.querySelectorAll('.retry-bar').forEach((el) => el.remove());
+  const bar = document.createElement('div');
+  bar.className = 'retry-bar';
+  bar.innerHTML = `
+    <span class="retry-hint">运行失败，可选恢复动作</span>
+    <div class="retry-actions">
+      <button type="button" class="btn small primary" data-act="retry">重试</button>
+      <button type="button" class="btn small ghost" data-act="fresh">新会话重试</button>
+      <button type="button" class="btn small ghost" data-act="diag">导出诊断</button>
+    </div>`;
+  bar.querySelector('[data-act="retry"]').onclick = () => {
+    bar.remove();
+    runTaskPrompt(task, promptText, { isRetry: true, skipResume: false });
+  };
+  bar.querySelector('[data-act="fresh"]').onclick = async () => {
+    bar.remove();
+    try {
+      await window.grok.clearSession({ projectId: task.projectId, taskId: task.id });
+    } catch {
+      /* ignore */
+    }
+    task.sessionId = null;
+    runTaskPrompt(task, promptText, { isRetry: true, skipResume: true, resetSession: true });
+  };
+  bar.querySelector('[data-act="diag"]').onclick = () => {
+    window.GrokSettingsExtra?.exportDiag?.();
+  };
+  task.pane.appendChild(bar);
+  scrollMessages(true, task);
 }
 
 async function stopAgent() {
@@ -2551,50 +2650,7 @@ function summarizeArgs(name, args = {}) {
   return args;
 }
 
-// ── Lightweight markdown ────────────────────────────────
-function renderMarkdown(src) {
-  let s = esc(src || '');
-  // fenced code
-  s = s.replace(/```(\w*)\n([\s\S]*?)```/g, (_, lang, code) => {
-    return `<pre><code class="lang-${esc(lang)}">${code.replace(/\n$/, '')}</code></pre>`;
-  });
-  // inline code
-  s = s.replace(/`([^`\n]+)`/g, '<code>$1</code>');
-  // bold / italic
-  s = s.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
-  s = s.replace(/\*([^*\n]+)\*/g, '<em>$1</em>');
-  // links
-  s = s.replace(/\[([^\]]+)\]\((https?:[^)]+)\)/g, '<a href="$2" data-ext="$2">$1</a>');
-  // lists
-  s = s.replace(/(^|\n)(?:- |\* )(.+)/g, '$1• $2');
-  // paragraphs
-  s = s
-    .split(/\n{2,}/)
-    .map((block) => {
-      if (block.startsWith('<pre>')) return block;
-      return `<p>${block.replace(/\n/g, '<br>')}</p>`;
-    })
-    .join('');
-  // defer external link clicks
-  queueMicrotask(() => {
-    $$('.msg .body.md a[data-ext]').forEach((a) => {
-      if (a.dataset.bound) return;
-      a.dataset.bound = '1';
-      a.onclick = (e) => {
-        e.preventDefault();
-        window.grok.openExternal(a.dataset.ext);
-      };
-    });
-  });
-  return s;
-}
-
-function cssEscape(s) {
-  if (window.CSS?.escape) return CSS.escape(String(s));
-  return String(s).replace(/"/g, '\\"');
-}
-
-// ── Settings / toast ────────────────────────────────────
+// ── Settings ────────────────────────────────────────────
 function openSettings() {
   refreshConfigUi();
   // 默认打开通用页
@@ -2644,6 +2700,8 @@ async function refreshConfigUi() {
   $('#cfgYolo').checked = cfg.alwaysApprove !== false;
   $('#cfgRules').value = cfg.rules || '';
 
+  window.GrokSettingsExtra?.fillFromConfig?.(cfg);
+
   if (cfg.workspace) {
     state.workspace = cfg.workspace;
     setWorkspaceLabel(cfg.workspace);
@@ -2657,6 +2715,7 @@ async function saveSettings() {
     maxTurns: Number($('#cfgRounds').value) || 30,
     alwaysApprove: $('#cfgYolo').checked,
     rules: $('#cfgRules').value,
+    ...(window.GrokSettingsExtra?.collectPartial?.() || {}),
   };
   const key = $('#cfgApiKey').value.trim();
   if (key) partial.apiKey = key;
@@ -2666,31 +2725,8 @@ async function saveSettings() {
   toast('设置已保存', 'ok');
 }
 
-function toast(msg, type = '') {
-  const host = $('#toasts');
-  if (!host) {
-    console.log(msg);
-    return;
-  }
-  const el = document.createElement('div');
-  el.className = 'toast' + (type ? ' ' + type : '');
-  el.textContent = msg;
-  host.appendChild(el);
-  setTimeout(() => {
-    el.classList.add('out');
-    setTimeout(() => el.remove(), 250);
-  }, 2600);
-}
-// 供 settings-mcp-skills.js 使用
+const toast = U.toast || window.toast || ((msg) => console.log(msg));
 window.toast = toast;
-
-function esc(s) {
-  return String(s)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
-}
 
 init().catch((err) => {
   console.error(err);

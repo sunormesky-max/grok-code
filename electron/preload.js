@@ -4,6 +4,7 @@ contextBridge.exposeInMainWorld('grok', {
   getConfig: () => ipcRenderer.invoke('config:get'),
   setConfig: (partial) => ipcRenderer.invoke('config:set', partial),
   probeCli: () => ipcRenderer.invoke('cli:probe'),
+  getAppVersion: () => ipcRenderer.invoke('app:getVersion'),
 
   // 多项目
   projectList: () => ipcRenderer.invoke('project:list'),
@@ -51,6 +52,20 @@ contextBridge.exposeInMainWorld('grok', {
   persistRoot: () => ipcRenderer.invoke('persist:root'),
   compressContext: (payload) => ipcRenderer.invoke('context:compress', payload),
 
+  // 体检 / 诊断
+  doctorRun: () => ipcRenderer.invoke('doctor:run'),
+  doctorExport: () => ipcRenderer.invoke('doctor:export'),
+
+  // 外部编辑器
+  openInEditor: (payload) => ipcRenderer.invoke('editor:open', payload || {}),
+  resolveEditor: () => ipcRenderer.invoke('editor:resolve'),
+
+  // 更新
+  updateStatus: () => ipcRenderer.invoke('update:status'),
+  updateCheck: () => ipcRenderer.invoke('update:check'),
+  updateDownload: () => ipcRenderer.invoke('update:download'),
+  updateInstall: () => ipcRenderer.invoke('update:install'),
+
   // MCP
   mcpList: () => ipcRenderer.invoke('mcp:list'),
   mcpAdd: (payload) => ipcRenderer.invoke('mcp:add', payload),
@@ -81,6 +96,7 @@ contextBridge.exposeInMainWorld('grok', {
       'agent:cli',
       'fs:changed',
       'window:maximized',
+      'update:status',
     ];
     if (!allowed.includes(channel)) return () => {};
     const handler = (_event, data) => callback(data);

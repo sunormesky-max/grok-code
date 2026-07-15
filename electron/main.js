@@ -7,6 +7,10 @@ const { createTools } = require('./tools');
 const { resolveGrokBinary, probeGrok } = require('./grok-cli');
 const { createPersist } = require('./persist');
 const { compressContext, buildContextPrompt } = require('./context-compress');
+const { enrichContextWithLlm } = require('./context-llm');
+const { runDoctor, exportDiagnostics } = require('./diagnostics');
+const { openInExternalEditor, resolveEditorBinary } = require('./external-editor');
+const updater = require('./updater');
 const mcpSkills = require('./mcp-skills');
 
 const persist = createPersist();
@@ -28,6 +32,14 @@ const store = new Store({
     sessions: {},
     /** projectPath -> { taskId: sessionId } */
     taskSessions: {},
+    /** 首启向导是否完成 */
+    onboardingDone: false,
+    /** heuristic | llm — L1/L2 压缩模式 */
+    contextMode: 'heuristic',
+    /** auto | code | cursor | system */
+    preferredEditor: 'auto',
+    /** 是否允许自动检查更新 */
+    autoUpdate: true,
   },
 });
 
@@ -61,7 +73,30 @@ function getConfig() {
     alwaysApprove: store.get('alwaysApprove'),
     maxTurns: store.get('maxTurns'),
     rules: store.get('rules'),
+    contextMode: store.get('contextMode') || 'heuristic',
+    preferredEditor: store.get('preferredEditor') || 'auto',
+    autoUpdate: store.get('autoUpdate') !== false,
   };
+}
+
+async function compressWithMode(messages, opts = {}) {
+  let context = compressContext(messages, {
+    prev: opts.prevContext || {},
+    projectName: opts.projectName || '',
+  });
+  const mode = opts.contextMode || store.get('contextMode') || 'heuristic';
+  if (mode === 'llm') {
+    const cfg = getConfig();
+    context = await enrichContextWithLlm(context, {
+      apiKey: cfg.apiKey,
+      model: opts.llmModel || cfg.model || undefined,
+      projectName: opts.projectName,
+      taskTitle: opts.taskTitle,
+    });
+  } else {
+    context.mode = 'heuristic';
+  }
+  return context;
 }
 
 function basename(p) {
@@ -253,6 +288,15 @@ app.whenReady().then(() => {
     }
   }
 
+  // 自动更新（仅打包后）
+  if (store.get('autoUpdate') !== false) {
+    try {
+      updater.initUpdater({ checkOnStart: true, autoDownload: true });
+    } catch (e) {
+      console.warn('updater init', e);
+    }
+  }
+
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });
@@ -277,6 +321,11 @@ ipcMain.handle('config:get', () => {
     recentProjects: store.get('recentProjects') || [],
     cli: probe,
     resolvedGrok: resolveGrokBinary(store.get('grokPath')),
+    onboardingDone: Boolean(store.get('onboardingDone')),
+    contextMode: store.get('contextMode') || 'heuristic',
+    preferredEditor: store.get('preferredEditor') || 'auto',
+    autoUpdate: store.get('autoUpdate') !== false,
+    appVersion: app.getVersion(),
   };
 });
 
@@ -289,10 +338,80 @@ ipcMain.handle('config:set', (_e, partial) => {
   if (partial.alwaysApprove !== undefined) store.set('alwaysApprove', Boolean(partial.alwaysApprove));
   if (partial.maxTurns !== undefined) store.set('maxTurns', Number(partial.maxTurns) || 30);
   if (partial.rules !== undefined) store.set('rules', String(partial.rules));
+  if (partial.onboardingDone !== undefined) store.set('onboardingDone', Boolean(partial.onboardingDone));
+  if (partial.contextMode !== undefined) {
+    const m = String(partial.contextMode) === 'llm' ? 'llm' : 'heuristic';
+    store.set('contextMode', m);
+  }
+  if (partial.preferredEditor !== undefined) {
+    const pe = String(partial.preferredEditor);
+    store.set(
+      'preferredEditor',
+      ['auto', 'code', 'cursor', 'system'].includes(pe) ? pe : 'auto'
+    );
+  }
+  if (partial.autoUpdate !== undefined) store.set('autoUpdate', Boolean(partial.autoUpdate));
   return true;
 });
 
 ipcMain.handle('cli:probe', () => probeGrok(store.get('grokPath')));
+
+// ── 体检 / 诊断 / 首启 ──────────────────────────────────
+ipcMain.handle('doctor:run', () => {
+  return runDoctor(getConfig());
+});
+
+ipcMain.handle('doctor:export', async (e) => {
+  const running = [];
+  for (const p of projects.values()) {
+    for (const tid of p.agent.listRunning()) {
+      running.push({ projectId: p.id, taskId: tid, projectName: p.name });
+    }
+  }
+  const result = exportDiagnostics(getConfig(), {
+    recentProjects: store.get('recentProjects') || [],
+    runningAgents: running,
+  });
+  if (result.ok && result.dir) {
+    try {
+      shell.openPath(result.dir);
+    } catch {
+      /* ignore */
+    }
+  }
+  return result;
+});
+
+ipcMain.handle('app:getVersion', () => app.getVersion());
+
+// ── 外部编辑器 ──────────────────────────────────────────
+ipcMain.handle('editor:open', (_e, payload = {}) => {
+  const preferred = payload.preferred || store.get('preferredEditor') || 'auto';
+  let abs = payload.absPath || payload.path;
+  if (!abs && payload.projectId && payload.relPath) {
+    const p = projects.get(payload.projectId);
+    if (p) abs = path.join(p.path, payload.relPath);
+  }
+  if (!abs) throw new Error('缺少路径');
+  let workspaceRoot = payload.workspaceRoot;
+  if (!workspaceRoot && payload.projectId) {
+    workspaceRoot = projects.get(payload.projectId)?.path;
+  }
+  return openInExternalEditor(abs, {
+    line: payload.line,
+    column: payload.column,
+    preferred,
+    workspaceRoot,
+  });
+});
+
+ipcMain.handle('editor:resolve', () => resolveEditorBinary(store.get('preferredEditor') || 'auto'));
+
+// ── 自动更新 ────────────────────────────────────────────
+ipcMain.handle('update:status', () => updater.getStatus());
+ipcMain.handle('update:check', () => updater.checkForUpdates());
+ipcMain.handle('update:download', () => updater.downloadUpdate());
+ipcMain.handle('update:install', () => updater.quitAndInstall());
 
 // ── Projects（多项目并行） ──────────────────────────────
 ipcMain.handle('project:list', () => [...projects.values()].map(publicProject));
@@ -456,10 +575,22 @@ ipcMain.handle('agent:run', async (_e, payload) => {
     }
   }
 
-  const context = compressContext(history, {
-    prev: prevContext || {},
-    projectName: p.name,
-  });
+  const skipResume = Boolean(payload?.skipResume);
+  const effectiveSession = skipResume ? null : sessionId;
+
+  let context;
+  try {
+    context = await compressWithMode(history, {
+      prevContext: prevContext || {},
+      projectName: p.name,
+      taskTitle: taskTitle || tid,
+      contextMode: payload?.contextMode || store.get('contextMode'),
+    });
+  } catch (err) {
+    context = compressContext(history, { prev: prevContext || {}, projectName: p.name });
+    context.llm = { used: false, reason: err.message || String(err) };
+  }
+
   const fullPrompt = buildContextPrompt(context, message, {
     projectName: p.name,
     taskTitle: taskTitle || tid,
@@ -480,10 +611,13 @@ ipcMain.handle('agent:run', async (_e, payload) => {
   try {
     const result = await p.agent.run({
       message: fullPrompt,
-      sessionId,
+      sessionId: effectiveSession,
       signal: ac.signal,
       taskId: tid,
     });
+    if (result?.resumedFallback) {
+      setTaskSession(p.path, tid, null);
+    }
     if (result?.sessionId) {
       setTaskSession(p.path, tid, result.sessionId);
     }
@@ -493,6 +627,7 @@ ipcMain.handle('agent:run', async (_e, payload) => {
       projectId,
       context,
       contextTiers: context.tiers,
+      contextMode: context.mode || store.get('contextMode'),
     };
   } finally {
     if (p.aborts.get(tid) === ac) p.aborts.delete(tid);
@@ -581,10 +716,12 @@ ipcMain.handle('persist:delete', (_e, projectPath) => persist.deleteSnapshot(pro
 
 ipcMain.handle('persist:root', () => persist.root);
 
-ipcMain.handle('context:compress', (_e, payload = {}) => {
-  return compressContext(payload.messages || [], {
-    prev: payload.prevContext || {},
+ipcMain.handle('context:compress', async (_e, payload = {}) => {
+  return compressWithMode(payload.messages || [], {
+    prevContext: payload.prevContext || {},
     projectName: payload.projectName || '',
+    taskTitle: payload.taskTitle || '',
+    contextMode: payload.contextMode || store.get('contextMode'),
   });
 });
 

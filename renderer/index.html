@@ -241,6 +241,7 @@
             <div class="editor-foot">
               <button class="btn small" id="btnSave" disabled>保存 <kbd>Ctrl+S</kbd></button>
               <button class="btn small ghost" id="btnRevealDiff" disabled>查看 Diff</button>
+              <button class="btn small ghost" id="btnOpenExternalCode" disabled title="在 VS Code / Cursor 打开">↗ IDE</button>
               <span class="muted" id="editorStatus">就绪</span>
               <span class="muted ml-auto" id="editorMeta"></span>
             </div>
@@ -264,6 +265,7 @@
                   <span class="diff-stats" id="diffStats"></span>
                   <div class="diff-actions">
                     <button class="btn small ghost" id="btnOpenFromDiff" disabled>在 Code 打开</button>
+                    <button class="btn small primary" id="btnOpenExternal" disabled title="在 VS Code / Cursor 打开">↗ 外部编辑器</button>
                     <button class="btn small danger" id="btnRestoreFile" disabled title="用改前快照覆盖当前文件">还原此文件</button>
                     <button class="btn small ghost" id="btnDismissDiff" disabled title="仅从列表移除，不改磁盘">忽略</button>
                   </div>
@@ -365,6 +367,68 @@
 
   <div id="toasts" class="toasts" aria-live="polite"></div>
 
+  <!-- 首启向导 -->
+  <div class="modal hidden" id="onboardingModal">
+    <div class="modal-card glass onboarding-card">
+      <div class="modal-head">
+        <div>
+          <h2>Welcome aboard</h2>
+          <p class="modal-desc">GrokCode 首启体检 · 约 30 秒就绪</p>
+        </div>
+        <button type="button" class="icon-btn" id="onbSkipAll" title="跳过">✕</button>
+      </div>
+      <div class="onb-dots" aria-hidden="true">
+        <span class="onb-dot active" data-step="welcome"></span>
+        <span class="onb-dot" data-step="doctor"></span>
+        <span class="onb-dot" data-step="project"></span>
+        <span class="onb-dot" data-step="done"></span>
+      </div>
+
+      <div class="onb-step" data-step="welcome">
+        <div class="onb-hero">
+          <div class="grok-sigil" aria-hidden="true"><span></span><span></span><span></span></div>
+          <h3>Desktop agent over local Grok CLI</h3>
+          <p>多项目 · 多任务 · 上下文 L0–L3 · MCP &amp; Skills<br>
+          大脑是本机 <code>grok</code>，这里是飞行甲板。</p>
+        </div>
+        <div class="modal-foot">
+          <button type="button" class="btn primary" id="onbNextWelcome">开始体检 →</button>
+        </div>
+      </div>
+
+      <div class="onb-step hidden" data-step="doctor">
+        <div id="onbDoctorHost" class="doctor-results"></div>
+        <div class="modal-foot">
+          <button type="button" class="btn ghost" id="onbRedoDoctor">重新检测</button>
+          <button type="button" class="btn ghost" id="onbOpenSettings">去设置修路径</button>
+          <button type="button" class="btn primary" id="onbNextDoctor">下一步</button>
+        </div>
+      </div>
+
+      <div class="onb-step hidden" data-step="project">
+        <div class="onb-hero">
+          <h3>挂载一个项目</h3>
+          <p>可稍后添加更多仓库并行开发。建议先选你正在写的代码目录。</p>
+        </div>
+        <div class="modal-foot">
+          <button type="button" class="btn ghost" id="onbSkipProject">稍后</button>
+          <button type="button" class="btn primary" id="onbPickProject">选择文件夹</button>
+        </div>
+      </div>
+
+      <div class="onb-step hidden" data-step="done">
+        <div class="onb-hero">
+          <h3>准备起飞</h3>
+          <p>Ctrl+Enter 发送 · Ctrl+T 新任务 · Ctrl+O 添加项目<br>
+          Diff 里可一键在 VS Code / Cursor 打开文件。</p>
+        </div>
+        <div class="modal-foot">
+          <button type="button" class="btn primary" id="onbFinish">进入 GrokCode</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <div class="modal hidden" id="settingsModal">
     <div class="modal-card glass settings-card">
       <div class="modal-head">
@@ -425,6 +489,58 @@
           <input type="password" id="cfgApiKey" placeholder="xai-… 或留空使用 grok login" />
           <small>密钥：<a href="#" id="linkConsole">console.x.ai</a> · 本机：<code>grok login</code></small>
         </label>
+
+        <div class="field-row">
+          <label class="field">
+            <span>上下文压缩 <em>L1/L2</em></span>
+            <select id="cfgContextMode">
+              <option value="heuristic">启发式（离线、默认）</option>
+              <option value="llm">LLM 摘要（需 API Key）</option>
+            </select>
+            <small>LLM 模式会额外调用 xAI 精炼近端摘要与会话脉络</small>
+          </label>
+          <label class="field">
+            <span>外部编辑器</span>
+            <select id="cfgPreferredEditor">
+              <option value="auto">自动（Cursor → VS Code）</option>
+              <option value="cursor">Cursor</option>
+              <option value="code">VS Code</option>
+              <option value="system">系统默认</option>
+            </select>
+          </label>
+        </div>
+
+        <label class="field check">
+          <input type="checkbox" id="cfgAutoUpdate" checked />
+          <span>
+            <strong>自动检查更新</strong>
+            <small>从 GitHub Releases 拉取（仅安装版）</small>
+          </span>
+        </label>
+
+        <div class="diag-box">
+          <div class="diag-head">
+            <strong>环境体检 / 诊断</strong>
+            <span class="muted" id="appVersionLabel"></span>
+          </div>
+          <div class="diag-actions">
+            <button type="button" class="btn small ghost" id="btnRunDoctor">一键体检</button>
+            <button type="button" class="btn small ghost" id="btnExportDiag">导出诊断包</button>
+            <button type="button" class="btn small ghost" id="btnShowOnboarding">首启向导</button>
+          </div>
+          <div id="doctorResults" class="doctor-results"></div>
+        </div>
+
+        <div class="diag-box">
+          <div class="diag-head">
+            <strong>软件更新</strong>
+          </div>
+          <div class="diag-actions">
+            <button type="button" class="btn small ghost" id="btnCheckUpdate">检查更新</button>
+            <button type="button" class="btn small primary hidden" id="btnUpdateInstall">重启并安装</button>
+          </div>
+          <div class="update-status" id="updateStatusText">—</div>
+        </div>
 
         <div class="modal-foot">
           <button class="btn ghost" id="btnProbeCli">重新检测</button>
@@ -539,10 +655,14 @@
 
   <script src="boot.js"></script>
   <script src="stars.js"></script>
+  <script src="utils.js"></script>
   <script src="diff-util.js"></script>
   <script src="projects.js"></script>
   <script src="tasks.js"></script>
   <script src="settings-mcp-skills.js"></script>
+  <script src="onboarding.js"></script>
+  <script src="settings-extra.js"></script>
+  <script src="external-editor-ui.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

@@ -1,6 +1,6 @@
 {
   "name": "grok-code",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Desktop coding agent powered by local Grok Build CLI — multi-project, multi-task, context inheritance, MCP & Skills",
   "main": "electron/main.js",
   "productName": "GrokCode",
@@ -28,7 +28,8 @@
     "start": "electron .",
     "dev": "electron . --dev",
     "lint": "node scripts/check.js",
-    "check": "node scripts/check.js",
+    "check": "node scripts/check.js && node scripts/test-unit.js",
+    "test": "node scripts/test-unit.js",
     "pack": "electron-builder --dir",
     "dist": "electron-builder",
     "dist:win": "electron-builder --win",
@@ -37,7 +38,8 @@
     "release:dry": "electron-builder --win --publish never"
   },
   "dependencies": {
-    "electron-store": "^8.2.0"
+    "electron-store": "^8.2.0",
+    "electron-updater": "^6.8.9"
   },
   "devDependencies": {
     "electron": "^35.1.2",
@@ -65,11 +67,15 @@
       "target": [
         {
           "target": "nsis",
-          "arch": ["x64"]
+          "arch": [
+            "x64"
+          ]
         },
         {
           "target": "portable",
-          "arch": ["x64"]
+          "arch": [
+            "x64"
+          ]
         }
       ],
       "artifactName": "${productName}-${version}-${os}-${arch}.${ext}"
@@ -85,12 +91,17 @@
       "artifactName": "${productName}-${version}-portable.${ext}"
     },
     "linux": {
-      "target": ["AppImage", "deb"],
+      "target": [
+        "AppImage",
+        "deb"
+      ],
       "category": "Development",
       "artifactName": "${productName}-${version}-${os}-${arch}.${ext}"
     },
     "mac": {
-      "target": ["dmg"],
+      "target": [
+        "dmg"
+      ],
       "category": "public.app-category.developer-tools",
       "artifactName": "${productName}-${version}-${os}-${arch}.${ext}"
     },

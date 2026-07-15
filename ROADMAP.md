@@ -9,21 +9,25 @@ Living plan for the GrokCode open-source ecosystem. Order may change based on co
 - [x] Context inheritance + L0–L3
 - [x] MCP & Skills in Settings
 - [x] Public GitHub repo + CI + packaging pipeline
-- [ ] First GitHub Release (`v1.0.0`) with Windows installers
+- [x] First GitHub Release (`v1.0.0`) with Windows installers
+- [x] First-run onboarding + environment doctor
+- [x] Session reliability (resume fallback, retry bar, diagnostics export)
+- [x] Optional LLM L1/L2 context summaries
+- [x] Diff / Code → VS Code / Cursor
+- [x] Auto-update channel (electron-updater + GitHub Releases)
+- [x] Renderer modularization (utils / onboarding / settings-extra / …)
 - [ ] Discussions enabled for Q&A and showcase
 
 ## Next
 
-- [ ] **LLM-backed context summaries** (optional, for L1/L2 quality)
-- [ ] **Diff → open in external editor** (VS Code / Cursor URI)
 - [ ] **Plugin marketplace bridge** (discover Grok plugins from UI)
 - [ ] **i18n** (en / zh fully parallel)
 - [ ] **Theme packs** (community CSS tokens)
 - [ ] Linux / macOS signed artifacts in Release matrix
+- [ ] Virtualized Live timeline for very long sessions
 
 ## Later
 
-- [ ] Auto-update channel
 - [ ] Shared team “project profiles” (export/import workspace + rules)
 - [ ] Telemetry opt-in for crash reports only
 - [ ] Skill / MCP catalog website generated from `examples/`

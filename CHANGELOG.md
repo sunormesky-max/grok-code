@@ -11,6 +11,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 - See [ROADMAP.md](ROADMAP.md)
 
+## [1.1.0] — 2026-07-15
+
+### Added
+
+- **First-run onboarding** wizard with environment doctor (CLI / auth / sessions / editors)
+- **One-click diagnostics** export under `~/.grok-code/diagnostics/` (no secrets)
+- **Session reliability**: auto retry without `--resume` on session errors; UI retry / fresh-session bar
+- **Optional LLM L1/L2** context mode (xAI Chat Completions; fallback to heuristics)
+- **Open in external editor** (Cursor / VS Code / system) from Diff and Code panes
+- **Auto-update** via `electron-updater` + GitHub Releases (packaged builds only)
+- Renderer modules: `utils.js`, `onboarding.js`, `settings-extra.js`, `external-editor-ui.js`
+- Unit tests: `npm test` (`scripts/test-unit.js`)
+
+### Changed
+
+- Settings: context mode, preferred editor, auto-update toggles
+- `npm run check` now runs syntax checks + unit tests
+
 ## [1.0.0] — 2026-07-15
 
 ### Added
@@ -30,5 +48,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Requires installed Grok CLI + auth (`grok login` or `XAI_API_KEY`)
 - YOLO / always-approve is full workspace trust
 
-[Unreleased]: https://github.com/sunormesky-max/grok-code/compare/v1.0.0...HEAD
+[Unreleased]: https://github.com/sunormesky-max/grok-code/compare/v1.1.0...HEAD
+[1.1.0]: https://github.com/sunormesky-max/grok-code/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/sunormesky-max/grok-code/releases/tag/v1.0.0

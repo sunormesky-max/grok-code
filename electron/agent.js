@@ -51,7 +51,7 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
     return [...children.keys()];
   }
 
-  async function run({ message, sessionId = null, signal, taskId = 'default' }) {
+  async function run({ message, sessionId = null, signal, taskId = 'default', _resumeRetried = false }) {
     const cfg = getConfig();
     const cwd = workspaceRoot;
     if (!cwd || !fs.existsSync(cwd)) {
@@ -107,6 +107,11 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
     const env = { ...process.env, NO_COLOR: '1', FORCE_COLOR: '0' };
     if (cfg.apiKey) env.XAI_API_KEY = cfg.apiKey;
 
+    const isResumeError = (msg) =>
+      sessionId &&
+      !_resumeRetried &&
+      /resume|session|not found|invalid|unknown session|expired|no such/i.test(String(msg || ''));
+
     return new Promise((resolve, reject) => {
       let finalText = '';
       let thoughtText = '';
@@ -136,7 +141,30 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
         if (settled) return;
         settled = true;
         cleanup();
-        emitT('agent:error', { error: err.message || String(err) });
+        const msg = err.message || String(err);
+        if (isResumeError(msg)) {
+          emitT('agent:status', {
+            status: 'retry',
+            detail: '会话失效，无 resume 重试…',
+          });
+          run({
+            message,
+            sessionId: null,
+            signal,
+            taskId,
+            _resumeRetried: true,
+          })
+            .then((r) =>
+              resolve({
+                ...r,
+                resumedFallback: true,
+                previousError: msg,
+              })
+            )
+            .catch(reject);
+          return;
+        }
+        emitT('agent:error', { error: msg });
         reject(err);
       };
 
@@ -300,7 +328,10 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
           }
 
           if (!finalText) {
-            emitT('agent:error', { error: errMsg });
+            // fail() 内处理 resume 重试；仅非 resume 时 emit error
+            if (!isResumeError(errMsg)) {
+              emitT('agent:error', { error: errMsg });
+            }
             fail(new Error(errMsg));
             return;
           }
