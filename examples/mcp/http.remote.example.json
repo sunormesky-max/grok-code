@@ -1,0 +1,8 @@
+{
+  "name": "my-remote",
+  "transport": "http",
+  "url": "https://mcp.example.com/mcp",
+  "header": "Authorization: Bearer YOUR_TOKEN",
+  "enabled": true,
+  "note": "Prefer env-based secrets. For slow remotes set startup_timeout_sec = 120 in config.toml."
+}

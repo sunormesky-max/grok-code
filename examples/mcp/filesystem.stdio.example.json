@@ -1,0 +1,7 @@
+{
+  "name": "filesystem",
+  "transport": "stdio",
+  "command": "npx -y @modelcontextprotocol/server-filesystem /path/to/allowed/dir",
+  "enabled": true,
+  "note": "Replace the path. In GrokCode Settings → MCP, paste the command line as-is."
+}

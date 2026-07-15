@@ -1,0 +1,19 @@
+node_modules/
+dist/
+out/
+release/
+*.log
+.env
+.env.*
+!.env.example
+.DS_Store
+Thumbs.db
+*.local
+.idea/
+.vscode/
+*.pem
+*.key
+# never commit tokens
+*credentials*
+*secret*
+.git-credentials

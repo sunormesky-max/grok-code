@@ -1,0 +1,548 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'; img-src 'self' data:;" />
+  <title>GrokCode</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body class="theme-grok booting">
+  <!-- ═══ BOOT SEQUENCE ═══ -->
+  <div id="bootScreen" class="boot-screen" role="dialog" aria-label="GrokCode 启动">
+    <div class="boot-grid" aria-hidden="true"></div>
+    <div class="boot-scan" aria-hidden="true"></div>
+    <div class="boot-inner">
+      <div class="boot-logo-wrap">
+        <svg class="boot-logo" viewBox="0 0 80 80" fill="none" aria-hidden="true">
+          <circle cx="40" cy="40" r="36" stroke="url(#bg1)" stroke-width="1.5" opacity="0.45"/>
+          <circle cx="40" cy="40" r="24" stroke="url(#bg1)" stroke-width="1.4" opacity="0.85"/>
+          <path d="M24 44c4 10 28 10 32 0" stroke="url(#bg1)" stroke-width="2.2" stroke-linecap="round"/>
+          <circle cx="30" cy="32" r="2.8" fill="#fff"/>
+          <circle cx="50" cy="32" r="2.8" fill="#fff"/>
+          <circle cx="40" cy="40" r="4" fill="url(#bg2)"/>
+          <defs>
+            <linearGradient id="bg1" x1="8" y1="8" x2="72" y2="72">
+              <stop stop-color="#fff"/><stop offset="0.5" stop-color="#7dd3fc"/><stop offset="1" stop-color="#f97316"/>
+            </linearGradient>
+            <radialGradient id="bg2" cx="0.5" cy="0.5" r="0.5">
+              <stop stop-color="#fff"/><stop offset="1" stop-color="#38bdf8"/>
+            </radialGradient>
+          </defs>
+        </svg>
+        <div class="boot-rings" aria-hidden="true"><i></i><i></i><i></i></div>
+      </div>
+      <div class="boot-title">
+        <span class="bt-g">GROK</span><span class="bt-c">CODE</span>
+      </div>
+      <div class="boot-sub">xAI · MULTI-PROJECT · CONTEXT L0–L3 · FLIGHT DECK</div>
+      <div class="boot-log" id="bootLog"></div>
+      <div class="boot-progress">
+        <div class="boot-bar"><div class="boot-bar-fill" id="bootBarFill"></div></div>
+        <div class="boot-meta">
+          <span id="bootPct">0%</span>
+          <button type="button" class="boot-skip" id="bootSkip">SKIP ↵</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="app">
+    <!-- Grok 深空背景层 -->
+    <canvas id="starfield" aria-hidden="true"></canvas>
+    <div class="cosmos" aria-hidden="true">
+      <div class="nebula nebula-a"></div>
+      <div class="nebula nebula-b"></div>
+      <div class="nebula nebula-c"></div>
+      <div class="hex-grid"></div>
+      <div class="grid-floor"></div>
+      <div class="hud-corner hud-tl"></div>
+      <div class="hud-corner hud-tr"></div>
+      <div class="hud-corner hud-bl"></div>
+      <div class="hud-corner hud-br"></div>
+      <div class="scanlines"></div>
+      <div class="holo-beam"></div>
+    </div>
+
+    <!-- 自定义无边框标题栏 + 工具栏 -->
+    <header class="topbar titlebar" id="titlebar">
+      <div class="brand titlebar-drag">
+        <div class="logo" aria-hidden="true" title="Grok">
+          <svg class="logo-mark" viewBox="0 0 40 40" fill="none">
+            <circle cx="20" cy="20" r="18" stroke="url(#g1)" stroke-width="1.5" opacity="0.5"/>
+            <circle cx="20" cy="20" r="12" stroke="url(#g1)" stroke-width="1.2" opacity="0.8"/>
+            <path d="M12 22c2 5 14 5 16 0" stroke="url(#g1)" stroke-width="1.6" stroke-linecap="round"/>
+            <circle cx="15" cy="16" r="1.6" fill="#fff"/>
+            <circle cx="25" cy="16" r="1.6" fill="#fff"/>
+            <circle cx="20" cy="20" r="2.2" fill="url(#g2)"/>
+            <defs>
+              <linearGradient id="g1" x1="4" y1="4" x2="36" y2="36">
+                <stop stop-color="#fff"/>
+                <stop offset="0.5" stop-color="#7dd3fc"/>
+                <stop offset="1" stop-color="#f97316"/>
+              </linearGradient>
+              <radialGradient id="g2" cx="0.5" cy="0.5" r="0.5">
+                <stop stop-color="#fff"/>
+                <stop offset="1" stop-color="#38bdf8"/>
+              </radialGradient>
+            </defs>
+          </svg>
+          <span class="logo-pulse"></span>
+        </div>
+        <div class="brand-text">
+          <span class="name">
+            <span class="name-g">Grok</span><span class="name-code">Code</span>
+          </span>
+          <span class="tag">
+            <span class="tag-live"></span>
+            maximum truth-seeking · CLI
+          </span>
+        </div>
+      </div>
+
+      <div class="pills titlebar-drag">
+        <div class="pill cli-pill no-drag" id="cliPill" title="Grok CLI 状态">
+          <span class="pill-ico">⚡</span>
+          <span class="pill-text" id="cliLabel">检测 CLI…</span>
+          <span class="dot"></span>
+        </div>
+      </div>
+
+      <div class="top-actions no-drag">
+        <button class="btn ghost" id="btnOpen" title="添加项目到工作台 (Ctrl+O)">
+          <span class="btn-ico">＋</span> 添加项目
+        </button>
+        <button class="btn ghost" id="btnOpenWindow" title="在新窗口打开项目（并排开发）">⧉ 新窗口</button>
+        <button class="btn ghost icon-only" id="btnSettings" title="设置 (Ctrl+,)">⚙</button>
+        <div class="win-controls" aria-label="窗口控制">
+          <button type="button" class="win-btn" id="btnWinMin" title="最小化">─</button>
+          <button type="button" class="win-btn" id="btnWinMax" title="最大化">□</button>
+          <button type="button" class="win-btn win-close" id="btnWinClose" title="关闭">✕</button>
+        </div>
+      </div>
+    </header>
+
+    <!-- 多项目栏：并行挂载多个仓库 -->
+    <div class="project-bar no-drag" id="projectBar">
+      <div class="project-bar-label">PROJECTS</div>
+      <div class="project-tabs" id="projectTabs"></div>
+      <button type="button" class="project-add" id="btnAddProject" title="添加项目 (Ctrl+O)">＋ 项目</button>
+      <button type="button" class="project-add ghost" id="btnNewWindowProject" title="新窗口打开">⧉</button>
+    </div>
+
+    <div class="main">
+      <!-- 折叠后仍可见的左侧轨道：一点就展开 Explorer -->
+      <button type="button" class="rail-expand hidden" id="btnExpandFiles" title="展开资源管理器 (Ctrl+B)">
+        <span class="rail-glow" aria-hidden="true"></span>
+        <span class="rail-ico">◈</span>
+        <span class="rail-label">EXPLORER</span>
+        <span class="rail-chev">⟩</span>
+      </button>
+
+      <aside class="panel files glass" id="filesPanel">
+        <div class="panel-head">
+          <div class="panel-title">
+            <span class="panel-label">Explorer</span>
+            <span class="panel-sub" id="treeCount"></span>
+          </div>
+          <div class="panel-actions">
+            <button class="icon-btn" id="btnRefreshTree" title="刷新">↻</button>
+            <button class="icon-btn btn-collapse-files" id="btnCollapseFiles" title="折叠侧栏 (Ctrl+B)">⟨⟨</button>
+          </div>
+        </div>
+        <div class="tree-search-wrap">
+          <input type="search" id="treeFilter" placeholder="搜索文件… grok your tree" autocomplete="off" />
+        </div>
+        <div class="tree" id="fileTree">
+          <div class="empty-hint">
+            <div class="empty-ico grok-eye">◉</div>
+            <p>还没有工作区。<br>Grok 需要点东西才能「grok」。</p>
+            <button class="btn small primary" id="btnOpenEmpty">选择文件夹</button>
+          </div>
+        </div>
+      </aside>
+
+      <div class="resize-v" data-resize="files"></div>
+
+      <section class="center">
+        <div class="panel editor-wrap glass">
+          <div class="panel-head tabs" id="editorTabs">
+            <button type="button" class="tab active" data-tab="live" title="任务实时动态">Live</button>
+            <button type="button" class="tab" data-tab="editor" title="代码">Code</button>
+            <button type="button" class="tab" data-tab="diff" title="变更 diff">Diff</button>
+            <span class="live-badge hidden" id="liveBadge">● LIVE</span>
+            <span class="file-path" id="currentPath">—</span>
+            <span class="dirty-badge hidden" id="dirtyBadge">未保存</span>
+            <label class="follow-toggle" title="跟随 Agent 焦点文件">
+              <input type="checkbox" id="followAgent" checked />
+              <span>跟随</span>
+            </label>
+          </div>
+
+          <!-- Live：任务实时动态（真正价值区） -->
+          <div class="view-pane" id="livePane">
+            <div class="live-layout">
+              <div class="live-main">
+                <div class="live-status-bar" id="liveStatusBar">
+                  <div class="live-pulse-ring" id="livePulse"></div>
+                  <div class="live-status-text">
+                    <strong id="livePhase">待命</strong>
+                    <span id="liveDetail">丢一个任务给 Grok，这里会变成任务驾驶舱</span>
+                  </div>
+                  <div class="live-stats">
+                    <span class="stat" id="statTools">0 tools</span>
+                    <span class="stat" id="statFiles">0 files</span>
+                    <span class="stat" id="statElapsed">—</span>
+                  </div>
+                </div>
+                <div class="live-timeline" id="liveTimeline">
+                  <div class="live-empty" id="liveEmpty">
+                    <div class="grok-sigil" aria-hidden="true"><span></span><span></span><span></span></div>
+                    <h3>Mission Control</h3>
+                    <p>实时显示：思考 → 读文件 → 改代码 → 跑命令。<br>这是 GrokCode 相对「纯聊天框」的真正价值。</p>
+                  </div>
+                </div>
+              </div>
+              <aside class="live-side">
+                <div class="live-side-head">焦点文件</div>
+                <div class="live-focus" id="liveFocus">
+                  <div class="muted">Agent 读/写文件时出现在这里</div>
+                </div>
+                <div class="live-side-head">本轮变更</div>
+                <div class="live-changes" id="liveChanges">
+                  <div class="muted">尚无文件变更</div>
+                </div>
+                <div class="live-side-head">
+                  上下文四档
+                  <button type="button" class="link-btn" id="btnRefreshContext" title="重新压缩">整理</button>
+                </div>
+                <div class="context-tiers" id="contextTiers">
+                  <div class="muted">对话开始后实时压缩 L0–L3</div>
+                </div>
+              </aside>
+            </div>
+          </div>
+
+          <!-- Code -->
+          <div class="view-pane hidden" id="codePane">
+            <div class="editor-body">
+              <div class="editor-gutter" id="editorGutter" aria-hidden="true"></div>
+              <textarea id="editor" spellcheck="false" placeholder="// 打开文件，或让 Grok 直接动手…"></textarea>
+              <div class="editor-empty" id="editorEmpty">
+                <div class="empty-card">
+                  <div class="grok-sigil" aria-hidden="true">
+                    <span></span><span></span><span></span>
+                  </div>
+                  <h3>Code 是「审阅台」<br><em>不是第二 IDE</em></h3>
+                  <p>跟随 Agent 打开的文件 · 需要深度编辑请用 VS Code<br>这里负责：看懂 Grok 在动哪一行</p>
+                </div>
+              </div>
+            </div>
+            <div class="editor-foot">
+              <button class="btn small" id="btnSave" disabled>保存 <kbd>Ctrl+S</kbd></button>
+              <button class="btn small ghost" id="btnRevealDiff" disabled>查看 Diff</button>
+              <span class="muted" id="editorStatus">就绪</span>
+              <span class="muted ml-auto" id="editorMeta"></span>
+            </div>
+          </div>
+
+          <!-- Diff -->
+          <div class="view-pane hidden" id="diffPane">
+            <div class="diff-layout">
+              <aside class="diff-list" id="diffFileList">
+                <div class="diff-list-head">
+                  <span>变更文件</span>
+                  <button type="button" class="link-btn hidden" id="btnRestoreAll" title="将全部变更还原到改前快照">全部还原</button>
+                </div>
+                <div class="diff-list-body" id="diffFileListBody">
+                  <div class="muted pad">本会话还没有捕获到变更。<br>Agent 写文件后会出现在这里。</div>
+                </div>
+              </aside>
+              <div class="diff-main">
+                <div class="diff-toolbar">
+                  <span id="diffTitle">选择左侧文件</span>
+                  <span class="diff-stats" id="diffStats"></span>
+                  <div class="diff-actions">
+                    <button class="btn small ghost" id="btnOpenFromDiff" disabled>在 Code 打开</button>
+                    <button class="btn small danger" id="btnRestoreFile" disabled title="用改前快照覆盖当前文件">还原此文件</button>
+                    <button class="btn small ghost" id="btnDismissDiff" disabled title="仅从列表移除，不改磁盘">忽略</button>
+                  </div>
+                </div>
+                <div class="diff-content" id="diffContent">
+                  <div class="diff-placeholder">
+                    <h3>Real Diff</h3>
+                    <p>统一 diff · 行级 +/- · 实时捕获 Agent 写入<br>
+                    审阅后可 <strong>还原此文件</strong>（写回改前快照）或 <strong>忽略</strong></p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="resize-h" data-resize="term"></div>
+
+        <div class="panel terminal-wrap glass">
+          <div class="panel-head">
+            <div class="panel-title">
+              <span class="panel-label">Terminal</span>
+              <span class="panel-sub">workspace shell</span>
+            </div>
+            <div class="panel-actions">
+              <button class="icon-btn" id="btnToggleTerm" title="展开/收起终端">↕</button>
+              <button class="icon-btn" id="btnClearTerm" title="清空">✕</button>
+            </div>
+          </div>
+          <div class="term-out" id="termOut"></div>
+          <div class="term-in-row">
+            <span class="prompt">grok›</span>
+            <input id="termInput" type="text" placeholder="在工作区执行命令…  ↑↓ 历史" autocomplete="off" spellcheck="false" />
+          </div>
+        </div>
+      </section>
+
+      <div class="resize-v" data-resize="chat"></div>
+
+      <aside class="panel chat glass">
+        <div class="panel-head">
+          <div class="panel-title">
+            <span class="panel-label">Grok</span>
+            <span class="panel-sub" id="taskPanelHint">multi-task</span>
+          </div>
+          <div class="chat-head-actions">
+            <span class="status-chip" id="agentStatus">
+              <i class="pulse"></i>
+              <span id="agentStatusText">待命</span>
+            </span>
+            <span class="elapsed hidden" id="elapsedTimer">0s</span>
+            <button class="icon-btn" id="btnNewChat" title="新任务 (Ctrl+T)">＋</button>
+          </div>
+        </div>
+
+        <!-- 多任务栏 -->
+        <div class="task-bar" id="taskBar">
+          <div class="task-tabs" id="taskTabs"></div>
+          <button type="button" class="task-add" id="btnAddTask" title="新建并行任务 (Ctrl+T)">＋ 任务</button>
+        </div>
+
+        <div class="messages-host" id="messagesHost">
+          <!-- 每个任务一个 .messages 面板，由 JS 创建 -->
+        </div>
+        <div class="composer">
+          <div class="composer-box">
+            <div class="composer-glow" aria-hidden="true"></div>
+            <textarea id="prompt" rows="2" placeholder="对当前任务说… 可开多个任务并行跑"></textarea>
+            <div class="composer-bar">
+              <div class="composer-hints">
+                <span class="hint-chip">Ctrl+Enter</span>
+                <span class="hint-chip">Ctrl+T 新任务</span>
+                <span class="hint-chip muted" id="charCount">0</span>
+              </div>
+              <div class="composer-actions">
+                <button class="btn danger ghost small hidden" id="btnStop">■ 停止</button>
+                <button class="btn primary" id="btnSend">
+                  <span id="sendLabel">Grok it</span>
+                  <span class="send-arrow">↵</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </aside>
+    </div>
+
+    <footer class="statusbar">
+      <span class="sb-brand">xAI · Grok</span>
+      <span class="sep">│</span>
+      <span id="sbWorkspace">无工作区</span>
+      <span class="sep">·</span>
+      <span id="sbCli">CLI —</span>
+      <span class="sep">·</span>
+      <span id="sbAgent">待命</span>
+      <span class="ml-auto" id="sbHint">Ctrl+O 添加项目 · ⧉ 新窗口并排 · Ctrl+T 任务 · multi-project</span>
+    </footer>
+  </div>
+
+  <div id="toasts" class="toasts" aria-live="polite"></div>
+
+  <div class="modal hidden" id="settingsModal">
+    <div class="modal-card glass settings-card">
+      <div class="modal-head">
+        <div>
+          <h2>Settings</h2>
+          <p class="modal-desc">通用 · MCP · Skills — 直连本机 Grok CLI 配置</p>
+        </div>
+        <button class="icon-btn" id="btnCloseSettings">✕</button>
+      </div>
+
+      <div class="settings-tabs" id="settingsTabs">
+        <button type="button" class="stab active" data-stab="general">通用</button>
+        <button type="button" class="stab" data-stab="mcp">MCP</button>
+        <button type="button" class="stab" data-stab="skills">Skills</button>
+      </div>
+
+      <!-- 通用 -->
+      <div class="settings-pane" id="stab-general">
+        <div class="cli-status-box" id="cliStatusBox">
+          <div class="cli-status-top">
+            <strong>Grok CLI</strong>
+            <span class="badge" id="cliBadge">检测中</span>
+          </div>
+          <div id="cliStatusDetail">检测中…</div>
+        </div>
+
+        <label class="field">
+          <span>Grok 可执行文件路径 <em>可留空自动检测</em></span>
+          <input type="text" id="cfgGrokPath" placeholder="C:\Users\你\.grok\bin\grok.exe" />
+        </label>
+
+        <div class="field-row">
+          <label class="field">
+            <span>模型 <em>留空=CLI 默认</em></span>
+            <input type="text" id="cfgModel" placeholder="grok-build / grok-4.5" />
+          </label>
+          <label class="field">
+            <span>最大回合</span>
+            <input type="number" id="cfgRounds" min="1" max="100" value="30" />
+          </label>
+        </div>
+
+        <label class="field check">
+          <input type="checkbox" id="cfgYolo" checked />
+          <span>
+            <strong>自动批准工具</strong>
+            <small>--always-approve（YOLO · 全速前进）</small>
+          </span>
+        </label>
+
+        <label class="field">
+          <span>附加规则 <em>--rules</em></span>
+          <textarea id="cfgRules" rows="3" placeholder="例如：优先中文回复；不要 git commit"></textarea>
+        </label>
+
+        <label class="field">
+          <span>XAI_API_KEY <em>可选</em></span>
+          <input type="password" id="cfgApiKey" placeholder="xai-… 或留空使用 grok login" />
+          <small>密钥：<a href="#" id="linkConsole">console.x.ai</a> · 本机：<code>grok login</code></small>
+        </label>
+
+        <div class="modal-foot">
+          <button class="btn ghost" id="btnProbeCli">重新检测</button>
+          <button class="btn primary" id="btnSaveSettings">保存设置</button>
+        </div>
+      </div>
+
+      <!-- MCP -->
+      <div class="settings-pane hidden" id="stab-mcp">
+        <div class="mgmt-toolbar">
+          <span class="mgmt-hint">配置写入 <code>~/.grok/config.toml</code> · 与终端 <code>grok mcp</code> 同源</span>
+          <div class="mgmt-actions">
+            <button class="btn small ghost" id="btnMcpRefresh">刷新</button>
+            <button class="btn small ghost" id="btnMcpDoctor">Doctor</button>
+            <button class="btn small primary" id="btnMcpShowAdd">＋ 添加</button>
+          </div>
+        </div>
+        <div class="mgmt-list" id="mcpList">
+          <div class="muted pad">加载中…</div>
+        </div>
+
+        <div class="mgmt-form hidden" id="mcpAddForm">
+          <div class="mgmt-form-title">添加 MCP Server</div>
+          <div class="field-row">
+            <label class="field">
+              <span>名称</span>
+              <input type="text" id="mcpName" placeholder="filesystem / github" />
+            </label>
+            <label class="field">
+              <span>传输</span>
+              <select id="mcpTransport">
+                <option value="stdio">stdio（本地进程）</option>
+                <option value="http">http</option>
+                <option value="sse">sse</option>
+              </select>
+            </label>
+          </div>
+          <label class="field" id="mcpCmdField">
+            <span>Command <em>stdio：整行命令</em></span>
+            <input type="text" id="mcpCommand" placeholder="npx -y @modelcontextprotocol/server-filesystem C:/data" />
+          </label>
+          <label class="field hidden" id="mcpUrlField">
+            <span>URL</span>
+            <input type="text" id="mcpUrl" placeholder="https://mcp.example.com/mcp" />
+          </label>
+          <label class="field hidden" id="mcpHeaderField">
+            <span>Header <em>可选</em></span>
+            <input type="text" id="mcpHeader" placeholder="Authorization: Bearer TOKEN" />
+          </label>
+          <div class="modal-foot">
+            <button class="btn ghost" id="btnMcpCancel">取消</button>
+            <button class="btn primary" id="btnMcpSave">添加</button>
+          </div>
+        </div>
+        <pre class="mgmt-log hidden" id="mcpLog"></pre>
+      </div>
+
+      <!-- Skills -->
+      <div class="settings-pane hidden" id="stab-skills">
+        <div class="mgmt-toolbar">
+          <span class="mgmt-hint">用户技能目录 <code>~/.grok/skills</code> · 项目技能 <code>.grok/skills</code></span>
+          <div class="mgmt-actions">
+            <button class="btn small ghost" id="btnSkillsRefresh">刷新</button>
+            <button class="btn small ghost" id="btnSkillsOpenDir">打开目录</button>
+            <button class="btn small primary" id="btnSkillShowAdd">＋ 新建</button>
+          </div>
+        </div>
+        <div class="mgmt-list" id="skillsList">
+          <div class="muted pad">加载中…</div>
+        </div>
+
+        <div class="mgmt-form hidden" id="skillAddForm">
+          <div class="mgmt-form-title">新建 Skill</div>
+          <div class="field-row">
+            <label class="field">
+              <span>名称</span>
+              <input type="text" id="skillName" placeholder="my-workflow" />
+            </label>
+            <label class="field">
+              <span>作用域</span>
+              <select id="skillScope">
+                <option value="user">用户（全局）</option>
+                <option value="project">当前项目</option>
+              </select>
+            </label>
+          </div>
+          <label class="field">
+            <span>描述 <em>触发条件，越具体越好</em></span>
+            <input type="text" id="skillDesc" placeholder="When the user wants to …" />
+          </label>
+          <label class="field">
+            <span>正文</span>
+            <textarea id="skillBody" rows="6" placeholder="# Steps&#10;1. …"></textarea>
+          </label>
+          <div class="modal-foot">
+            <button class="btn ghost" id="btnSkillCancel">取消</button>
+            <button class="btn primary" id="btnSkillSave">创建</button>
+          </div>
+        </div>
+
+        <div class="mgmt-form hidden" id="skillEditForm">
+          <div class="mgmt-form-title">编辑 SKILL.md · <span id="skillEditName"></span></div>
+          <textarea id="skillEditRaw" rows="12" class="skill-editor" spellcheck="false"></textarea>
+          <div class="modal-foot">
+            <button class="btn ghost" id="btnSkillEditCancel">取消</button>
+            <button class="btn primary" id="btnSkillEditSave">保存</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="boot.js"></script>
+  <script src="stars.js"></script>
+  <script src="diff-util.js"></script>
+  <script src="projects.js"></script>
+  <script src="tasks.js"></script>
+  <script src="settings-mcp-skills.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

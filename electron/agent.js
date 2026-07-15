@@ -1,0 +1,346 @@
+const { spawn } = require('child_process');
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
+const { resolveGrokBinary } = require('./grok-cli');
+
+/**
+ * GrokCode multi-task agent
+ * 每个 taskId 可并行跑一个 grok CLI 进程，互不抢占。
+ */
+function createAgent({ getConfig, workspaceRoot, emit }) {
+  /** @type {Map<string, import('child_process').ChildProcess>} */
+  const children = new Map();
+
+  function killProc(child) {
+    if (!child || child.killed) return;
+    try {
+      if (process.platform === 'win32' && child.pid) {
+        spawn('taskkill', ['/pid', String(child.pid), '/T', '/F'], {
+          windowsHide: true,
+          stdio: 'ignore',
+        });
+      } else {
+        child.kill('SIGTERM');
+      }
+    } catch {
+      /* ignore */
+    }
+  }
+
+  function stop(taskId) {
+    if (taskId) {
+      const child = children.get(taskId);
+      if (child) {
+        killProc(child);
+        children.delete(taskId);
+      }
+      return;
+    }
+    for (const [id, child] of children) {
+      killProc(child);
+      children.delete(id);
+    }
+  }
+
+  function isRunning(taskId) {
+    return children.has(taskId);
+  }
+
+  function listRunning() {
+    return [...children.keys()];
+  }
+
+  async function run({ message, sessionId = null, signal, taskId = 'default' }) {
+    const cfg = getConfig();
+    const cwd = workspaceRoot;
+    if (!cwd || !fs.existsSync(cwd)) {
+      throw new Error('请先打开一个项目工作区');
+    }
+
+    // 同一 task 不允许并发叠跑；新请求先停旧的
+    if (children.has(taskId)) {
+      stop(taskId);
+    }
+
+    const grokBin = resolveGrokBinary(cfg.grokPath);
+    if (!grokBin) {
+      throw new Error(
+        '找不到 Grok CLI。请安装 Grok Build，或在设置中填写 grok 可执行文件路径。\n' +
+          '默认查找：%USERPROFILE%\\.grok\\bin\\grok.exe 或 PATH 中的 grok'
+      );
+    }
+
+    const promptFile = path.join(
+      os.tmpdir(),
+      `grok-code-prompt-${taskId}-${Date.now()}-${Math.random().toString(36).slice(2)}.txt`
+    );
+    fs.writeFileSync(promptFile, message, 'utf8');
+
+    const args = [
+      '--prompt-file',
+      promptFile,
+      '--cwd',
+      cwd,
+      '--output-format',
+      'streaming-json',
+      '--no-auto-update',
+    ];
+
+    if (cfg.alwaysApprove !== false) args.push('--always-approve');
+    if (cfg.model) args.push('-m', cfg.model);
+    if (cfg.maxTurns) args.push('--max-turns', String(cfg.maxTurns));
+    if (cfg.rules) args.push('--rules', cfg.rules);
+    if (sessionId) args.push('--resume', sessionId);
+
+    const emitT = (event, payload) => emit(event, { ...payload, taskId });
+
+    emitT('agent:status', {
+      status: 'running',
+      detail: sessionId ? 'resuming…' : 'booting CLI…',
+    });
+    emitT('agent:cli', {
+      binary: grokBin,
+      args: args.map((a, i) => (args[i - 1] === '--prompt-file' ? '<prompt-file>' : a)),
+    });
+
+    const env = { ...process.env, NO_COLOR: '1', FORCE_COLOR: '0' };
+    if (cfg.apiKey) env.XAI_API_KEY = cfg.apiKey;
+
+    return new Promise((resolve, reject) => {
+      let finalText = '';
+      let thoughtText = '';
+      let newSessionId = sessionId || null;
+      let settled = false;
+      let stdoutBuf = '';
+      let stderrBuf = '';
+
+      const cleanup = () => {
+        try {
+          fs.unlinkSync(promptFile);
+        } catch {
+          /* ignore */
+        }
+        children.delete(taskId);
+        if (signal) signal.removeEventListener?.('abort', onAbort);
+      };
+
+      const finish = (result) => {
+        if (settled) return;
+        settled = true;
+        cleanup();
+        resolve(result);
+      };
+
+      const fail = (err) => {
+        if (settled) return;
+        settled = true;
+        cleanup();
+        emitT('agent:error', { error: err.message || String(err) });
+        reject(err);
+      };
+
+      const onAbort = () => {
+        stop(taskId);
+        emitT('agent:error', { error: '已由用户停止' });
+        finish({ text: finalText, stopped: true, sessionId: newSessionId, taskId });
+      };
+
+      if (signal) {
+        if (signal.aborted) {
+          try {
+            fs.unlinkSync(promptFile);
+          } catch {
+            /* ignore */
+          }
+          finish({ text: '', stopped: true, sessionId, taskId });
+          return;
+        }
+        signal.addEventListener('abort', onAbort);
+      }
+
+      let child;
+      try {
+        child = spawn(grokBin, args, {
+          cwd,
+          env,
+          windowsHide: true,
+          stdio: ['ignore', 'pipe', 'pipe'],
+        });
+      } catch (err) {
+        fail(new Error(`无法启动 Grok CLI：${err.message}`));
+        return;
+      }
+
+      children.set(taskId, child);
+      try {
+        child.stdout.setEncoding('utf8');
+        if (typeof child.stdout._readableState === 'object') {
+          child.stdout._readableState.highWaterMark = 1;
+        }
+      } catch {
+        /* ignore */
+      }
+
+      const handleEvent = (ev) => {
+        if (!ev || typeof ev !== 'object') return;
+        const type = ev.type;
+
+        if (type === 'text' || type === 'message' || type === 'assistant' || type === 'content') {
+          const chunk =
+            ev.data ??
+            ev.delta ??
+            (typeof ev.text === 'string' && !ev.accumulated ? ev.text : '') ??
+            (typeof ev.content === 'string' ? ev.content : '') ??
+            '';
+          if (typeof ev.text === 'string' && ev.text.length > finalText.length && !ev.data && !ev.delta) {
+            finalText = ev.text;
+          } else if (chunk) {
+            finalText += chunk;
+          }
+          emitT('agent:text', { text: finalText, delta: chunk || '', partial: true });
+          emitT('agent:status', { status: 'streaming', detail: 'speaking…' });
+        } else if (type === 'thought' || type === 'reasoning' || type === 'thinking') {
+          const chunk = ev.data ?? ev.delta ?? ev.text ?? '';
+          if (chunk) thoughtText += chunk;
+          emitT('agent:thought', { text: thoughtText, delta: chunk });
+          emitT('agent:status', { status: 'thinking', detail: 'thinking…' });
+        } else if (type === 'tool' || type === 'tool_call' || type === 'tool_start') {
+          emitT('agent:tool_start', {
+            id: ev.id || ev.tool_call_id || String(Date.now()),
+            name: ev.name || ev.tool || 'tool',
+            args: ev.args || ev.input || {},
+          });
+          emitT('agent:status', {
+            status: 'tool',
+            detail: `${ev.name || ev.tool || 'tool'}…`,
+          });
+        } else if (type === 'tool_result' || type === 'tool_end') {
+          emitT('agent:tool_end', {
+            id: ev.id || ev.tool_call_id || '',
+            name: ev.name || ev.tool || 'tool',
+            args: ev.args || {},
+            result:
+              typeof ev.result === 'string'
+                ? ev.result
+                : JSON.stringify(ev.result ?? ev.output ?? ''),
+            ok: ev.ok !== false,
+          });
+        } else if (type === 'end' || type === 'result' || type === 'done') {
+          if (ev.sessionId) newSessionId = ev.sessionId;
+          if (typeof ev.text === 'string' && ev.text.length > finalText.length) {
+            finalText = ev.text;
+            emitT('agent:text', { text: finalText, delta: '', partial: false });
+          }
+          emitT('agent:status', { status: 'done', detail: 'done' });
+        } else if (type === 'error') {
+          emitT('agent:error', { error: ev.message || ev.error || 'Grok CLI error' });
+        } else if (type === 'max_turns_reached') {
+          emitT('agent:status', { status: 'max_turns', detail: 'max turns' });
+        }
+      };
+
+      const consumeLine = (line) => {
+        const trimmed = line.trim();
+        if (!trimmed) return;
+        try {
+          handleEvent(JSON.parse(trimmed));
+        } catch {
+          finalText += trimmed;
+          emitT('agent:text', { text: finalText, delta: trimmed, partial: true });
+        }
+      };
+
+      child.stdout.on('data', (chunk) => {
+        stdoutBuf += typeof chunk === 'string' ? chunk : chunk.toString('utf8');
+        let idx;
+        while ((idx = stdoutBuf.search(/\r?\n/)) >= 0) {
+          const nl = stdoutBuf[idx] === '\r' ? 2 : 1;
+          const line = stdoutBuf.slice(0, idx);
+          stdoutBuf = stdoutBuf.slice(idx + nl);
+          consumeLine(line);
+        }
+      });
+
+      child.stderr.on('data', (buf) => {
+        stderrBuf += buf.toString('utf8');
+        if (stderrBuf.length > 40_000) stderrBuf = stderrBuf.slice(-40_000);
+      });
+
+      child.on('error', (err) => {
+        fail(new Error(`Grok CLI 进程错误：${err.message}`));
+      });
+
+      child.on('close', (code) => {
+        if (stdoutBuf.trim()) consumeLine(stdoutBuf);
+        stdoutBuf = '';
+        if (settled) return;
+
+        if (signal?.aborted) {
+          finish({ text: finalText, stopped: true, sessionId: newSessionId, taskId });
+          return;
+        }
+
+        if (code !== 0 && code !== null) {
+          let errMsg = `Grok CLI 退出码 ${code}`;
+          const errLine = stderrBuf
+            .split(/\r?\n/)
+            .map((l) => l.trim())
+            .filter(Boolean)
+            .slice(-5)
+            .join('\n');
+          try {
+            const maybe = JSON.parse(
+              (stderrBuf || '').trim().split(/\r?\n/).filter(Boolean).pop() || '{}'
+            );
+            if (maybe.message) errMsg = maybe.message;
+            else if (errLine) errMsg = `${errMsg}\n${errLine}`;
+          } catch {
+            if (errLine) errMsg = `${errMsg}\n${errLine}`;
+          }
+
+          if (!finalText) {
+            emitT('agent:error', { error: errMsg });
+            fail(new Error(errMsg));
+            return;
+          }
+          emitT('agent:done', {
+            text: finalText,
+            sessionId: newSessionId,
+            code,
+            warning: errMsg,
+          });
+          finish({
+            text: finalText,
+            stopped: false,
+            sessionId: newSessionId,
+            code,
+            warning: errMsg,
+            taskId,
+          });
+          return;
+        }
+
+        if (finalText) {
+          emitT('agent:text', { text: finalText, delta: '', partial: false });
+        }
+        emitT('agent:done', {
+          text: finalText,
+          sessionId: newSessionId,
+          thought: thoughtText || undefined,
+        });
+        finish({
+          text: finalText,
+          stopped: false,
+          sessionId: newSessionId,
+          thought: thoughtText || undefined,
+          taskId,
+        });
+      });
+    });
+  }
+
+  return { run, stop, isRunning, listRunning };
+}
+
+module.exports = { createAgent };

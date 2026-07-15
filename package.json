@@ -1,0 +1,19 @@
+{
+  "name": "grok-code",
+  "version": "1.0.0",
+  "description": "Desktop coding agent that drives the local Grok Build CLI (OpenCode / Codex style UI)",
+  "main": "electron/main.js",
+  "productName": "GrokCode",
+  "author": "GrokCode",
+  "license": "MIT",
+  "scripts": {
+    "start": "electron .",
+    "dev": "electron . --dev"
+  },
+  "dependencies": {
+    "electron-store": "^8.2.0"
+  },
+  "devDependencies": {
+    "electron": "^35.1.2"
+  }
+}
