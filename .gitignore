@@ -2,6 +2,9 @@ node_modules/
 dist/
 out/
 release/
+*.exe
+*.blockmap
+.DS_Store
 *.log
 .env
 .env.*

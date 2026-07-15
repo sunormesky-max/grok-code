@@ -1,0 +1,17 @@
+title: "[Show] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Share screenshots, forks, MCP presets, or skill packs built with GrokCode.
+  - type: textarea
+    id: story
+    attributes:
+      label: What did you build?
+    validations:
+      required: true
+  - type: textarea
+    id: links
+    attributes:
+      label: Links
+      description: Repo, gist, or discussion links (no secrets)

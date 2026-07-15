@@ -1,19 +1,106 @@
 {
   "name": "grok-code",
   "version": "1.0.0",
-  "description": "Desktop coding agent that drives the local Grok Build CLI (OpenCode / Codex style UI)",
+  "description": "Desktop coding agent powered by local Grok Build CLI — multi-project, multi-task, context inheritance, MCP & Skills",
   "main": "electron/main.js",
   "productName": "GrokCode",
-  "author": "GrokCode",
+  "author": "GrokCode Contributors",
   "license": "MIT",
+  "homepage": "https://github.com/sunormesky-max/grok-code",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/sunormesky-max/grok-code.git"
+  },
+  "bugs": {
+    "url": "https://github.com/sunormesky-max/grok-code/issues"
+  },
+  "keywords": [
+    "grok",
+    "xai",
+    "electron",
+    "coding-agent",
+    "desktop",
+    "mcp",
+    "opencode",
+    "codex"
+  ],
   "scripts": {
     "start": "electron .",
-    "dev": "electron . --dev"
+    "dev": "electron . --dev",
+    "lint": "node scripts/check.js",
+    "check": "node scripts/check.js",
+    "pack": "electron-builder --dir",
+    "dist": "electron-builder",
+    "dist:win": "electron-builder --win",
+    "dist:linux": "electron-builder --linux",
+    "dist:mac": "electron-builder --mac",
+    "release:dry": "electron-builder --win --publish never"
   },
   "dependencies": {
     "electron-store": "^8.2.0"
   },
   "devDependencies": {
-    "electron": "^35.1.2"
+    "electron": "^35.1.2",
+    "electron-builder": "^25.1.8"
+  },
+  "build": {
+    "appId": "com.grokcode.desktop",
+    "productName": "GrokCode",
+    "copyright": "Copyright © 2026 GrokCode Contributors",
+    "directories": {
+      "output": "release",
+      "buildResources": "build"
+    },
+    "files": [
+      "electron/**/*",
+      "renderer/**/*",
+      "package.json",
+      "!**/node_modules/*/{CHANGELOG.md,README.md,README,readme.md,readme}",
+      "!**/{test,tests,__tests__,coverage}/**"
+    ],
+    "extraMetadata": {
+      "main": "electron/main.js"
+    },
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": ["x64"]
+        },
+        {
+          "target": "portable",
+          "arch": ["x64"]
+        }
+      ],
+      "artifactName": "${productName}-${version}-${os}-${arch}.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "GrokCode"
+    },
+    "portable": {
+      "artifactName": "${productName}-${version}-portable.${ext}"
+    },
+    "linux": {
+      "target": ["AppImage", "deb"],
+      "category": "Development",
+      "artifactName": "${productName}-${version}-${os}-${arch}.${ext}"
+    },
+    "mac": {
+      "target": ["dmg"],
+      "category": "public.app-category.developer-tools",
+      "artifactName": "${productName}-${version}-${os}-${arch}.${ext}"
+    },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "sunormesky-max",
+        "repo": "grok-code",
+        "releaseType": "release"
+      }
+    ]
   }
 }

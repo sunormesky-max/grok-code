@@ -132,8 +132,30 @@ Open **Settings → MCP / Skills** in the app.
 |---------|-------------|
 | `npm start` | Launch desktop app |
 | `npm run dev` | Launch with DevTools |
+| `npm run check` | Syntax + community file CI checks |
+| `npm run pack` | electron-builder unpacked dir |
+| `npm run dist:win` | Windows NSIS + portable → `release/` |
 
----
+## Releases
+
+Installers ship on [GitHub Releases](https://github.com/sunormesky-max/grok-code/releases) when a tag `v*` is pushed (see `.github/workflows/release.yml`).
+
+```bash
+git tag v1.0.0
+git push origin v1.0.0
+```
+
+## Ecosystem
+
+| Doc | Topic |
+|-----|--------|
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Process model |
+| [docs/ECOSYSTEM.md](docs/ECOSYSTEM.md) | Community channels |
+| [ROADMAP.md](ROADMAP.md) | What’s next |
+| [CHANGELOG.md](CHANGELOG.md) | Version history |
+| [examples/](examples/) | MCP & Skills templates |
+
+Join **Discussions** for Q&A and Show & Tell.
 
 ## License
 
@@ -142,4 +164,4 @@ Open **Settings → MCP / Skills** in the app.
 ---
 
 **Built for people who grok code.**  
-Issues & PRs welcome.
+Issues, Discussions & PRs welcome.

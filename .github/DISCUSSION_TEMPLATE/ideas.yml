@@ -1,0 +1,18 @@
+title: "[Idea] "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Share an idea for GrokCode. For concrete feature specs, prefer a Feature Request issue.
+  - type: textarea
+    id: idea
+    attributes:
+      label: Idea
+      description: What should we build or change?
+    validations:
+      required: true
+  - type: textarea
+    id: why
+    attributes:
+      label: Why it matters
