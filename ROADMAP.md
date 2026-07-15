@@ -13,13 +13,14 @@ Living plan for the GrokCode open-source ecosystem. Order may change based on co
 - [x] **MCP/Skills i18n** for management UI
 - [x] **UI polish** layer (glass, chips, composer, scrollbars)
 - [x] Settings general form i18n
+- [x] Keyboard cheatsheet · density themes · file tree polish
 
 ## Next
 
 - [ ] Electron major jump (40+) after dist matrix retest — see docs/SECURITY_DEPS.md
-- [ ] In-app keyboard shortcut cheatsheet overlay
-- [ ] File tree icons / density themes
 - [ ] Animated onboarding illustrations
+- [ ] Global search (files + symbols light)
+- [ ] Split Code / Diff side-by-side layout option
 
 ## Later
 

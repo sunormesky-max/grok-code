@@ -7,6 +7,9 @@
   <title>GrokCode</title>
   <link rel="stylesheet" href="styles.css" />
   <link rel="stylesheet" href="ui-polish.css" />
+  <link rel="stylesheet" href="density.css" />
+  <link rel="stylesheet" href="help-overlay.css" />
+  <link rel="stylesheet" href="tree-polish.css" />
 </head>
 <body class="theme-grok booting">
   <a class="skip-link" href="#app" data-i18n="a11y.skip">跳到主内容</a>
@@ -154,6 +157,10 @@
         </div>
         <div class="tree-search-wrap">
           <input type="search" id="treeFilter" placeholder="搜索文件… grok your tree" autocomplete="off" />
+        </div>
+        <div class="tree-toolbar">
+          <button type="button" class="btn small ghost" id="btnTreeExpand" title="展开全部">全部展开</button>
+          <button type="button" class="btn small ghost" id="btnTreeCollapse" title="折叠全部">全部折叠</button>
         </div>
         <div class="tree" id="fileTree">
           <div class="empty-hint">
@@ -363,7 +370,7 @@
       <span id="sbCli">CLI —</span>
       <span class="sep">·</span>
       <span id="sbAgent">待命</span>
-      <span class="ml-auto" id="sbHint">Ctrl+K 命令 · Ctrl+O 项目 · Ctrl+T 任务 · multi-project</span>
+      <span class="ml-auto" id="sbHint">Ctrl+K · Ctrl+/ 快捷键 · Ctrl+O 项目 · Ctrl+T 任务</span>
     </footer>
   </div>
 
@@ -572,6 +579,14 @@
           </select>
         </label>
         <label class="field">
+          <span data-i18n="density.label">界面密度</span>
+          <select id="cfgDensity">
+            <option value="comfortable" data-i18n="density.comfortable">舒适</option>
+            <option value="compact" data-i18n="density.compact">紧凑</option>
+          </select>
+          <small data-i18n="density.hint">紧凑模式缩小边距与字号，适合小屏 / 多任务</small>
+        </label>
+        <label class="field">
           <span data-i18n="theme.label">主题</span>
           <select id="cfgTheme">
             <option value="grok" data-i18n="theme.grok">Grok 深空（默认）</option>
@@ -768,6 +783,8 @@
   <script src="utils.js"></script>
   <script src="i18n.js"></script>
   <script src="themes.js"></script>
+  <script src="density.js"></script>
+  <script src="shortcuts-overlay.js"></script>
   <script src="live-virtual.js"></script>
   <script src="chat-virtual.js"></script>
   <script src="diff-util.js"></script>

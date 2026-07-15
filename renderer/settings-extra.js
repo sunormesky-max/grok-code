@@ -28,6 +28,8 @@
     if (loc) loc.value = window.GrokI18n?.getLocale?.() || cfg.locale || 'zh';
     const th = $('#cfgTheme');
     if (th) th.value = window.GrokThemes?.getTheme?.() || cfg.theme || 'grok';
+    const dens = $('#cfgDensity');
+    if (dens) dens.value = window.GrokDensity?.getDensity?.() || 'comfortable';
     const tel = $('#cfgTelemetry');
     if (tel) tel.checked = Boolean(cfg.telemetryEnabled);
     const telEp = $('#cfgTelemetryEndpoint');
@@ -132,6 +134,8 @@
       window.GrokThemes?.setTheme?.(partial.theme);
       window.toast?.(window.GrokI18n?.t?.('toast.theme') || '主题已切换', 'ok');
     }
+    const dens = $('#cfgDensity')?.value;
+    if (dens) window.GrokDensity?.setDensity?.(dens);
     await window.grok.setConfig({
       locale: partial.locale,
       theme: partial.theme,
@@ -158,6 +162,13 @@
     });
     $('#cfgTheme')?.addEventListener('change', (e) => {
       window.GrokThemes?.setTheme?.(e.target.value);
+    });
+    $('#cfgDensity')?.addEventListener('change', (e) => {
+      window.GrokDensity?.setDensity?.(e.target.value);
+      window.toast?.(
+        window.GrokI18n?.t?.('toast.density', null, { mode: e.target.value }) || e.target.value,
+        'ok'
+      );
     });
     $('#btnOpenCrashDir')?.addEventListener('click', () => window.grok.telemetryOpenDir());
 

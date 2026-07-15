@@ -11,6 +11,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 - See [ROADMAP.md](ROADMAP.md)
 
+## [1.2.5] — 2026-07-16
+
+### Added
+
+- **Keyboard shortcuts cheatsheet** (`?` or `Ctrl+/`, also via Ctrl+K)
+- **UI density** comfortable / compact (Appearance + command palette)
+- **File tree polish**: extension tint, active file highlight, expand/collapse all, richer icons
+- Path **breadcrumb** in Code chrome
+
 ## [1.2.4] — 2026-07-16
 
 ### Added / UI
@@ -111,7 +120,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Requires installed Grok CLI + auth (`grok login` or `XAI_API_KEY`)
 - YOLO / always-approve is full workspace trust
 
-[Unreleased]: https://github.com/sunormesky-max/grok-code/compare/v1.2.4...HEAD
+[Unreleased]: https://github.com/sunormesky-max/grok-code/compare/v1.2.5...HEAD
+[1.2.5]: https://github.com/sunormesky-max/grok-code/compare/v1.2.4...v1.2.5
 [1.2.4]: https://github.com/sunormesky-max/grok-code/compare/v1.2.3...v1.2.4
 [1.2.3]: https://github.com/sunormesky-max/grok-code/compare/v1.2.2...v1.2.3
 [1.2.2]: https://github.com/sunormesky-max/grok-code/compare/v1.2.1...v1.2.2

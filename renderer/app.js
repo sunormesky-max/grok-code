@@ -963,6 +963,20 @@ function bindUi() {
     state.filter = e.target.value.trim().toLowerCase();
     applyTreeFilter();
   });
+  $('#btnTreeExpand')?.addEventListener('click', () => {
+    $$('#fileTree .tree-item.dir').forEach((row) => {
+      row.classList.add('open');
+      const next = row.nextElementSibling;
+      if (next?.classList.contains('tree-children')) next.classList.remove('hidden');
+    });
+  });
+  $('#btnTreeCollapse')?.addEventListener('click', () => {
+    $$('#fileTree .tree-item.dir').forEach((row) => {
+      row.classList.remove('open');
+      const next = row.nextElementSibling;
+      if (next?.classList.contains('tree-children')) next.classList.add('hidden');
+    });
+  });
 
   $('#editor').addEventListener('input', () => {
     requireProject().dirty = true;
@@ -1045,6 +1059,10 @@ function bindShortcuts() {
     if (e.key === 'Escape') {
       if (window.GrokCommandPalette?.isOpen?.()) {
         window.GrokCommandPalette.close();
+        return;
+      }
+      if (window.GrokHelp?.isOpen?.()) {
+        window.GrokHelp.close();
         return;
       }
       if (!$('#settingsModal')?.classList.contains('hidden')) closeSettings();
@@ -1231,12 +1249,41 @@ function fileIcon(name, isDir) {
   if (isDir) return '📁';
   const ext = name.includes('.') ? name.split('.').pop().toLowerCase() : '';
   const map = {
-    js: '📜', ts: '📘', tsx: '📘', jsx: '📜', json: '🧩', md: '📝',
-    css: '🎨', html: '🌐', py: '🐍', rs: '🦀', go: '🐹', java: '☕',
+    js: '📜', mjs: '📜', cjs: '📜', ts: '📘', tsx: '📘', jsx: '📜',
+    json: '🧩', md: '📝', mdx: '📝', css: '🎨', scss: '🎨', html: '🌐',
+    py: '🐍', rs: '🦀', go: '🐹', java: '☕', kt: '☕',
     toml: '⚙️', yml: '⚙️', yaml: '⚙️', env: '🔐', gitignore: '🙈',
-    svg: '🖼️', png: '🖼️', jpg: '🖼️', lock: '🔒',
+    svg: '🖼️', png: '🖼️', jpg: '🖼️', jpeg: '🖼️', gif: '🖼️', webp: '🖼️',
+    lock: '🔒', sh: '💻', bash: '💻', ps1: '💻', bat: '💻',
+    vue: '💚', svelte: '🧡', sql: '🗄️', wasm: '📦', zip: '🗜️',
   };
   return map[ext] || '📄';
+}
+
+function fileExt(name) {
+  if (!name || !name.includes('.')) return '';
+  return name.split('.').pop().toLowerCase();
+}
+
+function setPathBreadcrumb(relPath) {
+  const el = $('#currentPath');
+  if (!el) return;
+  if (!relPath || relPath === '—') {
+    el.textContent = '—';
+    el.title = '';
+    return;
+  }
+  const parts = String(relPath).replace(/\\/g, '/').split('/').filter(Boolean);
+  el.title = relPath;
+  if (parts.length <= 1) {
+    el.innerHTML = `<span class="fp-leaf">${esc(parts[0] || relPath)}</span>`;
+    return;
+  }
+  const leaf = parts.pop();
+  const head = parts
+    .map((p) => `<span class="fp-seg">${esc(p)}</span>`)
+    .join('<span class="fp-sep">/</span>');
+  el.innerHTML = `${head}<span class="fp-sep">/</span><span class="fp-leaf">${esc(leaf)}</span>`;
 }
 
 function buildTreeFrag(nodes, depth) {
@@ -1248,6 +1295,7 @@ function buildTreeFrag(nodes, depth) {
     row.dataset.path = n.path;
     row.dataset.name = n.name.toLowerCase();
     row.dataset.type = n.type;
+    if (!isDir) row.dataset.ext = fileExt(n.name);
     row.innerHTML = `
       <span class="chev">${isDir ? '▶' : ''}</span>
       <span class="fico">${fileIcon(n.name, isDir)}</span>
@@ -1319,7 +1367,11 @@ async function openFile(relPath, { fromAgent = false, switchToCode = true } = {}
     requireProject().currentFile = relPath;
     requireProject().dirty = false;
     $('#editor').value = data.content;
-    $('#currentPath').textContent = relPath;
+    setPathBreadcrumb(relPath);
+    // highlight in tree
+    $$('#fileTree .tree-item').forEach((el) => {
+      el.classList.toggle('active-file', el.dataset.path === relPath);
+    });
     if (!fromAgent && switchToCode) switchTab('editor');
     updateEditorChrome();
     syncGutter();

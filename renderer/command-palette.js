@@ -245,6 +245,29 @@
         run: run(() =>
           window.grok?.openExternal?.('https://github.com/sunormesky-max/grok-code')
         ),
+      },
+      {
+        id: 'help.shortcuts',
+        title: t('cmd.help.shortcuts', '快捷键速查'),
+        hint: 'Ctrl+/',
+        keywords: 'help shortcuts keyboard 快捷键 ?',
+        group: 'actions',
+        run: run(() => global.GrokHelp?.open?.()),
+      },
+      {
+        id: 'density.toggle',
+        title: t('cmd.density.toggle', '切换界面密度'),
+        keywords: 'density compact comfortable 密度',
+        group: 'actions',
+        run: run(() => {
+          const cur = global.GrokDensity?.getDensity?.() || 'comfortable';
+          const next = cur === 'compact' ? 'comfortable' : 'compact';
+          global.GrokDensity?.setDensity?.(next);
+          global.toast?.(
+            t('toast.density', '密度：{mode}', { mode: next }),
+            'ok'
+          );
+        }),
       }
     );
   }

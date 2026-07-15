@@ -1,0 +1,103 @@
+/* Density modes — comfortable (default) vs compact */
+
+body.density-compact {
+  --files-w: 220px;
+  --chat-w: 360px;
+  --term-h: 132px;
+  --topbar-h: 44px;
+  --status-h: 26px;
+  --radius: 10px;
+  --radius-sm: 7px;
+  font-size: 12px;
+}
+
+body.density-compact .topbar {
+  padding-left: 10px;
+  padding-right: 4px;
+}
+body.density-compact .brand-text .name {
+  font-size: 14px;
+}
+body.density-compact .tag {
+  font-size: 9px;
+}
+body.density-compact .project-bar {
+  padding: 4px 8px;
+  min-height: 36px;
+}
+body.density-compact .project-tab,
+body.density-compact .task-tab {
+  padding: 3px 8px !important;
+  font-size: 11.5px !important;
+  border-radius: 8px !important;
+}
+body.density-compact .panel-head {
+  padding: 6px 10px;
+  min-height: 34px;
+}
+body.density-compact .panel-label {
+  font-size: 11px;
+}
+body.density-compact .tree-item {
+  padding: 2px 6px;
+  font-size: 11.5px;
+  min-height: 22px;
+}
+body.density-compact .msg {
+  padding: 8px 10px !important;
+  margin-bottom: 6px !important;
+  border-radius: 10px !important;
+}
+body.density-compact .msg .role {
+  font-size: 10px;
+}
+body.density-compact .composer-box {
+  border-radius: 12px !important;
+}
+body.density-compact #prompt {
+  font-size: 12.5px !important;
+  min-height: 44px;
+}
+body.density-compact .btn {
+  padding: 5px 10px;
+  font-size: 11.5px;
+}
+body.density-compact .btn.small {
+  padding: 2px 8px;
+  font-size: 11px;
+}
+body.density-compact .live-status-bar {
+  padding: 6px 10px !important;
+}
+body.density-compact .live-event .card {
+  padding: 6px 8px;
+  font-size: 11.5px;
+}
+body.density-compact .settings-card {
+  max-width: 720px;
+}
+body.density-compact .stab {
+  padding: 4px 10px !important;
+  font-size: 11.5px;
+}
+body.density-compact .field {
+  margin-bottom: 8px;
+}
+body.density-compact .field input,
+body.density-compact .field textarea,
+body.density-compact .field select {
+  padding: 6px 8px !important;
+  font-size: 12px;
+}
+body.density-compact .statusbar {
+  font-size: 10px;
+}
+body.density-compact .hint-chip {
+  font-size: 9px !important;
+  padding: 1px 6px;
+}
+
+/* Comfortable keeps defaults from styles.css / ui-polish.css */
+body.density-comfortable {
+  /* explicit for class presence */
+}

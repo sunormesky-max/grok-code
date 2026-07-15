@@ -1,0 +1,113 @@
+/* Shortcuts cheatsheet overlay */
+
+.help-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 12500;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+.help-overlay.hidden {
+  display: none;
+}
+.help-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.58);
+  backdrop-filter: blur(8px);
+}
+.help-card {
+  position: relative;
+  width: min(520px, 94vw);
+  max-height: min(80vh, 640px);
+  overflow: auto;
+  border-radius: 16px;
+  border: 1px solid transparent;
+  background:
+    linear-gradient(165deg, rgba(12, 16, 26, 0.98), rgba(4, 6, 12, 0.98)) padding-box,
+    linear-gradient(135deg, rgba(125, 211, 252, 0.45), rgba(249, 115, 22, 0.3)) border-box;
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.6), 0 0 40px rgba(56, 189, 248, 0.08);
+  animation: helpIn 0.22s cubic-bezier(0.22, 1, 0.36, 1);
+}
+@keyframes helpIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.help-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 18px 8px;
+  border-bottom: 1px solid rgba(125, 211, 252, 0.1);
+}
+.help-head h2 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 750;
+  letter-spacing: 0.04em;
+  background: linear-gradient(105deg, #fff, #7dd3fc 60%, #f97316);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+.help-grid {
+  padding: 10px 14px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.help-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  transition: background 0.12s;
+}
+.help-row:hover {
+  background: rgba(125, 211, 252, 0.06);
+}
+.help-keys {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+.help-keys kbd {
+  font-family: var(--mono, ui-monospace, monospace);
+  font-size: 11px;
+  padding: 3px 7px;
+  border-radius: 6px;
+  border: 1px solid rgba(125, 211, 252, 0.25);
+  background: rgba(0, 0, 0, 0.45);
+  color: #e4e4e7;
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.06);
+  min-width: 1.4em;
+  text-align: center;
+}
+.help-plus {
+  color: var(--faint, #52525b);
+  font-size: 10px;
+  margin: 0 1px;
+}
+.help-desc {
+  font-size: 13px;
+  color: var(--muted, #a1a1aa);
+  text-align: right;
+}
+.help-foot {
+  padding: 10px 18px 14px;
+  font-size: 11px;
+  color: var(--faint, #71717a);
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+}
