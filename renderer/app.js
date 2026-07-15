@@ -16,8 +16,10 @@ const t = (key, fallback, vars) =>
 
 const LAYOUT_KEY = 'grokcode-layout-v1';
 const TERM_HIST_KEY = 'grokcode-term-hist';
+const MODE_KEY = 'grokcode-work-mode';
 
 const state = {
+  workMode: loadJson(MODE_KEY, 'craft') || 'craft',
   workspace: null,
   treeData: [],
   currentFile: null,
@@ -128,6 +130,15 @@ async function init() {
   // 暴露给命令面板
   window.switchProject = switchProject;
   window.renderTaskTabs = renderTaskTabs;
+
+  bindWorkModeUi();
+  // sync mode from config if present
+  try {
+    const cfg = await window.grok.getConfig();
+    if (cfg.workMode) setWorkMode(cfg.workMode, { persistRemote: false });
+  } catch {
+    /* ignore */
+  }
 
   // i18n + theme first paint
   try {
@@ -1480,6 +1491,37 @@ window.openFile = openFile;
 window.switchTab = switchTab;
 window.renderDiffPane = renderDiffPane;
 
+// ── Work mode Craft / Plan / Ask ────────────────────────
+const MODE_HINTS = {
+  craft: { zh: '直接动手', en: 'Act now' },
+  plan: { zh: '先方案 · 说「执行」再改代码', en: 'Plan first · say “execute” to act' },
+  ask: { zh: '只读问答 · 不改磁盘', en: 'Read-only · no disk writes' },
+};
+
+function setWorkMode(mode, opts = {}) {
+  const m = ['craft', 'plan', 'ask'].includes(mode) ? mode : 'craft';
+  state.workMode = m;
+  saveJson(MODE_KEY, m);
+  document.querySelectorAll('.mode-chip').forEach((btn) => {
+    btn.classList.toggle('active', btn.dataset.mode === m);
+  });
+  const loc = window.GrokI18n?.getLocale?.() || 'zh';
+  const hint = MODE_HINTS[m];
+  const el = document.getElementById('modeHint');
+  if (el && hint) el.textContent = loc === 'en' ? hint.en : hint.zh;
+  if (opts.persistRemote !== false) {
+    window.grok.setConfig({ workMode: m }).catch(() => {});
+  }
+}
+
+function bindWorkModeUi() {
+  document.querySelectorAll('.mode-chip').forEach((btn) => {
+    btn.onclick = () => setWorkMode(btn.dataset.mode);
+  });
+  setWorkMode(state.workMode || 'craft', { persistRemote: false });
+}
+window.setWorkMode = setWorkMode;
+
 // ── Live / Diff mission control ─────────────────────────
 function pushLiveEvent({ kind, title, sub, running = false, projectId = null }) {
   const proj = projectId ? window.ProjectStore.get(projectId) : P();
@@ -2414,6 +2456,8 @@ async function runTaskPrompt(task, text, opts = {}) {
       messages: task.messages || [],
       prevContext: task.context || null,
       contextMode: cfg.contextMode,
+      workMode: state.workMode || cfg.workMode || 'craft',
+      stylePack: cfg.stylePack || 'default',
     });
     flushStreamPaint(task);
 

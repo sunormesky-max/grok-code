@@ -87,6 +87,16 @@ function testCatalogBuild() {
   console.log('ok  catalog-data.json');
 }
 
+function testModes() {
+  const m = require(path.join(root, 'electron', 'modes.js'));
+  const rules = m.buildRules({ baseRules: 'base', workMode: 'ask', stylePack: 'pragmatic' });
+  assert.ok(rules.includes('Ask') || rules.includes('只读'));
+  assert.ok(m.modePromptPrefix('plan', 'hello').includes('Plan'));
+  assert.equal(m.listModes().length, 3);
+  assert.ok(m.listStyles().length >= 3);
+  console.log('ok  modes / styles');
+}
+
 function testToolsSearchExports() {
   // createTools needs a real dir
   const os = require('os');
@@ -111,6 +121,7 @@ try {
   testPluginsExports();
   testProfilesRoundtrip();
   testCatalogBuild();
+  testModes();
   testToolsSearchExports();
   console.log('\nAll unit tests passed');
 } catch (err) {

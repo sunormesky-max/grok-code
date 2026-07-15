@@ -141,8 +141,12 @@ function createTools(workspaceRoot) {
     };
   }
 
-  /** 删除工作区内文件（还原「新建文件」用） */
-  function deleteFile(relPath) {
+  /**
+   * 删除工作区内文件
+   * @param {string} relPath
+   * @param {{ trash?: boolean }} opts  trash=true 时尽量进回收站（Windows）
+   */
+  function deleteFile(relPath, opts = {}) {
     const abs = resolveSafe(relPath);
     if (!fs.existsSync(abs)) {
       return { path: toRel(abs), deleted: false, reason: 'not_found' };
@@ -151,8 +155,29 @@ function createTools(workspaceRoot) {
     if (st.isDirectory()) {
       throw new Error(`拒绝删除目录: ${relPath}`);
     }
+    if (opts.trash !== false && process.platform === 'win32') {
+      try {
+        // Send to Recycle Bin via PowerShell / VisualBasic
+        const { execFileSync } = require('child_process');
+        const ps = `
+          Add-Type -AssemblyName Microsoft.VisualBasic;
+          [Microsoft.VisualBasic.FileIO.FileSystem]::DeleteFile(
+            '${abs.replace(/'/g, "''")}',
+            'OnlyErrorDialogs',
+            'SendToRecycleBin'
+          )
+        `;
+        execFileSync('powershell.exe', ['-NoProfile', '-Command', ps], {
+          windowsHide: true,
+          timeout: 15000,
+        });
+        return { path: toRel(abs), deleted: true, trash: true };
+      } catch {
+        /* fall through hard delete */
+      }
+    }
     fs.unlinkSync(abs);
-    return { path: toRel(abs), deleted: true };
+    return { path: toRel(abs), deleted: true, trash: false };
   }
 
   function searchFiles(query, globHint = '', maxHits = 40) {

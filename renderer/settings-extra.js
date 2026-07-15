@@ -30,6 +30,12 @@
     if (th) th.value = window.GrokThemes?.getTheme?.() || cfg.theme || 'grok';
     const dens = $('#cfgDensity');
     if (dens) dens.value = window.GrokDensity?.getDensity?.() || 'comfortable';
+    const st = $('#cfgStylePack');
+    if (st) st.value = cfg.stylePack || 'default';
+    const pp = $('#cfgPersonalProtect');
+    if (pp) pp.value = cfg.personalProtect || 'standard';
+    const tr = $('#cfgTrashOnDelete');
+    if (tr) tr.checked = cfg.trashOnDelete !== false;
     const tel = $('#cfgTelemetry');
     if (tel) tel.checked = Boolean(cfg.telemetryEnabled);
     const telEp = $('#cfgTelemetryEndpoint');
@@ -48,6 +54,12 @@
     if (loc) partial.locale = loc.value === 'en' ? 'en' : 'zh';
     const th = $('#cfgTheme');
     if (th) partial.theme = th.value || 'grok';
+    const st = $('#cfgStylePack');
+    if (st) partial.stylePack = st.value || 'default';
+    const pp = $('#cfgPersonalProtect');
+    if (pp) partial.personalProtect = pp.value || 'standard';
+    const tr = $('#cfgTrashOnDelete');
+    if (tr) partial.trashOnDelete = tr.checked;
     const tel = $('#cfgTelemetry');
     if (tel) partial.telemetryEnabled = tel.checked;
     const telEp = $('#cfgTelemetryEndpoint');
@@ -139,6 +151,9 @@
     await window.grok.setConfig({
       locale: partial.locale,
       theme: partial.theme,
+      stylePack: partial.stylePack,
+      personalProtect: partial.personalProtect,
+      trashOnDelete: partial.trashOnDelete,
       telemetryEnabled: partial.telemetryEnabled,
       telemetryEndpoint: partial.telemetryEndpoint,
     });

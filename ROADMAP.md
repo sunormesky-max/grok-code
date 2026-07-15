@@ -15,13 +15,14 @@ Living plan for the GrokCode open-source ecosystem. Order may change based on co
 - [x] Settings general form i18n
 - [x] Keyboard cheatsheet · density themes · file tree polish
 - [x] Global file/content search · Code|Diff split · Electron 43
+- [x] Craft/Plan/Ask modes · style packs · personal protect / trash delete
 
 ## Next
 
+- [ ] Hard Ask-mode tool block at IPC for UI terminal (beyond CLI rules)
 - [ ] Symbol/outline light search in open file
-- [ ] Animated onboarding illustrations
 - [ ] Persist split divider width per project
-- [ ] Retest signed packaging notes after Electron 43 installs
+- [ ] Skill progressive loader (inject description only until triggered)
 
 ## Later
 

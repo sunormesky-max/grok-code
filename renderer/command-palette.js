@@ -291,6 +291,27 @@
         keywords: 'split side by side 并排',
         group: 'actions',
         run: run(() => global.GrokSplit?.toggle?.()),
+      },
+      {
+        id: 'mode.craft',
+        title: t('cmd.mode.craft', '模式 · Craft'),
+        keywords: 'mode craft 动手',
+        group: 'actions',
+        run: run(() => global.setWorkMode?.('craft')),
+      },
+      {
+        id: 'mode.plan',
+        title: t('cmd.mode.plan', '模式 · Plan'),
+        keywords: 'mode plan 方案',
+        group: 'actions',
+        run: run(() => global.setWorkMode?.('plan')),
+      },
+      {
+        id: 'mode.ask',
+        title: t('cmd.mode.ask', '模式 · Ask'),
+        keywords: 'mode ask 只读',
+        group: 'actions',
+        run: run(() => global.setWorkMode?.('ask')),
       }
     );
   }

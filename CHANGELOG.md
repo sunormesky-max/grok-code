@@ -11,6 +11,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 - See [ROADMAP.md](ROADMAP.md)
 
+## [1.2.7] — 2026-07-16
+
+### Added (WorkBuddy-inspired, GrokCode-native)
+
+- **Work modes**: Craft / Plan / Ask (composer chips + rules injection)
+  - Plan: plan first; user says「执行」to act
+  - Ask: no auto-approve tools + read-only rules
+- **Style packs**: default / pragmatic / teaching / warm / blunt
+- **Personal protect** settings + **delete → Recycle Bin** on Windows (UI fs:delete)
+- Skill pack **template** under `examples/skills/skill-pack-template/` (progressive disclosure layout)
+
 ## [1.2.6] — 2026-07-16
 
 ### Added
@@ -132,7 +143,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Requires installed Grok CLI + auth (`grok login` or `XAI_API_KEY`)
 - YOLO / always-approve is full workspace trust
 
-[Unreleased]: https://github.com/sunormesky-max/grok-code/compare/v1.2.6...HEAD
+[Unreleased]: https://github.com/sunormesky-max/grok-code/compare/v1.2.7...HEAD
+[1.2.7]: https://github.com/sunormesky-max/grok-code/compare/v1.2.6...v1.2.7
 [1.2.6]: https://github.com/sunormesky-max/grok-code/compare/v1.2.5...v1.2.6
 [1.2.5]: https://github.com/sunormesky-max/grok-code/compare/v1.2.4...v1.2.5
 [1.2.4]: https://github.com/sunormesky-max/grok-code/compare/v1.2.3...v1.2.4

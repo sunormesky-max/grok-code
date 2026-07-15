@@ -5,6 +5,7 @@ contextBridge.exposeInMainWorld('grok', {
   setConfig: (partial) => ipcRenderer.invoke('config:set', partial),
   probeCli: () => ipcRenderer.invoke('cli:probe'),
   getAppVersion: () => ipcRenderer.invoke('app:getVersion'),
+  listModes: () => ipcRenderer.invoke('modes:list'),
 
   // 多项目
   projectList: () => ipcRenderer.invoke('project:list'),

@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generatedAt": "2026-07-15T16:27:42.279Z",
+  "generatedAt": "2026-07-15T16:50:09.524Z",
   "mcp": [
     {
       "kind": "mcp",
@@ -46,6 +46,14 @@
       "description": "Create a clear conventional commit from staged changes. Use when the user asks to commit or /commit.",
       "path": "examples/skills/sample-commit/SKILL.md",
       "bodyPreview": "\n# Sample commit skill\n\n1. Run `git status` and `git diff --staged`\n2. Summarize intent in one sentence\n3. Propose a conventional commit message (`feat:`, `fix:`, `docs:`, …)\n4. Only commit after the user confirms (unless they said to commit immediately)\n"
+    },
+    {
+      "kind": "skill",
+      "id": "skill-pack-template",
+      "name": "skill-pack-template",
+      "description": ">",
+      "path": "examples/skills/skill-pack-template/SKILL.md",
+      "bodyPreview": "\n# Skill pack template\n\nProgressive loading (inspired by common agent skill layouts, GrokCode-native):\n\n1. **Metadata** — name + description (always available for matching)\n2. **This body** — short procedure when skill triggers\n3. **references/** — load only when needed (schemas, long docs)\n4. **scripts/** — deterministic helpers the agent can run\n5. **assets/** — templates/images for output, not "
     }
   ],
   "plugins": [

@@ -15,6 +15,7 @@ const mcpSkills = require('./mcp-skills');
 const plugins = require('./plugins');
 const profiles = require('./profiles');
 const telemetry = require('./telemetry');
+const modes = require('./modes');
 
 const persist = createPersist();
 
@@ -50,6 +51,14 @@ const store = new Store({
     /** opt-in crash telemetry */
     telemetryEnabled: false,
     telemetryEndpoint: '',
+    /** craft | plan | ask */
+    workMode: 'craft',
+    /** default | pragmatic | teaching | warm | blunt */
+    stylePack: 'default',
+    /** off | standard | strict — personal dir caution for UI ops */
+    personalProtect: 'standard',
+    /** UI delete → recycle bin when possible */
+    trashOnDelete: true,
   },
 });
 
@@ -76,6 +85,12 @@ function emit(event, payload) {
 }
 
 function getConfig() {
+  const workMode = ['craft', 'plan', 'ask'].includes(store.get('workMode'))
+    ? store.get('workMode')
+    : 'craft';
+  const stylePack = modes.STYLES[store.get('stylePack')]
+    ? store.get('stylePack')
+    : 'default';
   return {
     apiKey: store.get('apiKey'),
     model: store.get('model'),
@@ -90,6 +105,10 @@ function getConfig() {
     theme: store.get('theme') || 'grok',
     telemetryEnabled: Boolean(store.get('telemetryEnabled')),
     telemetryEndpoint: store.get('telemetryEndpoint') || '',
+    workMode,
+    stylePack,
+    personalProtect: store.get('personalProtect') || 'standard',
+    trashOnDelete: store.get('trashOnDelete') !== false,
   };
 }
 
@@ -186,21 +205,21 @@ function openProject(dirPath) {
 
   const id = makeProjectId();
   const tools = createTools(dirPath);
-  const agent = createAgent({
-    getConfig,
-    workspaceRoot: dirPath,
-    emit: (event, payload) => emit(event, { ...payload, projectId: id }),
-  });
-
   const project = {
     id,
     path: path.resolve(dirPath),
     name: basename(dirPath),
     tools,
-    agent,
+    agent: null,
     watcher: null,
     aborts: new Map(),
+    _configOverride: null,
   };
+  project.agent = createAgent({
+    getConfig: () => ({ ...getConfig(), ...(project._configOverride || {}) }),
+    workspaceRoot: dirPath,
+    emit: (event, payload) => emit(event, { ...payload, projectId: id }),
+  });
   startWatcher(project);
   projects.set(id, project);
 
@@ -369,6 +388,12 @@ ipcMain.handle('config:get', () => {
     theme: store.get('theme') || 'grok',
     telemetryEnabled: Boolean(store.get('telemetryEnabled')),
     telemetryEndpoint: store.get('telemetryEndpoint') || '',
+    workMode: getConfig().workMode,
+    stylePack: getConfig().stylePack,
+    personalProtect: getConfig().personalProtect,
+    trashOnDelete: getConfig().trashOnDelete,
+    modes: modes.listModes(),
+    styles: modes.listStyles(),
   };
 });
 
@@ -404,8 +429,28 @@ ipcMain.handle('config:set', (_e, partial) => {
   if (partial.telemetryEndpoint !== undefined) {
     store.set('telemetryEndpoint', String(partial.telemetryEndpoint || '').trim());
   }
+  if (partial.workMode !== undefined) {
+    const m = String(partial.workMode);
+    store.set('workMode', ['craft', 'plan', 'ask'].includes(m) ? m : 'craft');
+  }
+  if (partial.stylePack !== undefined) {
+    const s = String(partial.stylePack);
+    store.set('stylePack', modes.STYLES[s] ? s : 'default');
+  }
+  if (partial.personalProtect !== undefined) {
+    const pp = String(partial.personalProtect);
+    store.set('personalProtect', ['off', 'standard', 'strict'].includes(pp) ? pp : 'standard');
+  }
+  if (partial.trashOnDelete !== undefined) {
+    store.set('trashOnDelete', Boolean(partial.trashOnDelete));
+  }
   return true;
 });
+
+ipcMain.handle('modes:list', () => ({
+  modes: modes.listModes(),
+  styles: modes.listStyles(),
+}));
 
 ipcMain.handle('cli:probe', () => probeGrok(store.get('grokPath')));
 
@@ -548,7 +593,8 @@ ipcMain.handle('fs:write', async (_e, payload) => {
 
 ipcMain.handle('fs:delete', async (_e, payload) => {
   const p = requireProject(payload.projectId);
-  return p.tools.deleteFile(payload.relPath ?? payload.path);
+  const trash = payload.trash !== undefined ? Boolean(payload.trash) : store.get('trashOnDelete') !== false;
+  return p.tools.deleteFile(payload.relPath ?? payload.path, { trash });
 });
 
 ipcMain.handle('fs:exists', async (_e, payload) => {
@@ -658,10 +704,41 @@ ipcMain.handle('agent:run', async (_e, payload) => {
     context.llm = { used: false, reason: err.message || String(err) };
   }
 
-  const fullPrompt = buildContextPrompt(context, message, {
+  const workMode = ['craft', 'plan', 'ask'].includes(payload?.workMode)
+    ? payload.workMode
+    : getConfig().workMode;
+  const stylePack = modes.STYLES[payload?.stylePack]
+    ? payload.stylePack
+    : getConfig().stylePack;
+
+  const modePrefix = modes.modePromptPrefix(workMode, message);
+  const basePrompt = buildContextPrompt(context, message, {
     projectName: p.name,
     taskTitle: taskTitle || tid,
   });
+  const fullPrompt = modePrefix + basePrompt;
+
+  // merged rules for CLI
+  const mergedRules = modes.buildRules({
+    baseRules: store.get('rules') || '',
+    workMode,
+    stylePack,
+  });
+
+  // Ask: never auto-approve tools; Plan: keep user setting unless execute phrase
+  let alwaysOverride;
+  let maxTurnsOverride;
+  if (workMode === 'ask') {
+    alwaysOverride = false;
+    maxTurnsOverride = Math.min(Number(store.get('maxTurns') || 30), 12);
+  } else if (workMode === 'plan') {
+    const exec =
+      /^(执行|开干|按方案|implement|execute|do it|lgtm|开搞)/i.test(String(message || '').trim());
+    if (!exec) {
+      // planning turn: fewer tool turns preferred
+      maxTurnsOverride = Math.min(Number(store.get('maxTurns') || 30), 16);
+    }
+  }
 
   if (p.aborts.has(tid)) {
     try {
@@ -674,6 +751,12 @@ ipcMain.handle('agent:run', async (_e, payload) => {
 
   const ac = new AbortController();
   p.aborts.set(tid, ac);
+
+  p._configOverride = {
+    _rulesOverride: mergedRules,
+    _alwaysApproveOverride: alwaysOverride,
+    _maxTurnsOverride: maxTurnsOverride,
+  };
 
   try {
     const result = await p.agent.run({
@@ -695,8 +778,11 @@ ipcMain.handle('agent:run', async (_e, payload) => {
       context,
       contextTiers: context.tiers,
       contextMode: context.mode || store.get('contextMode'),
+      workMode,
+      stylePack,
     };
   } finally {
+    p._configOverride = null;
     if (p.aborts.get(tid) === ac) p.aborts.delete(tid);
   }
 });

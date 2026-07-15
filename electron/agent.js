@@ -87,10 +87,19 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
       '--no-auto-update',
     ];
 
-    if (cfg.alwaysApprove !== false) args.push('--always-approve');
+    // allow per-run overrides (modes)
+    const alwaysApprove =
+      cfg._alwaysApproveOverride !== undefined
+        ? cfg._alwaysApproveOverride
+        : cfg.alwaysApprove !== false;
+    const rules = cfg._rulesOverride !== undefined ? cfg._rulesOverride : cfg.rules;
+    const maxTurns =
+      cfg._maxTurnsOverride !== undefined ? cfg._maxTurnsOverride : cfg.maxTurns;
+
+    if (alwaysApprove) args.push('--always-approve');
     if (cfg.model) args.push('-m', cfg.model);
-    if (cfg.maxTurns) args.push('--max-turns', String(cfg.maxTurns));
-    if (cfg.rules) args.push('--rules', cfg.rules);
+    if (maxTurns) args.push('--max-turns', String(maxTurns));
+    if (rules) args.push('--rules', rules);
     if (sessionId) args.push('--resume', sessionId);
 
     const emitT = (event, payload) => emit(event, { ...payload, taskId });

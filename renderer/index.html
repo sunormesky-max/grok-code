@@ -12,6 +12,7 @@
   <link rel="stylesheet" href="tree-polish.css" />
   <link rel="stylesheet" href="search-ui.css" />
   <link rel="stylesheet" href="split-layout.css" />
+  <link rel="stylesheet" href="work-mode.css" />
 </head>
 <body class="theme-grok booting">
   <a class="skip-link" href="#app" data-i18n="a11y.skip">跳到主内容</a>
@@ -343,6 +344,12 @@
           <!-- 每个任务一个 .messages 面板，由 JS 创建 -->
         </div>
         <div class="composer">
+          <div class="mode-bar" id="modeBar" role="group" aria-label="Work mode">
+            <button type="button" class="mode-chip active" data-mode="craft" title="直接动手">Craft</button>
+            <button type="button" class="mode-chip" data-mode="plan" title="先方案后执行">Plan</button>
+            <button type="button" class="mode-chip" data-mode="ask" title="只读问答">Ask</button>
+            <span class="mode-hint" id="modeHint">直接动手</span>
+          </div>
           <div class="composer-box">
             <div class="composer-glow" aria-hidden="true"></div>
             <textarea id="prompt" rows="2" placeholder="对当前任务说… 可开多个任务并行跑" data-i18n-placeholder="chat.placeholder"></textarea>
@@ -588,6 +595,29 @@
             <option value="compact" data-i18n="density.compact">紧凑</option>
           </select>
           <small data-i18n="density.hint">紧凑模式缩小边距与字号，适合小屏 / 多任务</small>
+        </label>
+        <label class="field">
+          <span data-i18n="style.label">对话风格</span>
+          <select id="cfgStylePack">
+            <option value="default">默认 · Grok</option>
+            <option value="pragmatic">高效务实</option>
+            <option value="teaching">启发教学</option>
+            <option value="warm">亲和友善</option>
+            <option value="blunt">直言不讳</option>
+          </select>
+        </label>
+        <label class="field">
+          <span data-i18n="protect.label">个人目录保护</span>
+          <select id="cfgPersonalProtect">
+            <option value="off">关闭</option>
+            <option value="standard" selected>标准（桌面/下载/文档）</option>
+            <option value="strict">严格（整个用户主目录）</option>
+          </select>
+          <small data-i18n="protect.hint">UI 删除进回收站；Agent 侧靠模式与规则约束</small>
+        </label>
+        <label class="field check">
+          <input type="checkbox" id="cfgTrashOnDelete" checked />
+          <span><strong data-i18n="protect.trash">删除进回收站</strong></span>
         </label>
         <label class="field">
           <span data-i18n="theme.label">主题</span>
