@@ -16,24 +16,32 @@ Living plan for the GrokCode open-source ecosystem. Order may change based on co
 - [x] Diff / Code → VS Code / Cursor
 - [x] Auto-update channel (electron-updater + GitHub Releases)
 - [x] Renderer modularization (utils / onboarding / settings-extra / …)
-- [ ] Discussions enabled for Q&A and showcase
+- [x] Discussions enabled for Q&A and showcase
+- [x] **Plugin marketplace bridge** (`grok plugin` in Settings)
+- [x] **i18n** (en / zh shell UI)
+- [x] **Theme packs** (built-in + community tokens under `examples/themes/`)
+- [x] **Linux / macOS** artifacts in Release matrix (unsigned community builds)
+- [x] **Virtualized Live timeline** for long sessions
+- [x] **Project profiles** export / import
+- [x] **Telemetry opt-in** (local crash logs; optional endpoint)
+- [x] **Skill / MCP catalog** from `examples/` (`npm run catalog`)
 
 ## Next
 
-- [ ] **Plugin marketplace bridge** (discover Grok plugins from UI)
-- [ ] **i18n** (en / zh fully parallel)
-- [ ] **Theme packs** (community CSS tokens)
-- [ ] Linux / macOS signed artifacts in Release matrix
-- [ ] Virtualized Live timeline for very long sessions
+- [ ] Richer i18n coverage (dynamic toasts / Live strings)
+- [ ] Theme pack import UI (drag JSON)
+- [ ] Signed macOS / Windows code-signing when certs available
+- [ ] Plugin search UX parity with TUI marketplace filters
+- [ ] Optional Graphite / multi-PR workflow docs for contributors
 
 ## Later
 
-- [ ] Shared team “project profiles” (export/import workspace + rules)
-- [ ] Telemetry opt-in for crash reports only
-- [ ] Skill / MCP catalog website generated from `examples/`
+- [ ] Shared cloud team profiles (optional sync service)
+- [ ] Static docs site for catalog (GitHub Pages)
+- [ ] Accessibility audit (keyboard / screen readers)
 
 ## How to influence
 
 1. Open a [Feature request](https://github.com/sunormesky-max/grok-code/issues/new?template=feature_request.md)
-2. Or start a Discussion (Show & Tell / Ideas)
+2. Or start a [Discussion](https://github.com/sunormesky-max/grok-code/discussions) (Show & Tell / Ideas)
 3. Ship a PR — see [CONTRIBUTING.md](CONTRIBUTING.md)

@@ -3380,3 +3380,80 @@ body.booted #app {
   padding: 8px 10px;
   font-size: 13px;
 }
+
+/* ── Theme packs ── */
+body.theme-void {
+  --bg: #000000;
+  --bg-elev: #0a0a0a;
+  --panel: rgba(12,12,12,0.92);
+  --ice: #e4e4e7;
+  --accent: #a1a1aa;
+  --accent-glow: rgba(255,255,255,0.12);
+  --mars: #71717a;
+  --ok: #a3e635;
+}
+body.theme-mars {
+  --bg: #0c0604;
+  --bg-elev: #1a0c08;
+  --panel: rgba(28,12,8,0.9);
+  --ice: #fdba74;
+  --accent: #f97316;
+  --accent-glow: rgba(249,115,22,0.35);
+  --mars: #ea580c;
+  --ok: #fbbf24;
+}
+body.theme-ice {
+  --bg: #020617;
+  --bg-elev: #0c1a2e;
+  --panel: rgba(8,20,40,0.92);
+  --ice: #7dd3fc;
+  --accent: #38bdf8;
+  --accent-glow: rgba(56,189,248,0.4);
+  --mars: #67e8f9;
+  --ok: #34d399;
+}
+body.theme-ember {
+  --bg: #0a0404;
+  --bg-elev: #1c0a0a;
+  --panel: rgba(32,10,10,0.92);
+  --ice: #fecaca;
+  --accent: #f87171;
+  --accent-glow: rgba(248,113,113,0.35);
+  --mars: #ef4444;
+  --ok: #fbbf24;
+}
+
+.mgmt-section-title {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ice);
+  margin: 12px 0 6px;
+  opacity: 0.85;
+}
+.mi-ver {
+  font-size: 10px;
+  color: var(--faint);
+  margin-left: 6px;
+  font-weight: 400;
+}
+.mi-meta.mono {
+  font-family: var(--mono);
+  font-size: 11px;
+  opacity: 0.75;
+  word-break: break-all;
+}
+.virt-spacer { pointer-events: none; }
+#liveTimeline { overflow-y: auto; position: relative; }
+
+#cfgLocale, #cfgTheme {
+  width: 100%;
+  background: rgba(0,0,0,0.4);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-size: 13px;
+}
+.settings-tabs { flex-wrap: wrap; }

@@ -95,7 +95,7 @@
           </span>
           <span class="tag">
             <span class="tag-live"></span>
-            maximum truth-seeking · CLI
+            <span data-i18n="app.tag">maximum truth-seeking · CLI</span>
           </span>
         </div>
       </div>
@@ -103,17 +103,17 @@
       <div class="pills titlebar-drag">
         <div class="pill cli-pill no-drag" id="cliPill" title="Grok CLI 状态">
           <span class="pill-ico">⚡</span>
-          <span class="pill-text" id="cliLabel">检测 CLI…</span>
+          <span class="pill-text" id="cliLabel" data-i18n="cli.detecting">检测 CLI…</span>
           <span class="dot"></span>
         </div>
       </div>
 
       <div class="top-actions no-drag">
         <button class="btn ghost" id="btnOpen" title="添加项目到工作台 (Ctrl+O)">
-          <span class="btn-ico">＋</span> 添加项目
+          <span class="btn-ico">＋</span> <span data-i18n="btn.addProject">添加项目</span>
         </button>
-        <button class="btn ghost" id="btnOpenWindow" title="在新窗口打开项目（并排开发）">⧉ 新窗口</button>
-        <button class="btn ghost icon-only" id="btnSettings" title="设置 (Ctrl+,)">⚙</button>
+        <button class="btn ghost" id="btnOpenWindow" title="在新窗口打开项目（并排开发）">⧉ <span data-i18n="btn.newWindow">新窗口</span></button>
+        <button class="btn ghost icon-only" id="btnSettings" data-i18n-title="btn.settings" title="设置 (Ctrl+,)">⚙</button>
         <div class="win-controls" aria-label="窗口控制">
           <button type="button" class="win-btn" id="btnWinMin" title="最小化">─</button>
           <button type="button" class="win-btn" id="btnWinMax" title="最大化">□</button>
@@ -124,9 +124,9 @@
 
     <!-- 多项目栏：并行挂载多个仓库 -->
     <div class="project-bar no-drag" id="projectBar">
-      <div class="project-bar-label">PROJECTS</div>
+      <div class="project-bar-label" data-i18n="projects.label">PROJECTS</div>
       <div class="project-tabs" id="projectTabs"></div>
-      <button type="button" class="project-add" id="btnAddProject" title="添加项目 (Ctrl+O)">＋ 项目</button>
+      <button type="button" class="project-add" id="btnAddProject" title="添加项目 (Ctrl+O)" data-i18n="projects.add">＋ 项目</button>
       <button type="button" class="project-add ghost" id="btnNewWindowProject" title="新窗口打开">⧉</button>
     </div>
 
@@ -142,7 +142,7 @@
       <aside class="panel files glass" id="filesPanel">
         <div class="panel-head">
           <div class="panel-title">
-            <span class="panel-label">Explorer</span>
+            <span class="panel-label" data-i18n="explorer.title">Explorer</span>
             <span class="panel-sub" id="treeCount"></span>
           </div>
           <div class="panel-actions">
@@ -167,15 +167,15 @@
       <section class="center">
         <div class="panel editor-wrap glass">
           <div class="panel-head tabs" id="editorTabs">
-            <button type="button" class="tab active" data-tab="live" title="任务实时动态">Live</button>
-            <button type="button" class="tab" data-tab="editor" title="代码">Code</button>
-            <button type="button" class="tab" data-tab="diff" title="变更 diff">Diff</button>
+            <button type="button" class="tab active" data-tab="live" title="任务实时动态" data-i18n="tab.live">Live</button>
+            <button type="button" class="tab" data-tab="editor" title="代码" data-i18n="tab.code">Code</button>
+            <button type="button" class="tab" data-tab="diff" title="变更 diff" data-i18n="tab.diff">Diff</button>
             <span class="live-badge hidden" id="liveBadge">● LIVE</span>
             <span class="file-path" id="currentPath">—</span>
             <span class="dirty-badge hidden" id="dirtyBadge">未保存</span>
             <label class="follow-toggle" title="跟随 Agent 焦点文件">
               <input type="checkbox" id="followAgent" checked />
-              <span>跟随</span>
+              <span data-i18n="follow">跟随</span>
             </label>
           </div>
 
@@ -186,8 +186,8 @@
                 <div class="live-status-bar" id="liveStatusBar">
                   <div class="live-pulse-ring" id="livePulse"></div>
                   <div class="live-status-text">
-                    <strong id="livePhase">待命</strong>
-                    <span id="liveDetail">丢一个任务给 Grok，这里会变成任务驾驶舱</span>
+                    <strong id="livePhase" data-i18n="live.idle">待命</strong>
+                    <span id="liveDetail" data-i18n="live.hint">丢一个任务给 Grok，这里会变成任务驾驶舱</span>
                   </div>
                   <div class="live-stats">
                     <span class="stat" id="statTools">0 tools</span>
@@ -204,17 +204,17 @@
                 </div>
               </div>
               <aside class="live-side">
-                <div class="live-side-head">焦点文件</div>
+                <div class="live-side-head" data-i18n="live.focus">焦点文件</div>
                 <div class="live-focus" id="liveFocus">
                   <div class="muted">Agent 读/写文件时出现在这里</div>
                 </div>
-                <div class="live-side-head">本轮变更</div>
+                <div class="live-side-head" data-i18n="live.changes">本轮变更</div>
                 <div class="live-changes" id="liveChanges">
                   <div class="muted">尚无文件变更</div>
                 </div>
                 <div class="live-side-head">
-                  上下文四档
-                  <button type="button" class="link-btn" id="btnRefreshContext" title="重新压缩">整理</button>
+                  <span data-i18n="live.context">上下文四档</span>
+                  <button type="button" class="link-btn" id="btnRefreshContext" title="重新压缩" data-i18n="live.context.refresh">整理</button>
                 </div>
                 <div class="context-tiers" id="contextTiers">
                   <div class="muted">对话开始后实时压缩 L0–L3</div>
@@ -239,10 +239,10 @@
               </div>
             </div>
             <div class="editor-foot">
-              <button class="btn small" id="btnSave" disabled>保存 <kbd>Ctrl+S</kbd></button>
-              <button class="btn small ghost" id="btnRevealDiff" disabled>查看 Diff</button>
-              <button class="btn small ghost" id="btnOpenExternalCode" disabled title="在 VS Code / Cursor 打开">↗ IDE</button>
-              <span class="muted" id="editorStatus">就绪</span>
+              <button class="btn small" id="btnSave" disabled><span data-i18n="code.save">保存</span> <kbd>Ctrl+S</kbd></button>
+              <button class="btn small ghost" id="btnRevealDiff" disabled data-i18n="code.diff">查看 Diff</button>
+              <button class="btn small ghost" id="btnOpenExternalCode" disabled title="在 VS Code / Cursor 打开" data-i18n="code.ide">↗ IDE</button>
+              <span class="muted" id="editorStatus" data-i18n="code.ready">就绪</span>
               <span class="muted ml-auto" id="editorMeta"></span>
             </div>
           </div>
@@ -252,8 +252,8 @@
             <div class="diff-layout">
               <aside class="diff-list" id="diffFileList">
                 <div class="diff-list-head">
-                  <span>变更文件</span>
-                  <button type="button" class="link-btn hidden" id="btnRestoreAll" title="将全部变更还原到改前快照">全部还原</button>
+                  <span data-i18n="diff.files">变更文件</span>
+                  <button type="button" class="link-btn hidden" id="btnRestoreAll" title="将全部变更还原到改前快照" data-i18n="diff.restoreAll">全部还原</button>
                 </div>
                 <div class="diff-list-body" id="diffFileListBody">
                   <div class="muted pad">本会话还没有捕获到变更。<br>Agent 写文件后会出现在这里。</div>
@@ -261,13 +261,13 @@
               </aside>
               <div class="diff-main">
                 <div class="diff-toolbar">
-                  <span id="diffTitle">选择左侧文件</span>
+                  <span id="diffTitle" data-i18n="diff.pick">选择左侧文件</span>
                   <span class="diff-stats" id="diffStats"></span>
                   <div class="diff-actions">
-                    <button class="btn small ghost" id="btnOpenFromDiff" disabled>在 Code 打开</button>
-                    <button class="btn small primary" id="btnOpenExternal" disabled title="在 VS Code / Cursor 打开">↗ 外部编辑器</button>
-                    <button class="btn small danger" id="btnRestoreFile" disabled title="用改前快照覆盖当前文件">还原此文件</button>
-                    <button class="btn small ghost" id="btnDismissDiff" disabled title="仅从列表移除，不改磁盘">忽略</button>
+                    <button class="btn small ghost" id="btnOpenFromDiff" disabled data-i18n="diff.openCode">在 Code 打开</button>
+                    <button class="btn small primary" id="btnOpenExternal" disabled title="在 VS Code / Cursor 打开" data-i18n="diff.openExt">↗ 外部编辑器</button>
+                    <button class="btn small danger" id="btnRestoreFile" disabled title="用改前快照覆盖当前文件" data-i18n="diff.restore">还原此文件</button>
+                    <button class="btn small ghost" id="btnDismissDiff" disabled title="仅从列表移除，不改磁盘" data-i18n="diff.dismiss">忽略</button>
                   </div>
                 </div>
                 <div class="diff-content" id="diffContent">
@@ -287,7 +287,7 @@
         <div class="panel terminal-wrap glass">
           <div class="panel-head">
             <div class="panel-title">
-              <span class="panel-label">Terminal</span>
+              <span class="panel-label" data-i18n="term.label">Terminal</span>
               <span class="panel-sub">workspace shell</span>
             </div>
             <div class="panel-actions">
@@ -308,13 +308,13 @@
       <aside class="panel chat glass">
         <div class="panel-head">
           <div class="panel-title">
-            <span class="panel-label">Grok</span>
+            <span class="panel-label" data-i18n="chat.label">Grok</span>
             <span class="panel-sub" id="taskPanelHint">multi-task</span>
           </div>
           <div class="chat-head-actions">
             <span class="status-chip" id="agentStatus">
               <i class="pulse"></i>
-              <span id="agentStatusText">待命</span>
+              <span id="agentStatusText" data-i18n="chat.status">待命</span>
             </span>
             <span class="elapsed hidden" id="elapsedTimer">0s</span>
             <button class="icon-btn" id="btnNewChat" title="新任务 (Ctrl+T)">＋</button>
@@ -324,7 +324,7 @@
         <!-- 多任务栏 -->
         <div class="task-bar" id="taskBar">
           <div class="task-tabs" id="taskTabs"></div>
-          <button type="button" class="task-add" id="btnAddTask" title="新建并行任务 (Ctrl+T)">＋ 任务</button>
+          <button type="button" class="task-add" id="btnAddTask" title="新建并行任务 (Ctrl+T)" data-i18n="chat.newTask">＋ 任务</button>
         </div>
 
         <div class="messages-host" id="messagesHost">
@@ -333,7 +333,7 @@
         <div class="composer">
           <div class="composer-box">
             <div class="composer-glow" aria-hidden="true"></div>
-            <textarea id="prompt" rows="2" placeholder="对当前任务说… 可开多个任务并行跑"></textarea>
+            <textarea id="prompt" rows="2" placeholder="对当前任务说… 可开多个任务并行跑" data-i18n-placeholder="chat.placeholder"></textarea>
             <div class="composer-bar">
               <div class="composer-hints">
                 <span class="hint-chip">Ctrl+Enter</span>
@@ -341,9 +341,9 @@
                 <span class="hint-chip muted" id="charCount">0</span>
               </div>
               <div class="composer-actions">
-                <button class="btn danger ghost small hidden" id="btnStop">■ 停止</button>
+                <button class="btn danger ghost small hidden" id="btnStop" data-i18n="chat.stop">■ 停止</button>
                 <button class="btn primary" id="btnSend">
-                  <span id="sendLabel">Grok it</span>
+                  <span id="sendLabel" data-i18n="chat.send">Grok it</span>
                   <span class="send-arrow">↵</span>
                 </button>
               </div>
@@ -356,7 +356,7 @@
     <footer class="statusbar">
       <span class="sb-brand">xAI · Grok</span>
       <span class="sep">│</span>
-      <span id="sbWorkspace">无工作区</span>
+      <span id="sbWorkspace" data-i18n="sb.noProject">无工作区</span>
       <span class="sep">·</span>
       <span id="sbCli">CLI —</span>
       <span class="sep">·</span>
@@ -433,16 +433,19 @@
     <div class="modal-card glass settings-card">
       <div class="modal-head">
         <div>
-          <h2>Settings</h2>
-          <p class="modal-desc">通用 · MCP · Skills — 直连本机 Grok CLI 配置</p>
+          <h2 data-i18n="settings.title">Settings</h2>
+          <p class="modal-desc" data-i18n="settings.desc">通用 · MCP · Skills · 插件 — 直连本机 Grok CLI</p>
         </div>
         <button class="icon-btn" id="btnCloseSettings">✕</button>
       </div>
 
       <div class="settings-tabs" id="settingsTabs">
-        <button type="button" class="stab active" data-stab="general">通用</button>
-        <button type="button" class="stab" data-stab="mcp">MCP</button>
-        <button type="button" class="stab" data-stab="skills">Skills</button>
+        <button type="button" class="stab active" data-stab="general" data-i18n="stab.general">通用</button>
+        <button type="button" class="stab" data-stab="appearance" data-i18n="stab.appearance">外观</button>
+        <button type="button" class="stab" data-stab="mcp" data-i18n="stab.mcp">MCP</button>
+        <button type="button" class="stab" data-stab="skills" data-i18n="stab.skills">Skills</button>
+        <button type="button" class="stab" data-stab="plugins" data-i18n="stab.plugins">插件</button>
+        <button type="button" class="stab" data-stab="catalog" data-i18n="stab.catalog">目录</button>
       </div>
 
       <!-- 通用 -->
@@ -542,9 +545,56 @@
           <div class="update-status" id="updateStatusText">—</div>
         </div>
 
+        <div class="diag-box">
+          <div class="diag-head"><strong data-i18n="profile.export">项目配置</strong></div>
+          <div class="diag-actions">
+            <button type="button" class="btn small ghost" id="btnProfileExport" data-i18n="profile.export">导出项目配置</button>
+            <button type="button" class="btn small ghost" id="btnProfileImport" data-i18n="profile.import">导入项目配置</button>
+          </div>
+          <small class="muted">导出规则 / 模型 / 上下文模式等，便于团队共享「飞行配置」</small>
+        </div>
+
         <div class="modal-foot">
           <button class="btn ghost" id="btnProbeCli">重新检测</button>
           <button class="btn primary" id="btnSaveSettings">保存设置</button>
+        </div>
+      </div>
+
+      <!-- 外观：语言 / 主题 / 遥测 -->
+      <div class="settings-pane hidden" id="stab-appearance">
+        <label class="field">
+          <span data-i18n="lang.label">界面语言</span>
+          <select id="cfgLocale">
+            <option value="zh">中文</option>
+            <option value="en">English</option>
+          </select>
+        </label>
+        <label class="field">
+          <span data-i18n="theme.label">主题</span>
+          <select id="cfgTheme">
+            <option value="grok" data-i18n="theme.grok">Grok 深空（默认）</option>
+            <option value="void" data-i18n="theme.void">纯黑 Void</option>
+            <option value="mars" data-i18n="theme.mars">火星橙 Mars</option>
+            <option value="ice" data-i18n="theme.ice">冰蓝 Ice</option>
+            <option value="ember" data-i18n="theme.ember">余烬 Ember</option>
+          </select>
+        </label>
+        <label class="field check">
+          <input type="checkbox" id="cfgTelemetry" />
+          <span>
+            <strong data-i18n="telemetry.label">崩溃报告（可选）</strong>
+            <small data-i18n="telemetry.hint">默认关闭。开启后仅写本地 ~/.grok-code/crashes，可选手动 endpoint</small>
+          </span>
+        </label>
+        <label class="field">
+          <span>Telemetry endpoint <em>可选 HTTPS POST</em></span>
+          <input type="text" id="cfgTelemetryEndpoint" placeholder="https://example.com/crash" />
+        </label>
+        <div class="diag-actions">
+          <button type="button" class="btn small ghost" id="btnOpenCrashDir">打开崩溃日志目录</button>
+        </div>
+        <div class="modal-foot">
+          <button class="btn primary" id="btnSaveAppearance">保存外观</button>
         </div>
       </div>
 
@@ -650,18 +700,71 @@
           </div>
         </div>
       </div>
+
+      <!-- Plugins -->
+      <div class="settings-pane hidden" id="stab-plugins">
+        <div class="mgmt-toolbar">
+          <span class="mgmt-hint">对接 <code>grok plugin</code> / marketplace · 与 TUI 同源</span>
+          <div class="mgmt-actions">
+            <button class="btn small ghost" id="btnPluginRefresh">刷新</button>
+            <button class="btn small ghost" id="btnPluginUpdateMarkets">更新市场</button>
+          </div>
+        </div>
+        <div class="field-row">
+          <label class="field">
+            <span>安装插件 <em>git URL / user/repo</em></span>
+            <input type="text" id="pluginSource" placeholder="owner/plugin-repo 或 https://github.com/…" />
+          </label>
+          <div class="field" style="align-self:end">
+            <button class="btn small primary" id="btnPluginInstall">安装</button>
+          </div>
+        </div>
+        <div class="field-row">
+          <label class="field">
+            <span>添加市场源</span>
+            <input type="text" id="marketplaceSource" placeholder="https://github.com/xai-org/plugin-marketplace.git" />
+          </label>
+          <div class="field" style="align-self:end">
+            <button class="btn small ghost" id="btnMarketplaceAdd">添加源</button>
+          </div>
+        </div>
+        <div class="mgmt-list" id="pluginList">
+          <div class="muted pad">打开本页时加载…</div>
+        </div>
+        <pre class="mgmt-log hidden" id="pluginLog"></pre>
+      </div>
+
+      <!-- Catalog from examples/ -->
+      <div class="settings-pane hidden" id="stab-catalog">
+        <div class="mgmt-toolbar">
+          <span class="mgmt-hint">社区目录 · 源自仓库 <code>examples/</code></span>
+          <div class="mgmt-actions">
+            <button class="btn small ghost" id="btnCatalogRefresh">刷新</button>
+          </div>
+        </div>
+        <div class="tree-search-wrap" style="margin-bottom:10px">
+          <input type="search" id="catalogFilter" placeholder="筛选 MCP / Skills / 市场…" autocomplete="off" />
+        </div>
+        <div class="mgmt-list" id="catalogList">
+          <div class="muted pad">加载目录…</div>
+        </div>
+      </div>
     </div>
   </div>
 
   <script src="boot.js"></script>
   <script src="stars.js"></script>
   <script src="utils.js"></script>
+  <script src="i18n.js"></script>
+  <script src="themes.js"></script>
+  <script src="live-virtual.js"></script>
   <script src="diff-util.js"></script>
   <script src="projects.js"></script>
   <script src="tasks.js"></script>
   <script src="settings-mcp-skills.js"></script>
   <script src="onboarding.js"></script>
   <script src="settings-extra.js"></script>
+  <script src="settings-plugins.js"></script>
   <script src="external-editor-ui.js"></script>
   <script src="app.js"></script>
 </body>

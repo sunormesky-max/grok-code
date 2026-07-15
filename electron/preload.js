@@ -66,6 +66,31 @@ contextBridge.exposeInMainWorld('grok', {
   updateDownload: () => ipcRenderer.invoke('update:download'),
   updateInstall: () => ipcRenderer.invoke('update:install'),
 
+  // Plugins marketplace
+  pluginList: () => ipcRenderer.invoke('plugin:list'),
+  pluginAvailable: () => ipcRenderer.invoke('plugin:available'),
+  pluginMarketplaces: () => ipcRenderer.invoke('plugin:marketplaces'),
+  pluginMarketplaceAdd: (payload) => ipcRenderer.invoke('plugin:marketplaceAdd', payload || {}),
+  pluginMarketplaceRemove: (payload) =>
+    ipcRenderer.invoke('plugin:marketplaceRemove', payload || {}),
+  pluginMarketplaceUpdate: () => ipcRenderer.invoke('plugin:marketplaceUpdate'),
+  pluginInstall: (payload) => ipcRenderer.invoke('plugin:install', payload || {}),
+  pluginUninstall: (payload) => ipcRenderer.invoke('plugin:uninstall', payload || {}),
+  pluginEnable: (payload) => ipcRenderer.invoke('plugin:enable', payload || {}),
+  pluginDisable: (payload) => ipcRenderer.invoke('plugin:disable', payload || {}),
+  pluginDetails: (payload) => ipcRenderer.invoke('plugin:details', payload || {}),
+
+  // Project profiles
+  profileExport: (payload) => ipcRenderer.invoke('profile:export', payload || {}),
+  profileImport: () => ipcRenderer.invoke('profile:import'),
+  profileList: () => ipcRenderer.invoke('profile:list'),
+  profileDir: () => ipcRenderer.invoke('profile:dir'),
+
+  // Telemetry
+  telemetryReport: (payload) => ipcRenderer.invoke('telemetry:report', payload || {}),
+  telemetryList: () => ipcRenderer.invoke('telemetry:list'),
+  telemetryOpenDir: () => ipcRenderer.invoke('telemetry:openDir'),
+
   // MCP
   mcpList: () => ipcRenderer.invoke('mcp:list'),
   mcpAdd: (payload) => ipcRenderer.invoke('mcp:add', payload),

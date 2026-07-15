@@ -24,11 +24,10 @@ jobs:
         include:
           - os: windows-latest
             cmd: npm run dist:win
-          # Uncomment when you want multi-OS artifacts:
-          # - os: ubuntu-latest
-          #   cmd: npm run dist:linux
-          # - os: macos-latest
-          #   cmd: npm run dist:mac
+          - os: ubuntu-latest
+            cmd: npm run dist:linux
+          - os: macos-latest
+            cmd: npm run dist:mac
 
     steps:
       - uses: actions/checkout@v4
@@ -41,11 +40,14 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Build catalog
+        run: npm run catalog
+
       - name: Build distributables
         run: ${{ matrix.cmd }}
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # publish only on tags
+          # Unsigned community artifacts (no Apple/Windows certs in OSS by default)
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
 
       - name: Upload release assets
@@ -57,6 +59,7 @@ jobs:
             release/*.AppImage
             release/*.deb
             release/*.dmg
+            release/*.zip
             release/*.yml
             release/*.blockmap
           generate_release_notes: true

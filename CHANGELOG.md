@@ -11,6 +11,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 - See [ROADMAP.md](ROADMAP.md)
 
+## [1.2.0] — 2026-07-15
+
+### Added
+
+- **Plugin marketplace bridge** — Settings → Plugins (`grok plugin` list/install/enable + marketplaces)
+- **i18n** — Chinese / English shell UI (`renderer/i18n.js`, Settings → Appearance)
+- **Theme packs** — grok / void / mars / ice / ember + `examples/themes/`
+- **Virtualized Live timeline** for long agent sessions
+- **Project profiles** — export / import rules & flight-deck config
+- **Telemetry opt-in** — local `~/.grok-code/crashes` only unless endpoint set
+- **Community catalog** — Settings → Catalog from `examples/` (`npm run catalog`)
+- Release matrix: **Windows + Linux + macOS** unsigned community artifacts
+
+### Changed
+
+- Version **1.2.0**; ROADMAP Now items completed for promised v1.x surface
+
 ## [1.1.0] — 2026-07-15
 
 ### Added
@@ -48,6 +65,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Requires installed Grok CLI + auth (`grok login` or `XAI_API_KEY`)
 - YOLO / always-approve is full workspace trust
 
-[Unreleased]: https://github.com/sunormesky-max/grok-code/compare/v1.1.0...HEAD
+[Unreleased]: https://github.com/sunormesky-max/grok-code/compare/v1.2.0...HEAD
+[1.2.0]: https://github.com/sunormesky-max/grok-code/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/sunormesky-max/grok-code/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/sunormesky-max/grok-code/releases/tag/v1.0.0

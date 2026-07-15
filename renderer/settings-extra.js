@@ -24,6 +24,14 @@
     if (au) au.checked = cfg.autoUpdate !== false;
     const ver = $('#appVersionLabel');
     if (ver) ver.textContent = cfg.appVersion ? `v${cfg.appVersion}` : '';
+    const loc = $('#cfgLocale');
+    if (loc) loc.value = window.GrokI18n?.getLocale?.() || cfg.locale || 'zh';
+    const th = $('#cfgTheme');
+    if (th) th.value = window.GrokThemes?.getTheme?.() || cfg.theme || 'grok';
+    const tel = $('#cfgTelemetry');
+    if (tel) tel.checked = Boolean(cfg.telemetryEnabled);
+    const telEp = $('#cfgTelemetryEndpoint');
+    if (telEp) telEp.value = cfg.telemetryEndpoint || '';
   }
 
   function collectPartial() {
@@ -34,6 +42,14 @@
     if (ed) partial.preferredEditor = ed.value || 'auto';
     const au = $('#cfgAutoUpdate');
     if (au) partial.autoUpdate = au.checked;
+    const loc = $('#cfgLocale');
+    if (loc) partial.locale = loc.value === 'en' ? 'en' : 'zh';
+    const th = $('#cfgTheme');
+    if (th) partial.theme = th.value || 'grok';
+    const tel = $('#cfgTelemetry');
+    if (tel) partial.telemetryEnabled = tel.checked;
+    const telEp = $('#cfgTelemetryEndpoint');
+    if (telEp) partial.telemetryEndpoint = telEp.value.trim();
     return partial;
   }
 
@@ -106,6 +122,25 @@
     }
   }
 
+  async function saveAppearance() {
+    const partial = collectPartial();
+    if (partial.locale) {
+      window.GrokI18n?.setLocale?.(partial.locale);
+      window.toast?.(window.GrokI18n?.t?.('toast.lang') || '语言已切换', 'ok');
+    }
+    if (partial.theme) {
+      window.GrokThemes?.setTheme?.(partial.theme);
+      window.toast?.(window.GrokI18n?.t?.('toast.theme') || '主题已切换', 'ok');
+    }
+    await window.grok.setConfig({
+      locale: partial.locale,
+      theme: partial.theme,
+      telemetryEnabled: partial.telemetryEnabled,
+      telemetryEndpoint: partial.telemetryEndpoint,
+    });
+    window.toast?.(window.GrokI18n?.t?.('toast.saved') || '设置已保存', 'ok');
+  }
+
   function bind() {
     $('#btnRunDoctor')?.addEventListener('click', () => runDoctorUi());
     $('#btnExportDiag')?.addEventListener('click', () => exportDiag());
@@ -117,6 +152,39 @@
     $('#btnShowOnboarding')?.addEventListener('click', () => {
       window.GrokOnboarding?.show();
     });
+    $('#btnSaveAppearance')?.addEventListener('click', () => saveAppearance());
+    $('#cfgLocale')?.addEventListener('change', (e) => {
+      window.GrokI18n?.setLocale?.(e.target.value);
+    });
+    $('#cfgTheme')?.addEventListener('change', (e) => {
+      window.GrokThemes?.setTheme?.(e.target.value);
+    });
+    $('#btnOpenCrashDir')?.addEventListener('click', () => window.grok.telemetryOpenDir());
+    $('#btnProfileExport')?.addEventListener('click', async () => {
+      try {
+        const proj = window.ProjectStore?.active?.();
+        if (!proj) return window.toast?.('请先打开项目', 'err');
+        const r = await window.grok.profileExport({ projectId: proj.id });
+        window.toast?.(r.ok ? `已导出：${r.file}` : '导出失败', r.ok ? 'ok' : 'err');
+      } catch (err) {
+        window.toast?.(err.message, 'err');
+      }
+    });
+    $('#btnProfileImport')?.addEventListener('click', async () => {
+      try {
+        const r = await window.grok.profileImport();
+        if (!r) return;
+        window.toast?.(`已导入配置「${r.name}」— 请查看设置中的规则/模型`, 'ok');
+        // refresh settings fields
+        const cfg = await window.grok.getConfig();
+        fillFromConfig(cfg);
+        if (cfg.rules && document.querySelector('#cfgRules')) {
+          document.querySelector('#cfgRules').value = cfg.rules;
+        }
+      } catch (err) {
+        window.toast?.(err.message, 'err');
+      }
+    });
 
     if (window.grok?.on) {
       window.grok.on('update:status', (st) => renderUpdateStatus(st));
@@ -124,6 +192,12 @@
 
     // 初始状态
     window.grok?.updateStatus?.().then(renderUpdateStatus).catch(() => {});
+    // i18n first paint
+    try {
+      window.GrokI18n?.applyDom?.();
+    } catch {
+      /* ignore */
+    }
   }
 
   window.GrokSettingsExtra = {

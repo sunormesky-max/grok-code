@@ -12,6 +12,9 @@ const { runDoctor, exportDiagnostics } = require('./diagnostics');
 const { openInExternalEditor, resolveEditorBinary } = require('./external-editor');
 const updater = require('./updater');
 const mcpSkills = require('./mcp-skills');
+const plugins = require('./plugins');
+const profiles = require('./profiles');
+const telemetry = require('./telemetry');
 
 const persist = createPersist();
 
@@ -40,6 +43,13 @@ const store = new Store({
     preferredEditor: 'auto',
     /** 是否允许自动检查更新 */
     autoUpdate: true,
+    /** UI locale hint (renderer owns localStorage; mirrored for export) */
+    locale: 'zh',
+    /** theme id */
+    theme: 'grok',
+    /** opt-in crash telemetry */
+    telemetryEnabled: false,
+    telemetryEndpoint: '',
   },
 });
 
@@ -76,7 +86,23 @@ function getConfig() {
     contextMode: store.get('contextMode') || 'heuristic',
     preferredEditor: store.get('preferredEditor') || 'auto',
     autoUpdate: store.get('autoUpdate') !== false,
+    locale: store.get('locale') || 'zh',
+    theme: store.get('theme') || 'grok',
+    telemetryEnabled: Boolean(store.get('telemetryEnabled')),
+    telemetryEndpoint: store.get('telemetryEndpoint') || '',
   };
+}
+
+function reportIfEnabled(err, extra) {
+  try {
+    return telemetry.reportCrash(err, {
+      enabled: Boolean(store.get('telemetryEnabled')),
+      endpoint: store.get('telemetryEndpoint') || '',
+      extra,
+    });
+  } catch {
+    return { ok: false };
+  }
 }
 
 async function compressWithMode(messages, opts = {}) {
@@ -297,6 +323,17 @@ app.whenReady().then(() => {
     }
   }
 
+  process.on('uncaughtException', (err) => {
+    console.error('uncaughtException', err);
+    reportIfEnabled(err, { kind: 'uncaughtException' });
+  });
+  process.on('unhandledRejection', (reason) => {
+    console.error('unhandledRejection', reason);
+    reportIfEnabled(reason instanceof Error ? reason : String(reason), {
+      kind: 'unhandledRejection',
+    });
+  });
+
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });
@@ -326,6 +363,10 @@ ipcMain.handle('config:get', () => {
     preferredEditor: store.get('preferredEditor') || 'auto',
     autoUpdate: store.get('autoUpdate') !== false,
     appVersion: app.getVersion(),
+    locale: store.get('locale') || 'zh',
+    theme: store.get('theme') || 'grok',
+    telemetryEnabled: Boolean(store.get('telemetryEnabled')),
+    telemetryEndpoint: store.get('telemetryEndpoint') || '',
   };
 });
 
@@ -351,6 +392,16 @@ ipcMain.handle('config:set', (_e, partial) => {
     );
   }
   if (partial.autoUpdate !== undefined) store.set('autoUpdate', Boolean(partial.autoUpdate));
+  if (partial.locale !== undefined) {
+    store.set('locale', String(partial.locale) === 'en' ? 'en' : 'zh');
+  }
+  if (partial.theme !== undefined) store.set('theme', String(partial.theme || 'grok'));
+  if (partial.telemetryEnabled !== undefined) {
+    store.set('telemetryEnabled', Boolean(partial.telemetryEnabled));
+  }
+  if (partial.telemetryEndpoint !== undefined) {
+    store.set('telemetryEndpoint', String(partial.telemetryEndpoint || '').trim());
+  }
   return true;
 });
 
@@ -782,6 +833,105 @@ ipcMain.handle('skills:openDir', async (_e, payload = {}) => {
 });
 
 ipcMain.handle('paths:grokHome', () => mcpSkills.GROK_HOME);
+
+// ── Plugins marketplace ─────────────────────────────────
+ipcMain.handle('plugin:list', () => plugins.listInstalled(store.get('grokPath')));
+ipcMain.handle('plugin:available', () => plugins.listAvailable(store.get('grokPath')));
+ipcMain.handle('plugin:marketplaces', () => plugins.listMarketplaces(store.get('grokPath')));
+ipcMain.handle('plugin:marketplaceAdd', (_e, payload = {}) =>
+  plugins.addMarketplace(payload.source, store.get('grokPath'))
+);
+ipcMain.handle('plugin:marketplaceRemove', (_e, payload = {}) =>
+  plugins.removeMarketplace(payload.name, store.get('grokPath'))
+);
+ipcMain.handle('plugin:marketplaceUpdate', () => plugins.updateMarketplaces(store.get('grokPath')));
+ipcMain.handle('plugin:install', (_e, payload = {}) =>
+  plugins.installPlugin(payload.source, store.get('grokPath'), { trust: payload.trust !== false })
+);
+ipcMain.handle('plugin:uninstall', (_e, payload = {}) =>
+  plugins.uninstallPlugin(payload.name, store.get('grokPath'))
+);
+ipcMain.handle('plugin:enable', (_e, payload = {}) =>
+  plugins.enablePlugin(payload.name, store.get('grokPath'))
+);
+ipcMain.handle('plugin:disable', (_e, payload = {}) =>
+  plugins.disablePlugin(payload.name, store.get('grokPath'))
+);
+ipcMain.handle('plugin:details', (_e, payload = {}) =>
+  plugins.pluginDetails(payload.name, store.get('grokPath'))
+);
+
+// ── Project profiles ────────────────────────────────────
+ipcMain.handle('profile:export', async (e, payload = {}) => {
+  const projectId = payload.projectId;
+  const p = projectId ? projects.get(projectId) : projects.values().next().value;
+  if (!p) throw new Error('请先打开项目');
+  const cfg = getConfig();
+  const result = profiles.exportProfile({
+    projectPath: p.path,
+    name: payload.name || p.name,
+    rules: cfg.rules,
+    model: cfg.model,
+    maxTurns: cfg.maxTurns,
+    alwaysApprove: cfg.alwaysApprove,
+    contextMode: cfg.contextMode,
+    preferredEditor: cfg.preferredEditor,
+    includeSession: payload.includeSession !== false,
+  });
+  // offer save dialog copy
+  const win = BrowserWindow.fromWebContents(e.sender);
+  const save = await dialog.showSaveDialog(win, {
+    title: '导出 GrokCode 项目配置',
+    defaultPath: path.join(osHomedir(), `${p.name}.grokcode.json`),
+    filters: [{ name: 'GrokCode Profile', extensions: ['json'] }],
+  });
+  if (!save.canceled && save.filePath) {
+    fs.copyFileSync(result.file, save.filePath);
+    result.file = save.filePath;
+  }
+  return result;
+});
+
+ipcMain.handle('profile:import', async (e) => {
+  const win = BrowserWindow.fromWebContents(e.sender);
+  const open = await dialog.showOpenDialog(win, {
+    title: '导入 GrokCode 项目配置',
+    properties: ['openFile'],
+    filters: [{ name: 'GrokCode Profile', extensions: ['json'] }],
+  });
+  if (open.canceled || !open.filePaths[0]) return null;
+  const result = profiles.importProfile(open.filePaths[0]);
+  // apply config fields
+  const c = result.config || {};
+  if (c.rules !== undefined) store.set('rules', c.rules);
+  if (c.model !== undefined) store.set('model', c.model);
+  if (c.maxTurns !== undefined) store.set('maxTurns', c.maxTurns);
+  if (c.alwaysApprove !== undefined) store.set('alwaysApprove', c.alwaysApprove);
+  if (c.contextMode !== undefined) store.set('contextMode', c.contextMode);
+  if (c.preferredEditor !== undefined) store.set('preferredEditor', c.preferredEditor);
+  return result;
+});
+
+ipcMain.handle('profile:list', () => profiles.listProfiles());
+ipcMain.handle('profile:dir', () => profiles.profilesDir());
+
+// ── Telemetry ───────────────────────────────────────────
+ipcMain.handle('telemetry:report', (_e, payload = {}) => {
+  return reportIfEnabled(payload.message || payload.error || 'renderer-error', {
+    kind: payload.kind || 'renderer',
+    ...payload.extra,
+  });
+});
+ipcMain.handle('telemetry:list', () => telemetry.listCrashLogs());
+ipcMain.handle('telemetry:openDir', () => {
+  const dir = telemetry.logDir();
+  shell.openPath(dir);
+  return true;
+});
+
+function osHomedir() {
+  return require('os').homedir();
+}
 
 // ── 无边框窗口控制 ──────────────────────────────────────
 function winFromEvent(e) {

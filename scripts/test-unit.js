@@ -4,6 +4,7 @@
  */
 const assert = require('assert');
 const path = require('path');
+const fs = require('fs');
 
 const root = path.join(__dirname, '..');
 const { compressContext, buildContextPrompt } = require(path.join(root, 'electron', 'context-compress.js'));
@@ -49,11 +50,51 @@ function testDiagnosticsShape() {
   console.log('ok  diagnostics exports');
 }
 
+function testPluginsExports() {
+  const p = require(path.join(root, 'electron', 'plugins.js'));
+  assert.equal(typeof p.listInstalled, 'function');
+  assert.equal(typeof p.installPlugin, 'function');
+  console.log('ok  plugins exports');
+}
+
+function testProfilesRoundtrip() {
+  const os = require('os');
+  const fs = require('fs');
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'grokcode-prof-'));
+  // create a fake project dir
+  const proj = path.join(tmp, 'demo-proj');
+  fs.mkdirSync(proj);
+  fs.writeFileSync(path.join(proj, 'package.json'), '{}');
+  const { exportProfile, importProfile } = require(path.join(root, 'electron', 'profiles.js'));
+  const exp = exportProfile({
+    projectPath: proj,
+    name: 'demo',
+    rules: 'prefer Chinese',
+    includeSession: false,
+  });
+  assert.ok(exp.ok && fs.existsSync(exp.file));
+  const imp = importProfile(exp.file);
+  assert.equal(imp.config.rules, 'prefer Chinese');
+  console.log('ok  profiles export/import');
+}
+
+function testCatalogBuild() {
+  const cat = path.join(root, 'renderer', 'catalog-data.json');
+  assert.ok(fs.existsSync(cat), 'catalog-data.json should exist (run npm run catalog)');
+  const data = JSON.parse(fs.readFileSync(cat, 'utf8'));
+  assert.ok(Array.isArray(data.mcp));
+  assert.ok(Array.isArray(data.skills));
+  console.log('ok  catalog-data.json');
+}
+
 try {
   testCompress();
   testExtractJson();
   testExternalEditorResolve();
   testDiagnosticsShape();
+  testPluginsExports();
+  testProfilesRoundtrip();
+  testCatalogBuild();
   console.log('\nAll unit tests passed');
 } catch (err) {
   console.error('FAIL', err);

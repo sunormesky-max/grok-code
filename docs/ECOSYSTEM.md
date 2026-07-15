@@ -30,8 +30,15 @@
 ## Versioning
 
 - `main` — development  
-- Tags `vX.Y.Z` — GitHub Actions builds Windows (and later Linux/macOS) artifacts  
+- Tags `vX.Y.Z` — GitHub Actions builds **Windows + Linux + macOS** community artifacts (unsigned by default)  
 - Changelog: [CHANGELOG.md](../CHANGELOG.md)  
+
+## Catalog & themes
+
+- MCP / Skill examples → `examples/` → `npm run catalog` → Settings → Catalog  
+- Theme token examples → `examples/themes/`  
+- Plugin bridge → Settings → Plugins (`grok plugin` / marketplace)  
+
 
 ## Branding
 

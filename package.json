@@ -1,6 +1,6 @@
 {
   "name": "grok-code",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Desktop coding agent powered by local Grok Build CLI — multi-project, multi-task, context inheritance, MCP & Skills",
   "main": "electron/main.js",
   "productName": "GrokCode",
@@ -28,7 +28,8 @@
     "start": "electron .",
     "dev": "electron . --dev",
     "lint": "node scripts/check.js",
-    "check": "node scripts/check.js && node scripts/test-unit.js",
+    "catalog": "node scripts/build-catalog.js",
+    "check": "node scripts/check.js && node scripts/test-unit.js && node scripts/build-catalog.js",
     "test": "node scripts/test-unit.js",
     "pack": "electron-builder --dir",
     "dist": "electron-builder",

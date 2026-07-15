@@ -1,0 +1,12 @@
+{
+  "id": "void-community",
+  "name": "Void community pack",
+  "description": "Example community theme tokens. Copy vars into a custom pack or use built-in theme-void.",
+  "vars": {
+    "--bg": "#000000",
+    "--ice": "#e4e4e7",
+    "--accent": "#a1a1aa",
+    "--mars": "#71717a",
+    "--accent-glow": "rgba(255,255,255,0.12)"
+  }
+}

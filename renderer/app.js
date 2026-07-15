@@ -123,6 +123,23 @@ async function init() {
   renderContextTiers(T());
   bindPersistHooks();
 
+  // i18n + theme first paint
+  try {
+    window.GrokI18n?.applyDom?.();
+    window.GrokThemes?.init?.();
+  } catch (e) {
+    console.warn('i18n/theme', e);
+  }
+
+  // renderer error → optional telemetry
+  window.addEventListener('error', (ev) => {
+    window.grok?.telemetryReport?.({
+      message: ev.message || 'renderer error',
+      kind: 'window.error',
+      extra: { filename: ev.filename, lineno: ev.lineno },
+    });
+  });
+
   // 首启向导（boot 结束后再弹，避免叠层）
   const showOnb = () => {
     try {
@@ -561,11 +578,16 @@ function rebuildLiveTimeline(proj) {
   if (!box) return;
   const events = proj?.activity || [];
   if (!events.length) {
+    box._virt = null;
     box.innerHTML = `<div class="live-empty" id="liveEmpty">
       <div class="grok-sigil" aria-hidden="true"><span></span><span></span><span></span></div>
       <h3>Mission Control</h3>
       <p>项目 <strong>${esc(proj?.name || '')}</strong> 的实时动态会出现在这里。</p>
     </div>`;
+    return;
+  }
+  if (window.GrokLiveVirtual?.renderVirtualTimeline) {
+    window.GrokLiveVirtual.renderVirtualTimeline(box, events, { esc, forceBottom: true });
     return;
   }
   box.innerHTML = '';
@@ -1357,7 +1379,8 @@ function pushLiveEvent({ kind, title, sub, running = false, projectId = null }) 
   if (proj) {
     if (!Array.isArray(proj.activity)) proj.activity = [];
     proj.activity.push({ kind, title, sub, ts: Date.now() });
-    if (proj.activity.length > 200) proj.activity = proj.activity.slice(-200);
+    const maxKeep = window.GrokLiveVirtual?.MAX_KEEP || 500;
+    if (proj.activity.length > maxKeep) proj.activity = proj.activity.slice(-maxKeep);
   }
 
   // 仅当前激活项目刷新 DOM
@@ -1371,29 +1394,34 @@ function pushLiveEvent({ kind, title, sub, running = false, projectId = null }) 
 
   const box = $('#liveTimeline');
   if (!box) return;
-  const now = new Date();
-  const t = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(
-    now.getSeconds()
-  ).padStart(2, '0')}`;
 
-  box.querySelectorAll('.live-event.running').forEach((el) => el.classList.remove('running'));
-
-  const row = document.createElement('div');
-  row.className = `live-event ${kind}${running ? ' running' : ''}`;
-  row.innerHTML = `
-    <div class="t">${t}</div>
-    <div class="dot"></div>
-    <div class="card">
-      <div class="kind">${esc(kind)}</div>
-      <div class="title">${esc(title)}</div>
-      ${sub ? `<div class="sub">${esc(sub)}</div>` : ''}
-    </div>`;
-  box.appendChild(row);
-  while (box.querySelectorAll('.live-event').length > 120) {
-    const first = box.querySelector('.live-event');
-    if (first) first.remove();
+  const ev = { kind, title, sub, ts: Date.now(), running };
+  // 长列表：虚拟滚动；短列表：直接 append
+  if (window.GrokLiveVirtual && (proj.activity?.length || 0) > 40) {
+    window.GrokLiveVirtual.renderVirtualTimeline(box, proj.activity, { esc, forceBottom: true });
+  } else {
+    box.querySelectorAll('.live-event.running').forEach((el) => el.classList.remove('running'));
+    const now = new Date(ev.ts);
+    const t = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(
+      now.getSeconds()
+    ).padStart(2, '0')}`;
+    const row = document.createElement('div');
+    row.className = `live-event ${kind}${running ? ' running' : ''}`;
+    row.innerHTML = `
+      <div class="t">${t}</div>
+      <div class="dot"></div>
+      <div class="card">
+        <div class="kind">${esc(kind)}</div>
+        <div class="title">${esc(title)}</div>
+        ${sub ? `<div class="sub">${esc(sub)}</div>` : ''}
+      </div>`;
+    box.appendChild(row);
+    while (box.querySelectorAll('.live-event').length > 120) {
+      const first = box.querySelector('.live-event');
+      if (first) first.remove();
+    }
+    box.scrollTop = box.scrollHeight;
   }
-  box.scrollTop = box.scrollHeight;
   updateLiveStats();
 }
 

@@ -19,10 +19,11 @@
 | **Agent** | Headless `grok` + multi-turn `--resume` sessions |
 | **Multi-project** | Mount several repos; agents run in parallel per project |
 | **Multi-task** | Per-project task tabs; parallel CLI processes |
-| **Live / Code / Diff** | Mission control timeline, file review, real unified diffs + restore |
-| **Context inheritance** | Persist chats under `~/.grok-code/sessions`; L0–L3 compression |
-| **Settings** | CLI path, model, YOLO, **MCP** & **Skills** management |
-| **UI** | Sci-fi Grok aesthetic + boot sequence |
+| **Live / Code / Diff** | Mission control (virtualized), file review, unified diffs + restore |
+| **Context inheritance** | Persist chats under `~/.grok-code/sessions`; L0–L3 (+ optional LLM) |
+| **Settings** | CLI, model, YOLO, **MCP**, **Skills**, **Plugins**, **Catalog** |
+| **Appearance** | **i18n** en/zh · theme packs · project profile import/export |
+| **UI** | Sci-fi Grok aesthetic + boot sequence + onboarding doctor |
 
 ---
 
@@ -132,9 +133,13 @@ Open **Settings → MCP / Skills** in the app.
 |---------|-------------|
 | `npm start` | Launch desktop app |
 | `npm run dev` | Launch with DevTools |
-| `npm run check` | Syntax + community file CI checks |
+| `npm run check` | Syntax + unit tests + catalog build |
+| `npm run catalog` | Generate Settings catalog from `examples/` |
+| `npm test` | Unit tests |
 | `npm run pack` | electron-builder unpacked dir |
 | `npm run dist:win` | Windows NSIS + portable → `release/` |
+| `npm run dist:linux` | AppImage + deb |
+| `npm run dist:mac` | dmg (unsigned in OSS CI) |
 
 ## Releases
 

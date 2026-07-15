@@ -28,6 +28,8 @@
         $(`#stab-${id}`)?.classList.remove('hidden');
         if (id === 'mcp') refreshMcp();
         if (id === 'skills') refreshSkills();
+        if (id === 'plugins') global.GrokPluginsUi?.refreshPlugins?.();
+        if (id === 'catalog') global.GrokPluginsUi?.loadCatalog?.();
       };
     });
   }
