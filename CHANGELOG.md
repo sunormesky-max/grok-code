@@ -11,6 +11,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 - See [ROADMAP.md](ROADMAP.md)
 
+## [1.2.1] — 2026-07-15
+
+### Fixed
+
+- Linux `.deb` build: require author email / maintainer metadata (v1.2.0 ubuntu job failure)
+
+### Added
+
+- Richer **i18n** for dynamic toasts / Live / chat recovery strings (`{n}` / `{name}` interpolate)
+- **Theme pack import** UI (drag-drop or file picker for `vars` JSON)
+- **Plugin search** filter in Settings → Plugins
+- **A11y**: skip link, `:focus-visible`, aria labels on chrome controls
+- Static **catalog site** under `docs/catalog/`
+- Docs: [SIGNING.md](docs/SIGNING.md), [CONTRIBUTING_WORKFLOW.md](docs/CONTRIBUTING_WORKFLOW.md)
+
 ## [1.2.0] — 2026-07-15
 
 ### Added
@@ -65,7 +80,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Requires installed Grok CLI + auth (`grok login` or `XAI_API_KEY`)
 - YOLO / always-approve is full workspace trust
 
-[Unreleased]: https://github.com/sunormesky-max/grok-code/compare/v1.2.0...HEAD
+[Unreleased]: https://github.com/sunormesky-max/grok-code/compare/v1.2.1...HEAD
+[1.2.1]: https://github.com/sunormesky-max/grok-code/compare/v1.2.0...v1.2.1
 [1.2.0]: https://github.com/sunormesky-max/grok-code/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/sunormesky-max/grok-code/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/sunormesky-max/grok-code/releases/tag/v1.0.0

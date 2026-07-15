@@ -8,6 +8,7 @@
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body class="theme-grok booting">
+  <a class="skip-link" href="#app" data-i18n="a11y.skip">跳到主内容</a>
   <!-- ═══ BOOT SEQUENCE ═══ -->
   <div id="bootScreen" class="boot-screen" role="dialog" aria-label="GrokCode 启动">
     <div class="boot-grid" aria-hidden="true"></div>
@@ -47,7 +48,7 @@
     </div>
   </div>
 
-  <div id="app">
+  <div id="app" role="application" aria-label="GrokCode">
     <!-- Grok 深空背景层 -->
     <canvas id="starfield" aria-hidden="true"></canvas>
     <div class="cosmos" aria-hidden="true">
@@ -113,11 +114,11 @@
           <span class="btn-ico">＋</span> <span data-i18n="btn.addProject">添加项目</span>
         </button>
         <button class="btn ghost" id="btnOpenWindow" title="在新窗口打开项目（并排开发）">⧉ <span data-i18n="btn.newWindow">新窗口</span></button>
-        <button class="btn ghost icon-only" id="btnSettings" data-i18n-title="btn.settings" title="设置 (Ctrl+,)">⚙</button>
-        <div class="win-controls" aria-label="窗口控制">
-          <button type="button" class="win-btn" id="btnWinMin" title="最小化">─</button>
-          <button type="button" class="win-btn" id="btnWinMax" title="最大化">□</button>
-          <button type="button" class="win-btn win-close" id="btnWinClose" title="关闭">✕</button>
+        <button class="btn ghost icon-only" id="btnSettings" data-i18n-title="btn.settings" data-i18n-aria="btn.settings" title="设置 (Ctrl+,)">⚙</button>
+        <div class="win-controls" role="group" aria-label="窗口控制">
+          <button type="button" class="win-btn" id="btnWinMin" title="最小化" aria-label="最小化">─</button>
+          <button type="button" class="win-btn" id="btnWinMax" title="最大化" aria-label="最大化">□</button>
+          <button type="button" class="win-btn win-close" id="btnWinClose" title="关闭" aria-label="关闭">✕</button>
         </div>
       </div>
     </header>
@@ -579,6 +580,12 @@
             <option value="ember" data-i18n="theme.ember">余烬 Ember</option>
           </select>
         </label>
+        <div class="theme-drop" id="themeDropZone" tabindex="0" role="button" aria-label="Import theme pack">
+          <div class="theme-drop-title" data-i18n="theme.import">导入主题包 JSON</div>
+          <div class="theme-drop-hint" data-i18n="theme.import.hint">拖入或选择 community theme tokens（含 vars 字段）</div>
+          <input type="file" id="themeFileInput" accept=".json,application/json" class="theme-file" />
+          <button type="button" class="btn small ghost" id="btnThemePick">选择文件…</button>
+        </div>
         <label class="field check">
           <input type="checkbox" id="cfgTelemetry" />
           <span>
@@ -709,6 +716,9 @@
             <button class="btn small ghost" id="btnPluginRefresh">刷新</button>
             <button class="btn small ghost" id="btnPluginUpdateMarkets">更新市场</button>
           </div>
+        </div>
+        <div class="tree-search-wrap" style="margin-bottom:10px">
+          <input type="search" id="pluginFilter" data-i18n-placeholder="plugin.search" placeholder="搜索已安装 / 可安装插件…" autocomplete="off" />
         </div>
         <div class="field-row">
           <label class="field">

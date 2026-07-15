@@ -11,6 +11,8 @@ const loadJson = U.loadJson || ((_, fb) => fb);
 const saveJson = U.saveJson || (() => {});
 const formatBytes = U.formatBytes || ((n) => n + ' B');
 const renderMarkdown = U.renderMarkdown || ((s) => esc(s));
+const t = (key, fallback, vars) =>
+  (window.GrokI18n && window.GrokI18n.t(key, fallback, vars)) || fallback || key;
 
 const LAYOUT_KEY = 'grokcode-layout-v1';
 const TERM_HIST_KEY = 'grokcode-term-hist';
@@ -199,7 +201,7 @@ function bindPersistHooks() {
     if (!task) return;
     await refreshTaskContext(task);
     renderContextTiers(task);
-    toast('上下文已重新整理', 'ok');
+    toast(t('live.context.done', '上下文已重新整理'), 'ok');
     schedulePersist(true);
   });
   // 周期性自动保存
@@ -281,7 +283,12 @@ async function restoreAllProjectsFromDisk() {
         setWorkspaceLabel(p.path);
         window.TaskStore.onProjectSwitch();
         await loadTree();
-        toast(`已恢复 ${window.ProjectStore.count()} 个项目的上下文`, 'ok');
+        toast(
+          t('projects.restored', `已恢复 ${window.ProjectStore.count()} 个项目的上下文`, {
+            n: window.ProjectStore.count(),
+          }),
+          'ok'
+        );
       }
     } catch (e) {
       console.warn(e);
@@ -422,7 +429,9 @@ function renderProjectTabs() {
   const list = window.ProjectStore.list();
   const activeId = window.ProjectStore.activeId;
   if (!list.length) {
-    host.innerHTML = `<div class="muted" style="font-size:12px;padding:4px 8px">尚未挂载项目 — 点「＋ 项目」并行打开多个仓库</div>`;
+    host.innerHTML = `<div class="muted" style="font-size:12px;padding:4px 8px">${esc(
+      t('projects.none')
+    )}</div>`;
     return;
   }
   host.innerHTML = list
@@ -475,7 +484,7 @@ async function switchProject(id) {
   await loadTree();
   renderProjectTabs();
   schedulePersist(true);
-  toast(`切换到项目：${p.name}`);
+  toast(t('projects.switched', `切换到项目：${p.name}`, { name: p.name }));
 }
 
 /** 切换项目前：把当前 UI 状态写回旧项目对象 */
@@ -912,7 +921,7 @@ function bindUi() {
   $('#btnSave').onclick = saveCurrentFile;
   $('#btnClearTerm').onclick = () => {
     $('#termOut').innerHTML = '';
-    toast('终端已清空');
+    toast(t('term.cleared', '终端已清空'));
   };
   $('#btnCollapseFiles').onclick = toggleFiles;
   $('#btnExpandFiles')?.addEventListener('click', () => {
@@ -1064,7 +1073,7 @@ function toggleFiles() {
   syncFilesRail();
   persistLayout();
   if (!state.filesCollapsed) {
-    toast('资源管理器已展开', 'ok');
+    toast(t('toast.explorerOpen', '资源管理器已展开'), 'ok');
   }
 }
 
@@ -2199,7 +2208,7 @@ function scheduleTreeRefresh(immediate = false) {
 
 async function sendPrompt() {
   if (!P()) {
-    toast('请先添加项目（可多开并行）', 'err');
+    toast(t('chat.needProject', '请先添加项目（可多开并行）'), 'err');
     openProjectFlow();
     return;
   }
@@ -2207,7 +2216,7 @@ async function sendPrompt() {
   const task = T();
   if (!task) return;
   if (task.running) {
-    toast('当前任务正在运行 — 可开新任务或切换到其他项目', 'err');
+    toast(t('chat.busy', '当前任务正在运行 — 可开新任务或切换到其他项目'), 'err');
     return;
   }
 
@@ -2225,20 +2234,20 @@ async function sendPrompt() {
 async function runTaskPrompt(task, text, opts = {}) {
   if (!task || !text) return;
   if (task.running) {
-    toast('当前任务正在运行', 'err');
+    toast(t('chat.busy', '当前任务正在运行'), 'err');
     return;
   }
 
   const cfg = await window.grok.getConfig();
   if (!P()) {
-    appendMessage('assistant', '请先添加项目文件夹。', {}, task);
-    toast('请先打开项目', 'err');
+    appendMessage('assistant', t('chat.needProject'), {}, task);
+    toast(t('chat.needProject'), 'err');
     return;
   }
   if (!cfg.cli?.ok) {
     appendMessage(
       'assistant',
-      'Grok CLI 不可用。请安装 Grok Build，或在「设置」中填写 grok 路径。未登录可执行 `grok login`。\n可点设置 → 一键体检。',
+      t('chat.cliMissing'),
       {},
       task
     );
@@ -2317,7 +2326,7 @@ async function runTaskPrompt(task, text, opts = {}) {
       task.contextTiers = result.contextTiers || result.context.tiers;
     }
     if (result?.resumedFallback) {
-      toast('原会话已失效，已自动无 resume 重跑', 'ok');
+      toast(t('chat.resumeFallback'), 'ok');
     }
     if (finalText) {
       task.streamBuf = finalText;
@@ -2334,14 +2343,14 @@ async function runTaskPrompt(task, text, opts = {}) {
   } catch (err) {
     const msg = err.message || String(err);
     task.lastError = msg;
-    upsertAssistant(`错误：${msg}`, true, task);
+    upsertAssistant(t('chat.error', `错误：${msg}`, { msg }), true, task);
     finalizeLiveMessages(task);
     appendRetryBar(task, text, msg);
     if (isActiveTask(task)) {
-      setAgentStatus('出错', false, true);
-      setLivePhase('出错', msg);
+      setAgentStatus(t('live.phase.error', '出错'), false, true);
+      setLivePhase(t('live.phase.error', '出错'), msg);
     }
-    toast(msg || '运行失败', 'err');
+    toast(msg || t('live.phase.error'), 'err');
   } finally {
     clearInterval(liveTick);
     task.running = false;
@@ -2355,15 +2364,17 @@ async function runTaskPrompt(task, text, opts = {}) {
       $('#liveBadge')?.classList.toggle('hidden', !anyRunning());
       if (!$('#agentStatus').classList.contains('error')) {
         setAgentStatus('待命', false);
-        if ($('#livePhase')?.textContent !== '出错') {
+        if ($('#livePhase')?.textContent !== t('live.phase.error', '出错')) {
           const r = window.TaskStore.countRunning();
           setLivePhase(
-            r > 0 ? `${r} 个任务运行中` : '待命',
+            r > 0 ? t('live.running', `${r} 个任务运行中`, { n: r }) : t('live.idle', '待命'),
             changesMap().size
-              ? `累计 ${changesMap().size} 文件变更 · 去 Diff`
+              ? t('live.changes.hint', `累计 ${changesMap().size} 文件变更 · 去 Diff`, {
+                  n: changesMap().size,
+                })
               : r > 0
-                ? '可切换任务查看进度'
-                : '准备下一条 / 开新任务并行'
+                ? t('live.running', `${r} 个任务运行中`, { n: r })
+                : t('live.readyNext', '准备下一条 / 开新任务并行')
           );
         }
       }
@@ -2381,11 +2392,11 @@ function appendRetryBar(task, promptText, errMsg) {
   const bar = document.createElement('div');
   bar.className = 'retry-bar';
   bar.innerHTML = `
-    <span class="retry-hint">运行失败，可选恢复动作</span>
+    <span class="retry-hint">${esc(t('chat.retryHint'))}</span>
     <div class="retry-actions">
-      <button type="button" class="btn small primary" data-act="retry">重试</button>
-      <button type="button" class="btn small ghost" data-act="fresh">新会话重试</button>
-      <button type="button" class="btn small ghost" data-act="diag">导出诊断</button>
+      <button type="button" class="btn small primary" data-act="retry">${esc(t('chat.retry'))}</button>
+      <button type="button" class="btn small ghost" data-act="fresh">${esc(t('chat.retryFresh'))}</button>
+      <button type="button" class="btn small ghost" data-act="diag">${esc(t('chat.exportDiag'))}</button>
     </div>`;
   bar.querySelector('[data-act="retry"]').onclick = () => {
     bar.remove();
@@ -2419,7 +2430,7 @@ async function stopAgent() {
     stopElapsed(task);
   }
   renderTaskTabs();
-  toast(`已停止：${task.title}`);
+  toast(t('chat.stopped', `已停止：${task.title}`, { title: task.title }));
 }
 
 function setRunningUi(on) {
@@ -2750,7 +2761,7 @@ async function saveSettings() {
   await window.grok.setConfig(partial);
   closeSettings();
   await refreshCliStatus();
-  toast('设置已保存', 'ok');
+  toast(t('toast.saved', '设置已保存'), 'ok');
 }
 
 const toast = U.toast || window.toast || ((msg) => console.log(msg));

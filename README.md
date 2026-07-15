@@ -22,7 +22,7 @@
 | **Live / Code / Diff** | Mission control (virtualized), file review, unified diffs + restore |
 | **Context inheritance** | Persist chats under `~/.grok-code/sessions`; L0–L3 (+ optional LLM) |
 | **Settings** | CLI, model, YOLO, **MCP**, **Skills**, **Plugins**, **Catalog** |
-| **Appearance** | **i18n** en/zh · theme packs · project profile import/export |
+| **Appearance** | **i18n** en/zh · theme packs (+ JSON import) · profiles |
 | **UI** | Sci-fi Grok aesthetic + boot sequence + onboarding doctor |
 
 ---

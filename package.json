@@ -1,10 +1,13 @@
 {
   "name": "grok-code",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "description": "Desktop coding agent powered by local Grok Build CLI — multi-project, multi-task, context inheritance, MCP & Skills",
   "main": "electron/main.js",
   "productName": "GrokCode",
-  "author": "GrokCode Contributors",
+  "author": {
+    "name": "GrokCode Contributors",
+    "email": "grokcode-oss@users.noreply.github.com"
+  },
   "license": "MIT",
   "homepage": "https://github.com/sunormesky-max/grok-code",
   "repository": {
@@ -97,6 +100,10 @@
         "deb"
       ],
       "category": "Development",
+      "maintainer": "GrokCode Contributors <grokcode-oss@users.noreply.github.com>",
+      "vendor": "GrokCode Contributors",
+      "synopsis": "Desktop coding agent for local Grok CLI",
+      "description": "Multi-project multi-task desktop flight deck over Grok Build CLI.",
       "artifactName": "${productName}-${version}-${os}-${arch}.${ext}"
     },
     "mac": {
@@ -104,7 +111,10 @@
         "dmg"
       ],
       "category": "public.app-category.developer-tools",
-      "artifactName": "${productName}-${version}-${os}-${arch}.${ext}"
+      "artifactName": "${productName}-${version}-${os}-${arch}.${ext}",
+      "identity": null,
+      "hardenedRuntime": false,
+      "gatekeeperAssess": false
     },
     "publish": [
       {

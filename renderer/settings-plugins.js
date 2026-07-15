@@ -8,56 +8,66 @@
   function esc(s) {
     return (window.GrokUtils?.esc || ((x) => String(x ?? '')))(s);
   }
-  function toast(m, t) {
-    (window.toast || console.log)(m, t);
+  function toast(m, ty) {
+    (window.toast || console.log)(m, ty);
+  }
+  function t(k, fb, v) {
+    return window.GrokI18n?.t?.(k, fb, v) || fb || k;
   }
 
-  async function refreshPlugins() {
-    const host = $('#pluginList');
-    if (!host) return;
-    host.innerHTML = '<div class="muted pad">加载中…</div>';
-    try {
-      const [installed, markets, available] = await Promise.all([
-        window.grok.pluginList(),
-        window.grok.pluginMarketplaces(),
-        window.grok.pluginAvailable().catch(() => ({ plugins: [] })),
-      ]);
-      const inst = installed.plugins || [];
-      const avail = available.plugins || [];
-      const marketsList = markets.marketplaces || [];
+  /** @type {{ inst: any[], avail: any[], markets: any[], text?: string } | null} */
+  let cache = null;
 
-      let html = '';
-      html += `<div class="mgmt-section-title">已安装 (${inst.length})</div>`;
-      if (!inst.length) {
-        html += `<div class="muted pad">暂无插件。从下方市场安装，或粘贴 git 源安装。</div>`;
-      } else {
-        html += inst
-          .map(
-            (p) => `
+  function matchQ(obj, q) {
+    if (!q) return true;
+    const hay = `${obj.name || ''} ${obj.description || ''} ${obj.source || ''} ${obj.marketplace || ''} ${obj.version || ''}`.toLowerCase();
+    return hay.includes(q);
+  }
+
+  function renderFromCache() {
+    const host = $('#pluginList');
+    if (!host || !cache) return;
+    const q = ($('#pluginFilter')?.value || '').trim().toLowerCase();
+    const inst = (cache.inst || []).filter((p) => matchQ(p, q));
+    const avail = (cache.avail || []).filter((p) => matchQ(p, q));
+    const marketsList = cache.markets || [];
+
+    let html = '';
+    html += `<div class="mgmt-section-title">${esc(t('plugin.installed', `已安装 (${inst.length})`, { n: inst.length }))}</div>`;
+    if (!(cache.inst || []).length) {
+      html += `<div class="muted pad">${esc(t('plugin.empty'))}</div>`;
+    } else if (!inst.length) {
+      html += `<div class="muted pad">${esc(t('plugin.noneMatch'))}</div>`;
+    } else {
+      html += inst
+        .map(
+          (p) => `
           <div class="mgmt-item" data-name="${esc(p.name)}">
             <div class="mi-main">
               <div class="mi-name">${esc(p.name)} ${p.version ? `<span class="mi-ver">${esc(p.version)}</span>` : ''}</div>
               <div class="mi-meta">${esc(p.description || p.source || '')}</div>
             </div>
             <div class="mi-actions">
-              <button type="button" class="toggle ${p.enabled ? 'on' : ''}" data-act="toggle" title="启用/禁用"></button>
+              <button type="button" class="toggle ${p.enabled ? 'on' : ''}" data-act="toggle" title="enable/disable" aria-label="toggle"></button>
               <button type="button" class="btn small ghost" data-act="details">详情</button>
               <button type="button" class="btn small danger ghost" data-act="rm">卸载</button>
             </div>
           </div>`
-          )
-          .join('');
-      }
+        )
+        .join('');
+    }
 
-      html += `<div class="mgmt-section-title">市场源 (${marketsList.length})</div>`;
-      if (markets.text && !marketsList.length) {
-        html += `<pre class="mgmt-log">${esc(markets.text.slice(0, 800))}</pre>`;
-      }
-      html += marketsList
-        .map((m) => {
-          const name = m.name || m.id || m.url || 'source';
-          const url = m.url || m.source || m.repository || '';
-          return `<div class="mgmt-item">
+    html += `<div class="mgmt-section-title">${esc(
+      t('plugin.markets', `市场源 (${marketsList.length})`, { n: marketsList.length })
+    )}</div>`;
+    if (cache.text && !marketsList.length) {
+      html += `<pre class="mgmt-log">${esc(String(cache.text).slice(0, 800))}</pre>`;
+    }
+    html += marketsList
+      .map((m) => {
+        const name = m.name || m.id || m.url || 'source';
+        const url = m.url || m.source || m.repository || '';
+        return `<div class="mgmt-item">
             <div class="mi-main">
               <div class="mi-name">${esc(name)}</div>
               <div class="mi-meta">${esc(url)}</div>
@@ -66,13 +76,18 @@
               <button type="button" class="btn small danger ghost" data-act="rm-market" data-name="${esc(name)}">移除</button>
             </div>
           </div>`;
-        })
-        .join('');
+      })
+      .join('');
 
-      if (avail.length) {
-        html += `<div class="mgmt-section-title">可安装 (${avail.length})</div>`;
+    if ((cache.avail || []).length) {
+      html += `<div class="mgmt-section-title">${esc(
+        t('plugin.available', `可安装 (${avail.length})`, { n: avail.length })
+      )}</div>`;
+      if (!avail.length) {
+        html += `<div class="muted pad">${esc(t('plugin.noneMatch'))}</div>`;
+      } else {
         html += avail
-          .slice(0, 40)
+          .slice(0, 80)
           .map(
             (p) => `
           <div class="mgmt-item">
@@ -89,49 +104,72 @@
           )
           .join('');
       }
+    }
 
-      host.innerHTML = html;
+    host.innerHTML = html;
+    bindRowActions(host);
+  }
 
-      host.querySelectorAll('.mgmt-item').forEach((row) => {
-        const name = row.dataset.name;
-        row.querySelector('[data-act="toggle"]')?.addEventListener('click', async (e) => {
-          const on = e.currentTarget.classList.contains('on');
-          const r = on
-            ? await window.grok.pluginDisable({ name })
-            : await window.grok.pluginEnable({ name });
-          toast(r.ok ? (on ? '已禁用' : '已启用') : r.error || '失败', r.ok ? 'ok' : 'err');
-          refreshPlugins();
-        });
-        row.querySelector('[data-act="rm"]')?.addEventListener('click', async () => {
-          if (!confirm(`卸载插件 ${name}？`)) return;
-          const r = await window.grok.pluginUninstall({ name });
-          toast(r.ok ? '已卸载' : r.error || '失败', r.ok ? 'ok' : 'err');
-          refreshPlugins();
-        });
-        row.querySelector('[data-act="details"]')?.addEventListener('click', async () => {
-          const r = await window.grok.pluginDetails({ name });
-          const log = $('#pluginLog');
-          if (log) {
-            log.classList.remove('hidden');
-            log.textContent =
-              typeof r.details === 'string' ? r.details : JSON.stringify(r.details || r.text, null, 2);
-          }
-        });
-        row.querySelector('[data-act="rm-market"]')?.addEventListener('click', async (e) => {
-          const n = e.currentTarget.dataset.name;
-          if (!confirm(`移除市场源 ${n}？`)) return;
-          const r = await window.grok.pluginMarketplaceRemove({ name: n });
-          toast(r.ok ? '已移除' : r.error || '失败', r.ok ? 'ok' : 'err');
-          refreshPlugins();
-        });
-        row.querySelector('[data-act="install"]')?.addEventListener('click', async (e) => {
-          const source = e.currentTarget.dataset.source;
-          toast('安装中…');
-          const r = await window.grok.pluginInstall({ source, trust: true });
-          toast(r.ok ? '安装成功' : r.error || r.stderr || '安装失败', r.ok ? 'ok' : 'err');
-          refreshPlugins();
-        });
+  function bindRowActions(host) {
+    host.querySelectorAll('.mgmt-item').forEach((row) => {
+      const name = row.dataset.name;
+      row.querySelector('[data-act="toggle"]')?.addEventListener('click', async (e) => {
+        const on = e.currentTarget.classList.contains('on');
+        const r = on
+          ? await window.grok.pluginDisable({ name })
+          : await window.grok.pluginEnable({ name });
+        toast(r.ok ? (on ? '已禁用' : '已启用') : r.error || '失败', r.ok ? 'ok' : 'err');
+        refreshPlugins();
       });
+      row.querySelector('[data-act="rm"]')?.addEventListener('click', async () => {
+        if (!confirm(`卸载插件 ${name}？`)) return;
+        const r = await window.grok.pluginUninstall({ name });
+        toast(r.ok ? '已卸载' : r.error || '失败', r.ok ? 'ok' : 'err');
+        refreshPlugins();
+      });
+      row.querySelector('[data-act="details"]')?.addEventListener('click', async () => {
+        const r = await window.grok.pluginDetails({ name });
+        const log = $('#pluginLog');
+        if (log) {
+          log.classList.remove('hidden');
+          log.textContent =
+            typeof r.details === 'string' ? r.details : JSON.stringify(r.details || r.text, null, 2);
+        }
+      });
+      row.querySelector('[data-act="rm-market"]')?.addEventListener('click', async (e) => {
+        const n = e.currentTarget.dataset.name;
+        if (!confirm(`移除市场源 ${n}？`)) return;
+        const r = await window.grok.pluginMarketplaceRemove({ name: n });
+        toast(r.ok ? '已移除' : r.error || '失败', r.ok ? 'ok' : 'err');
+        refreshPlugins();
+      });
+      row.querySelector('[data-act="install"]')?.addEventListener('click', async (e) => {
+        const source = e.currentTarget.dataset.source;
+        toast('安装中…');
+        const r = await window.grok.pluginInstall({ source, trust: true });
+        toast(r.ok ? '安装成功' : r.error || r.stderr || '安装失败', r.ok ? 'ok' : 'err');
+        refreshPlugins();
+      });
+    });
+  }
+
+  async function refreshPlugins() {
+    const host = $('#pluginList');
+    if (!host) return;
+    host.innerHTML = `<div class="muted pad">${esc(t('plugin.loading'))}</div>`;
+    try {
+      const [installed, markets, available] = await Promise.all([
+        window.grok.pluginList(),
+        window.grok.pluginMarketplaces(),
+        window.grok.pluginAvailable().catch(() => ({ plugins: [] })),
+      ]);
+      cache = {
+        inst: installed.plugins || [],
+        avail: available.plugins || [],
+        markets: markets.marketplaces || [],
+        text: markets.text,
+      };
+      renderFromCache();
     } catch (err) {
       host.innerHTML = `<div class="muted pad">${esc(err.message)}</div>`;
     }
@@ -141,7 +179,6 @@
     const host = $('#catalogList');
     if (!host) return;
     try {
-      // bundled catalog-data.json
       const res = await fetch('catalog-data.json');
       const data = await res.json();
       window.__grokCatalog = data;
@@ -222,15 +259,15 @@
       btn.onclick = async () => {
         const item = (data.mcp || []).find((x) => x.id === btn.dataset.id);
         if (!item?.template) return;
-        const t = item.template;
+        const tmpl = item.template;
         try {
           const r = await window.grok.mcpAdd({
-            name: t.name,
-            transport: t.transport || 'stdio',
-            command: t.command,
-            url: t.url,
+            name: tmpl.name,
+            transport: tmpl.transport || 'stdio',
+            command: tmpl.command,
+            url: tmpl.url,
           });
-          toast(r?.ok !== false ? `已添加 MCP ${t.name}` : r?.error || '失败', 'ok');
+          toast(r?.ok !== false ? `已添加 MCP ${tmpl.name}` : r?.error || '失败', 'ok');
         } catch (e) {
           toast(e.message, 'err');
         }
@@ -288,8 +325,8 @@
     $('#catalogFilter')?.addEventListener('input', () => {
       if (window.__grokCatalog) renderCatalog(window.__grokCatalog);
     });
+    $('#pluginFilter')?.addEventListener('input', () => renderFromCache());
 
-    // settings tab switch for plugins/catalog
     document.getElementById('settingsTabs')?.addEventListener('click', (e) => {
       const btn = e.target.closest('.stab');
       if (!btn) return;

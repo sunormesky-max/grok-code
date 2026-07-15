@@ -8,6 +8,7 @@ const path = require('path');
 
 const root = path.join(__dirname, '..');
 const outFile = path.join(root, 'renderer', 'catalog-data.json');
+const docsCopy = path.join(root, 'docs', 'catalog', 'catalog-data.json');
 
 function readJson(p) {
   try {
@@ -86,7 +87,14 @@ const catalog = {
   ],
 };
 
-fs.writeFileSync(outFile, JSON.stringify(catalog, null, 2), 'utf8');
+const json = JSON.stringify(catalog, null, 2);
+fs.writeFileSync(outFile, json, 'utf8');
+try {
+  fs.mkdirSync(path.dirname(docsCopy), { recursive: true });
+  fs.writeFileSync(docsCopy, json, 'utf8');
+} catch (e) {
+  console.warn('warn catalog docs copy', e.message);
+}
 console.log(
-  `ok  catalog → ${path.relative(root, outFile)} (${mcp.length} mcp, ${skills.length} skills)`
+  `ok  catalog → ${path.relative(root, outFile)} (+ docs/catalog) (${mcp.length} mcp, ${skills.length} skills)`
 );

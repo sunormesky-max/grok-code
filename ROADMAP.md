@@ -18,27 +18,30 @@ Living plan for the GrokCode open-source ecosystem. Order may change based on co
 - [x] Renderer modularization (utils / onboarding / settings-extra / …)
 - [x] Discussions enabled for Q&A and showcase
 - [x] **Plugin marketplace bridge** (`grok plugin` in Settings)
-- [x] **i18n** (en / zh shell UI)
-- [x] **Theme packs** (built-in + community tokens under `examples/themes/`)
-- [x] **Linux / macOS** artifacts in Release matrix (unsigned community builds)
+- [x] **i18n** (en / zh shell UI + dynamic toasts / Live strings)
+- [x] **Theme packs** (built-in + JSON import / drag-drop)
+- [x] **Linux / macOS** artifacts in Release matrix (unsigned; deb maintainer fixed)
 - [x] **Virtualized Live timeline** for long sessions
 - [x] **Project profiles** export / import
 - [x] **Telemetry opt-in** (local crash logs; optional endpoint)
-- [x] **Skill / MCP catalog** from `examples/` (`npm run catalog`)
+- [x] **Skill / MCP catalog** from `examples/` + static `docs/catalog/`
+- [x] Plugin search / filter in Settings
+- [x] A11y basics (skip link, focus-visible, aria labels)
+- [x] Contributor stack workflow docs + signing guide
 
 ## Next
 
-- [ ] Richer i18n coverage (dynamic toasts / Live strings)
-- [ ] Theme pack import UI (drag JSON)
-- [ ] Signed macOS / Windows code-signing when certs available
-- [ ] Plugin search UX parity with TUI marketplace filters
-- [ ] Optional Graphite / multi-PR workflow docs for contributors
+- [ ] Broader i18n for MCP/Skills management copy
+- [ ] GitHub Pages publish for `docs/catalog/`
+- [ ] App icon / branding assets (replace default Electron icon)
+- [ ] Signed builds when maintainers have certs (see docs/SIGNING.md)
+- [ ] Message virtualization for very long chat panes
 
 ## Later
 
 - [ ] Shared cloud team profiles (optional sync service)
-- [ ] Static docs site for catalog (GitHub Pages)
-- [ ] Accessibility audit (keyboard / screen readers)
+- [ ] Full accessibility audit (screen readers)
+- [ ] Plugin marketplace filters parity with every TUI flag
 
 ## How to influence
 

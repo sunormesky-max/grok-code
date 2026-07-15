@@ -1,6 +1,6 @@
 /**
  * Lightweight i18n — en / zh
- * Usage: t('key') · data-i18n="key" · data-i18n-placeholder="key"
+ * Usage: t('key') · t('key', null, { name: 'x' }) · data-i18n="key"
  */
 (function (global) {
   const STRINGS = {
@@ -11,9 +11,13 @@
       'btn.settings': '设置',
       'projects.label': 'PROJECTS',
       'projects.add': '＋ 项目',
+      'projects.none': '尚未挂载项目 — 点「＋ 项目」并行打开多个仓库',
+      'projects.switched': '切换到项目：{name}',
+      'projects.restored': '已恢复 {n} 个项目的上下文',
       'explorer.title': 'Explorer',
       'explorer.empty': '还没有工作区。\nGrok 需要点东西才能「grok」。',
       'explorer.pick': '选择文件夹',
+      'explorer.openFirst': '打开项目后即可浏览文件\n可同时挂载多个项目并行开发',
       'tab.live': 'Live',
       'tab.code': 'Code',
       'tab.diff': 'Diff',
@@ -26,10 +30,17 @@
       'live.changes': '本轮变更',
       'live.context': '上下文四档',
       'live.context.refresh': '整理',
+      'live.context.done': '上下文已重新整理',
+      'live.running': '{n} 个任务运行中',
+      'live.phase.error': '出错',
+      'live.readyNext': '准备下一条 / 开新任务并行',
+      'live.changes.hint': '累计 {n} 文件变更 · 去 Diff',
       'code.save': '保存',
       'code.diff': '查看 Diff',
       'code.ide': '↗ IDE',
       'code.ready': '就绪',
+      'code.unsaved': '未保存',
+      'code.loaded': '已加载',
       'diff.files': '变更文件',
       'diff.restoreAll': '全部还原',
       'diff.openCode': '在 Code 打开',
@@ -37,13 +48,30 @@
       'diff.restore': '还原此文件',
       'diff.dismiss': '忽略',
       'diff.pick': '选择左侧文件',
+      'diff.empty': '本会话还没有捕获到变更。\nAgent 写文件后会出现在这里。',
+      'diff.restored': '已还原到改前快照',
+      'diff.deleted': '已删除新建文件',
+      'diff.already': '该文件已还原过',
       'term.label': 'Terminal',
+      'term.cleared': '终端已清空',
+      'term.needWs': '请先打开工作区。',
       'chat.label': 'Grok',
       'chat.status': '待命',
       'chat.newTask': '＋ 任务',
       'chat.placeholder': '对当前任务说… 可开多个任务并行跑',
       'chat.send': 'Grok it',
       'chat.stop': '■ 停止',
+      'chat.busy': '当前任务正在运行 — 可开新任务或切换到其他项目',
+      'chat.needProject': '请先添加项目（可多开并行）',
+      'chat.cliMissing':
+        'Grok CLI 不可用。请安装 Grok Build，或在「设置」中填写 grok 路径。未登录可执行 `grok login`。\n可点设置 → 一键体检。',
+      'chat.error': '错误：{msg}',
+      'chat.stopped': '已停止：{title}',
+      'chat.resumeFallback': '原会话已失效，已自动无 resume 重跑',
+      'chat.retry': '重试',
+      'chat.retryFresh': '新会话重试',
+      'chat.retryHint': '运行失败，可选恢复动作',
+      'chat.exportDiag': '导出诊断',
       'sb.noProject': '无工作区',
       'settings.title': 'Settings',
       'settings.desc': '通用 · MCP · Skills · 插件 — 直连本机 Grok CLI',
@@ -55,6 +83,10 @@
       'stab.appearance': '外观',
       'lang.label': '界面语言',
       'theme.label': '主题',
+      'theme.import': '导入主题包 JSON',
+      'theme.import.hint': '拖入或选择 community theme tokens（含 vars 字段）',
+      'theme.import.ok': '已应用主题包：{name}',
+      'theme.import.err': '主题包无效：需要 vars 对象',
       'theme.grok': 'Grok 深空（默认）',
       'theme.void': '纯黑 Void',
       'theme.mars': '火星橙 Mars',
@@ -64,14 +96,24 @@
       'profile.import': '导入项目配置',
       'telemetry.label': '崩溃报告（可选）',
       'telemetry.hint': '默认关闭。开启后仅写本地 ~/.grok-code/crashes，可选手动 endpoint',
+      'plugin.search': '搜索已安装 / 可安装插件…',
+      'plugin.installed': '已安装 ({n})',
+      'plugin.markets': '市场源 ({n})',
+      'plugin.available': '可安装 ({n})',
+      'plugin.empty': '暂无插件。从下方市场安装，或粘贴 git 源安装。',
+      'plugin.loading': '加载中…',
+      'plugin.noneMatch': '无匹配插件',
       'toast.saved': '设置已保存',
       'toast.lang': '语言已切换',
       'toast.theme': '主题已切换',
+      'toast.explorerOpen': '资源管理器已展开',
       'onb.welcome': 'Welcome aboard',
       'onb.desc': 'GrokCode 首启体检 · 约 30 秒就绪',
       'cli.detecting': '检测 CLI…',
       'cli.offline': 'CLI 未找到',
       'cli.online': '在线',
+      'a11y.skip': '跳到主内容',
+      'a11y.close': '关闭',
     },
     en: {
       'app.tag': 'maximum truth-seeking · CLI',
@@ -80,9 +122,13 @@
       'btn.settings': 'Settings',
       'projects.label': 'PROJECTS',
       'projects.add': '+ Project',
+      'projects.none': 'No projects yet — click “+ Project” to mount repos',
+      'projects.switched': 'Switched to {name}',
+      'projects.restored': 'Restored context for {n} project(s)',
       'explorer.title': 'Explorer',
       'explorer.empty': 'No workspace yet.\nGrok needs something to grok.',
       'explorer.pick': 'Choose folder',
+      'explorer.openFirst': 'Open a project to browse files\nMount multiple repos in parallel',
       'tab.live': 'Live',
       'tab.code': 'Code',
       'tab.diff': 'Diff',
@@ -95,10 +141,17 @@
       'live.changes': 'Session changes',
       'live.context': 'Context L0–L3',
       'live.context.refresh': 'Refresh',
+      'live.context.done': 'Context recompressed',
+      'live.running': '{n} task(s) running',
+      'live.phase.error': 'Error',
+      'live.readyNext': 'Ready for next prompt / new parallel task',
+      'live.changes.hint': '{n} file change(s) · open Diff',
       'code.save': 'Save',
       'code.diff': 'View Diff',
       'code.ide': '↗ IDE',
       'code.ready': 'Ready',
+      'code.unsaved': 'Unsaved',
+      'code.loaded': 'Loaded',
       'diff.files': 'Changed files',
       'diff.restoreAll': 'Restore all',
       'diff.openCode': 'Open in Code',
@@ -106,13 +159,30 @@
       'diff.restore': 'Restore file',
       'diff.dismiss': 'Dismiss',
       'diff.pick': 'Select a file',
+      'diff.empty': 'No changes captured yet.\nAgent writes will appear here.',
+      'diff.restored': 'Restored to pre-change snapshot',
+      'diff.deleted': 'Deleted agent-created file',
+      'diff.already': 'Already restored',
       'term.label': 'Terminal',
+      'term.cleared': 'Terminal cleared',
+      'term.needWs': 'Open a workspace first.',
       'chat.label': 'Grok',
       'chat.status': 'Idle',
       'chat.newTask': '+ Task',
       'chat.placeholder': 'Talk to the active task… open more tasks to run in parallel',
       'chat.send': 'Grok it',
       'chat.stop': '■ Stop',
+      'chat.busy': 'This task is running — open another task or switch project',
+      'chat.needProject': 'Add a project first (multi-project supported)',
+      'chat.cliMissing':
+        'Grok CLI unavailable. Install Grok Build or set the path in Settings. Or run `grok login`.\nUse Settings → Doctor.',
+      'chat.error': 'Error: {msg}',
+      'chat.stopped': 'Stopped: {title}',
+      'chat.resumeFallback': 'Session expired — retried without resume',
+      'chat.retry': 'Retry',
+      'chat.retryFresh': 'Retry fresh session',
+      'chat.retryHint': 'Run failed — recovery options',
+      'chat.exportDiag': 'Export diagnostics',
       'sb.noProject': 'No workspace',
       'settings.title': 'Settings',
       'settings.desc': 'General · MCP · Skills · Plugins — local Grok CLI',
@@ -124,6 +194,10 @@
       'stab.appearance': 'Appearance',
       'lang.label': 'Language',
       'theme.label': 'Theme',
+      'theme.import': 'Import theme pack JSON',
+      'theme.import.hint': 'Drop or choose community theme tokens (must include vars)',
+      'theme.import.ok': 'Applied theme pack: {name}',
+      'theme.import.err': 'Invalid theme pack: vars object required',
       'theme.grok': 'Grok deep space (default)',
       'theme.void': 'Void black',
       'theme.mars': 'Mars orange',
@@ -133,14 +207,24 @@
       'profile.import': 'Import project profile',
       'telemetry.label': 'Crash reports (optional)',
       'telemetry.hint': 'Off by default. Local ~/.grok-code/crashes only; optional endpoint',
+      'plugin.search': 'Filter installed / available plugins…',
+      'plugin.installed': 'Installed ({n})',
+      'plugin.markets': 'Marketplaces ({n})',
+      'plugin.available': 'Available ({n})',
+      'plugin.empty': 'No plugins. Install from a marketplace or paste a git source.',
+      'plugin.loading': 'Loading…',
+      'plugin.noneMatch': 'No matching plugins',
       'toast.saved': 'Settings saved',
       'toast.lang': 'Language updated',
       'toast.theme': 'Theme updated',
+      'toast.explorerOpen': 'Explorer expanded',
       'onb.welcome': 'Welcome aboard',
       'onb.desc': 'GrokCode first-run doctor · ~30 seconds',
       'cli.detecting': 'Probing CLI…',
       'cli.offline': 'CLI missing',
       'cli.online': 'Online',
+      'a11y.skip': 'Skip to main content',
+      'a11y.close': 'Close',
     },
   };
 
@@ -152,9 +236,17 @@
     /* ignore */
   }
 
-  function t(key, fallback) {
+  function interpolate(s, vars) {
+    if (!vars) return s;
+    return String(s).replace(/\{(\w+)\}/g, (_, k) =>
+      vars[k] != null ? String(vars[k]) : `{${k}}`
+    );
+  }
+
+  function t(key, fallback, vars) {
     const pack = STRINGS[locale] || STRINGS.zh;
-    return pack[key] || STRINGS.zh[key] || fallback || key;
+    const raw = pack[key] || STRINGS.zh[key] || fallback || key;
+    return interpolate(raw, vars);
   }
 
   function setLocale(next) {
@@ -191,6 +283,10 @@
     scope.querySelectorAll('[data-i18n-title]').forEach((el) => {
       const key = el.getAttribute('data-i18n-title');
       if (key) el.setAttribute('title', t(key));
+    });
+    scope.querySelectorAll('[data-i18n-aria]').forEach((el) => {
+      const key = el.getAttribute('data-i18n-aria');
+      if (key) el.setAttribute('aria-label', t(key));
     });
   }
 

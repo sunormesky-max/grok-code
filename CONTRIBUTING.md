@@ -46,3 +46,9 @@ npm start
 - 文档与教程  
 
 一起把桌面 Grok 编码体验做成真正的开源生态。
+
+## 进阶工作流
+
+- 单 PR / 堆叠 PR / Graphite：见 [docs/CONTRIBUTING_WORKFLOW.md](docs/CONTRIBUTING_WORKFLOW.md)  
+- 代码签名（可选）：见 [docs/SIGNING.md](docs/SIGNING.md)  
+- 社区目录静态页：见 [docs/catalog/](docs/catalog/)

@@ -160,6 +160,60 @@
       window.GrokThemes?.setTheme?.(e.target.value);
     });
     $('#btnOpenCrashDir')?.addEventListener('click', () => window.grok.telemetryOpenDir());
+
+    // Theme pack import
+    const drop = $('#themeDropZone');
+    const fileInput = $('#themeFileInput');
+    const applyThemeFile = async (file) => {
+      if (!file) return;
+      try {
+        const text = await file.text();
+        const pack = JSON.parse(text);
+        if (!pack.vars || typeof pack.vars !== 'object') {
+          window.toast?.(window.GrokI18n?.t?.('theme.import.err') || 'Invalid theme pack', 'err');
+          return;
+        }
+        window.GrokThemes?.applyCustomPack?.(pack);
+        window.toast?.(
+          window.GrokI18n?.t?.('theme.import.ok', null, { name: pack.name || pack.id || file.name }) ||
+            'Theme applied',
+          'ok'
+        );
+      } catch (err) {
+        window.toast?.(err.message || 'Import failed', 'err');
+      }
+    };
+    $('#btnThemePick')?.addEventListener('click', () => fileInput?.click());
+    fileInput?.addEventListener('change', () => {
+      const f = fileInput.files?.[0];
+      applyThemeFile(f);
+      fileInput.value = '';
+    });
+    if (drop) {
+      ['dragenter', 'dragover'].forEach((ev) => {
+        drop.addEventListener(ev, (e) => {
+          e.preventDefault();
+          drop.classList.add('dragover');
+        });
+      });
+      ['dragleave', 'drop'].forEach((ev) => {
+        drop.addEventListener(ev, (e) => {
+          e.preventDefault();
+          drop.classList.remove('dragover');
+        });
+      });
+      drop.addEventListener('drop', (e) => {
+        const f = e.dataTransfer?.files?.[0];
+        applyThemeFile(f);
+      });
+      drop.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          fileInput?.click();
+        }
+      });
+    }
+
     $('#btnProfileExport')?.addEventListener('click', async () => {
       try {
         const proj = window.ProjectStore?.active?.();

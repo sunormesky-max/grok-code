@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>GrokCode Catalog — MCP · Skills · Themes</title>
+  <style>
+    :root {
+      --bg: #050508;
+      --fg: #e4e4e7;
+      --muted: #a1a1aa;
+      --ice: #7dd3fc;
+      --card: rgba(255,255,255,0.04);
+      --border: rgba(125,211,252,0.2);
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: ui-sans-serif, system-ui, sans-serif;
+      background: radial-gradient(1200px 600px at 20% -10%, #0c1a2e, var(--bg));
+      color: var(--fg);
+      line-height: 1.5;
+      min-height: 100vh;
+    }
+    header {
+      padding: 48px 24px 24px;
+      max-width: 960px;
+      margin: 0 auto;
+    }
+    h1 { margin: 0 0 8px; font-size: 1.75rem; letter-spacing: -0.02em; }
+    h1 span { color: var(--ice); }
+    p { color: var(--muted); margin: 0 0 16px; max-width: 52ch; }
+    a { color: var(--ice); }
+    .toolbar {
+      display: flex; gap: 12px; flex-wrap: wrap; align-items: center;
+      max-width: 960px; margin: 0 auto 24px; padding: 0 24px;
+    }
+    input[type="search"] {
+      flex: 1; min-width: 200px;
+      background: #000; border: 1px solid var(--border);
+      color: var(--fg); border-radius: 10px; padding: 10px 14px;
+    }
+    main { max-width: 960px; margin: 0 auto; padding: 0 24px 64px; }
+    h2 {
+      font-size: 0.75rem; letter-spacing: 0.14em; text-transform: uppercase;
+      color: var(--ice); margin: 28px 0 12px;
+    }
+    .grid { display: grid; gap: 12px; }
+    .card {
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: 12px; padding: 14px 16px;
+    }
+    .card h3 { margin: 0 0 6px; font-size: 1rem; }
+    .card .meta { font-size: 0.85rem; color: var(--muted); word-break: break-all; }
+    .badge {
+      display: inline-block; font-size: 0.7rem; padding: 2px 8px;
+      border-radius: 999px; border: 1px solid var(--border); color: var(--ice);
+      margin-left: 8px; vertical-align: middle;
+    }
+    footer { max-width: 960px; margin: 0 auto; padding: 0 24px 48px; color: var(--muted); font-size: 0.85rem; }
+    .err { color: #f87171; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Grok<span>Code</span> Catalog</h1>
+    <p>
+      Community MCP templates, Skills, and plugin marketplace sources from the
+      <a href="https://github.com/sunormesky-max/grok-code">grok-code</a> repo.
+      Same data as <strong>Settings → Catalog</strong> in the desktop app.
+    </p>
+  </header>
+  <div class="toolbar">
+    <input type="search" id="q" placeholder="Filter…" autocomplete="off" />
+    <span id="count" class="meta"></span>
+  </div>
+  <main id="root">
+    <p class="meta">Loading catalog…</p>
+  </main>
+  <footer>
+    Generated for static hosting (GitHub Pages / any static server).
+    Source of truth: <code>examples/</code> → <code>npm run catalog</code> → <code>renderer/catalog-data.json</code>.
+  </footer>
+  <script>
+    async function load() {
+      const root = document.getElementById('root');
+      try {
+        // Prefer sibling copy for Pages; fall back to app catalog path
+        let data;
+        for (const url of ['./catalog-data.json', '../../renderer/catalog-data.json', '../catalog-data.json']) {
+          try {
+            const r = await fetch(url);
+            if (r.ok) { data = await r.json(); break; }
+          } catch { /* try next */ }
+        }
+        if (!data) throw new Error('catalog-data.json not found — run npm run catalog and copy to docs/catalog/');
+        window.__cat = data;
+        render();
+        document.getElementById('q').addEventListener('input', render);
+      } catch (e) {
+        root.innerHTML = '<p class="err">' + e.message + '</p>';
+      }
+    }
+    function render() {
+      const data = window.__cat;
+      const q = (document.getElementById('q').value || '').toLowerCase();
+      const match = (x) => !q || `${x.name} ${x.description || ''} ${x.source || ''}`.toLowerCase().includes(q);
+      const mcp = (data.mcp || []).filter(match);
+      const skills = (data.skills || []).filter(match);
+      const plugins = (data.plugins || []).filter(match);
+      document.getElementById('count').textContent =
+        mcp.length + skills.length + plugins.length + ' shown · generated ' + (data.generatedAt || '');
+      const card = (title, badge, meta) =>
+        `<article class="card"><h3>${esc(title)}<span class="badge">${esc(badge)}</span></h3><div class="meta">${esc(meta)}</div></article>`;
+      const esc = (s) => String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+      document.getElementById('root').innerHTML = `
+        <h2>MCP (${mcp.length})</h2>
+        <div class="grid">${mcp.map(m => card(m.name, m.transport || 'mcp', m.description || m.command || m.path)).join('') || '<p class="meta">None</p>'}</div>
+        <h2>Skills (${skills.length})</h2>
+        <div class="grid">${skills.map(s => card(s.name, 'skill', s.description || s.path)).join('') || '<p class="meta">None</p>'}</div>
+        <h2>Plugin sources (${plugins.length})</h2>
+        <div class="grid">${plugins.map(p => card(p.name, 'plugin', p.description || p.source)).join('') || '<p class="meta">None</p>'}</div>
+      `;
+    }
+    load();
+  </script>
+</body>
+</html>
