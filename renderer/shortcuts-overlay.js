@@ -8,6 +8,8 @@
 
   const ROWS = () => [
     { keys: ['Ctrl', 'K'], desc: t('help.cmd', '命令面板') },
+    { keys: ['Ctrl', 'P'], desc: t('help.files', '搜索文件') },
+    { keys: ['Ctrl', 'Shift', 'F'], desc: t('help.content', '搜索内容') },
     { keys: ['Ctrl', 'O'], desc: t('help.open', '添加项目') },
     { keys: ['Ctrl', 'T'], desc: t('help.task', '新建任务') },
     { keys: ['Ctrl', 'Enter'], desc: t('help.send', '发送当前任务') },

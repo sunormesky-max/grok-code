@@ -14,13 +14,14 @@ Living plan for the GrokCode open-source ecosystem. Order may change based on co
 - [x] **UI polish** layer (glass, chips, composer, scrollbars)
 - [x] Settings general form i18n
 - [x] Keyboard cheatsheet · density themes · file tree polish
+- [x] Global file/content search · Code|Diff split · Electron 43
 
 ## Next
 
-- [ ] Electron major jump (40+) after dist matrix retest — see docs/SECURITY_DEPS.md
+- [ ] Symbol/outline light search in open file
 - [ ] Animated onboarding illustrations
-- [ ] Global search (files + symbols light)
-- [ ] Split Code / Diff side-by-side layout option
+- [ ] Persist split divider width per project
+- [ ] Retest signed packaging notes after Electron 43 installs
 
 ## Later
 

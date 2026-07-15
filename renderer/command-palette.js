@@ -268,6 +268,29 @@
             'ok'
           );
         }),
+      },
+      {
+        id: 'search.files',
+        title: t('cmd.search.files', '搜索文件'),
+        hint: 'Ctrl+P',
+        keywords: 'search files quick open 文件 搜索',
+        group: 'actions',
+        run: run(() => global.GrokSearch?.open?.('files')),
+      },
+      {
+        id: 'search.content',
+        title: t('cmd.search.content', '搜索内容'),
+        hint: 'Ctrl+Shift+F',
+        keywords: 'search content grep 内容 搜索',
+        group: 'actions',
+        run: run(() => global.GrokSearch?.open?.('content')),
+      },
+      {
+        id: 'split.toggle',
+        title: t('cmd.split.toggle', 'Code | Diff 并排'),
+        keywords: 'split side by side 并排',
+        group: 'actions',
+        run: run(() => global.GrokSplit?.toggle?.()),
       }
     );
   }

@@ -87,6 +87,22 @@ function testCatalogBuild() {
   console.log('ok  catalog-data.json');
 }
 
+function testToolsSearchExports() {
+  // createTools needs a real dir
+  const os = require('os');
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'grokcode-search-'));
+  fs.writeFileSync(path.join(tmp, 'hello-world.js'), 'const foo = 42;\n// needle unique\n');
+  fs.mkdirSync(path.join(tmp, 'src'));
+  fs.writeFileSync(path.join(tmp, 'src', 'app.ts'), 'export const x = 1;\n');
+  const { createTools } = require(path.join(root, 'electron', 'tools.js'));
+  const tools = createTools(tmp);
+  const paths = tools.searchPaths('hello');
+  assert.ok(paths.hits.some((h) => h.path.includes('hello-world')));
+  const content = tools.searchFiles('needle unique');
+  assert.ok(content.hits.some((h) => h.line === 2));
+  console.log('ok  searchPaths / searchFiles');
+}
+
 try {
   testCompress();
   testExtractJson();
@@ -95,6 +111,7 @@ try {
   testPluginsExports();
   testProfilesRoundtrip();
   testCatalogBuild();
+  testToolsSearchExports();
   console.log('\nAll unit tests passed');
 } catch (err) {
   console.error('FAIL', err);

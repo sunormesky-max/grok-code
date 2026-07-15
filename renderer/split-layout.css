@@ -1,0 +1,76 @@
+/* Code + Diff side-by-side layout */
+
+body.layout-split #editorTabs .tab[data-tab="editor"],
+body.layout-split #editorTabs .tab[data-tab="diff"] {
+  /* both can look semi-active */
+}
+body.layout-split #editorTabs .tab[data-tab="live"].active {
+  /* live still exclusive */
+}
+
+/* When split mode active and not on live: show both panes */
+body.layout-split.view-codediff #livePane {
+  display: none !important;
+}
+body.layout-split.view-codediff #codePane,
+body.layout-split.view-codediff #diffPane {
+  display: flex !important;
+  flex-direction: column;
+}
+body.layout-split.view-codediff #codePane.hidden,
+body.layout-split.view-codediff #diffPane.hidden {
+  display: flex !important;
+}
+
+body.layout-split.view-codediff .editor-wrap {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+body.layout-split.view-codediff .editor-wrap > .panel-head {
+  flex-shrink: 0;
+}
+body.layout-split.view-codediff .split-host {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  gap: 0;
+}
+body.layout-split.view-codediff .split-host #codePane,
+body.layout-split.view-codediff .split-host #diffPane {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  border-radius: 0;
+}
+body.layout-split.view-codediff .split-host #codePane {
+  border-right: 1px solid rgba(125, 211, 252, 0.12);
+}
+body.layout-split.view-codediff .split-divider {
+  width: 5px;
+  cursor: col-resize;
+  background: linear-gradient(180deg, rgba(125, 211, 252, 0.08), rgba(249, 115, 22, 0.08));
+  flex-shrink: 0;
+  transition: background 0.15s;
+}
+body.layout-split.view-codediff .split-divider:hover,
+body.layout-split.view-codediff .split-divider.active {
+  background: rgba(125, 211, 252, 0.25);
+}
+
+/* In split mode, compact diff list */
+body.layout-split.view-codediff #diffPane .diff-layout {
+  min-height: 0;
+  flex: 1;
+}
+body.layout-split.view-codediff #diffPane .diff-list {
+  width: 140px;
+  min-width: 120px;
+}
+
+#btnSplitLayout.active {
+  color: var(--ice, #7dd3fc);
+  border-color: rgba(125, 211, 252, 0.4);
+  background: rgba(125, 211, 252, 0.1);
+  box-shadow: 0 0 12px rgba(125, 211, 252, 0.15);
+}

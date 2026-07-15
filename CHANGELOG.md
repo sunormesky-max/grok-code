@@ -11,6 +11,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 - See [ROADMAP.md](ROADMAP.md)
 
+## [1.2.6] — 2026-07-16
+
+### Added
+
+- **Global search**: files (`Ctrl+P`) + content (`Ctrl+Shift+F`) with path fuzzy match & line jump
+- **Code | Diff split** layout toggle (`⧉ Split` / command palette); resizable divider
+- IPC `fs:search` / `fs:searchPaths`
+
+### Changed
+
+- **Electron → 43.x** major upgrade (security line); electron-builder 26 remains
+
 ## [1.2.5] — 2026-07-16
 
 ### Added
@@ -120,7 +132,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Requires installed Grok CLI + auth (`grok login` or `XAI_API_KEY`)
 - YOLO / always-approve is full workspace trust
 
-[Unreleased]: https://github.com/sunormesky-max/grok-code/compare/v1.2.5...HEAD
+[Unreleased]: https://github.com/sunormesky-max/grok-code/compare/v1.2.6...HEAD
+[1.2.6]: https://github.com/sunormesky-max/grok-code/compare/v1.2.5...v1.2.6
 [1.2.5]: https://github.com/sunormesky-max/grok-code/compare/v1.2.4...v1.2.5
 [1.2.4]: https://github.com/sunormesky-max/grok-code/compare/v1.2.3...v1.2.4
 [1.2.3]: https://github.com/sunormesky-max/grok-code/compare/v1.2.2...v1.2.3

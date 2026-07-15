@@ -23,7 +23,7 @@
 | **Context inheritance** | Persist chats under `~/.grok-code/sessions`; L0–L3 (+ optional LLM) |
 | **Settings** | CLI, model, YOLO, **MCP**, **Skills**, **Plugins**, **Catalog** |
 | **Appearance** | **i18n** en/zh · theme packs (+ JSON import) · profiles |
-| **UI** | Sci-fi HUD · boot · onboarding · **Ctrl+K** command palette |
+| **UI** | Sci-fi HUD · **Ctrl+K** · **Ctrl+P** files · **Ctrl+Shift+F** content · Code\|Diff split |
 
 ---
 

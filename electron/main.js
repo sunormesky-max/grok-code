@@ -564,6 +564,20 @@ ipcMain.handle('fs:stat', async (_e, payload) => {
   return p.tools.statFile(payload.relPath ?? payload.path);
 });
 
+/** Content search in workspace */
+ipcMain.handle('fs:search', async (_e, payload = {}) => {
+  const p = payload.projectId ? requireProject(payload.projectId) : projects.values().next().value;
+  if (!p) throw new Error('尚未打开项目');
+  return p.tools.searchFiles(payload.query || '', payload.hint || '', payload.maxHits || 60);
+});
+
+/** Filename / path quick open */
+ipcMain.handle('fs:searchPaths', async (_e, payload = {}) => {
+  const p = payload.projectId ? requireProject(payload.projectId) : projects.values().next().value;
+  if (!p) throw new Error('尚未打开项目');
+  return p.tools.searchPaths(payload.query || '', payload.maxHits || 80);
+});
+
 // ── Terminal ────────────────────────────────────────────
 ipcMain.handle('terminal:run', async (_e, payload) => {
   const command = typeof payload === 'string' ? payload : payload.command;

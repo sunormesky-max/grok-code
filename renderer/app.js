@@ -1061,6 +1061,10 @@ function bindShortcuts() {
         window.GrokCommandPalette.close();
         return;
       }
+      if (window.GrokSearch?.isOpen?.()) {
+        window.GrokSearch.close();
+        return;
+      }
       if (window.GrokHelp?.isOpen?.()) {
         window.GrokHelp.close();
         return;
@@ -1442,21 +1446,39 @@ function switchTab(name, opts = {}) {
     P().activeTab = name;
   }
   $$('.tab').forEach((t) => t.classList.toggle('active', t.dataset.tab === name));
-  $('#livePane')?.classList.toggle('hidden', name !== 'live');
-  $('#codePane')?.classList.toggle('hidden', name !== 'editor');
-  $('#diffPane')?.classList.toggle('hidden', name !== 'diff');
 
-  if (name === 'editor') {
+  const split = window.GrokSplit?.isSplit?.();
+  if (split && name !== 'live') {
+    // 并排：Code + Diff 同时可见
+    $('#livePane')?.classList.add('hidden');
+    $('#codePane')?.classList.remove('hidden');
+    $('#diffPane')?.classList.remove('hidden');
+    window.GrokSplit?.ensureSplitHost?.();
+    window.GrokSplit?.applyViewClass?.();
+  } else {
+    $('#livePane')?.classList.toggle('hidden', name !== 'live');
+    $('#codePane')?.classList.toggle('hidden', name !== 'editor');
+    $('#diffPane')?.classList.toggle('hidden', name !== 'diff');
+    document.body.classList.remove('view-codediff');
+  }
+
+  if (name === 'editor' || (split && name !== 'live')) {
     updateEditorChrome();
     syncGutter();
-  } else if (name === 'diff') {
+  }
+  if (name === 'diff' || (split && name !== 'live')) {
     renderDiffPane();
-  } else if (name === 'live') {
+  }
+  if (name === 'live') {
     const p = P();
     if (p) rebuildLiveTimeline(p);
     renderLiveChanges();
   }
 }
+// 暴露给搜索 / 分屏
+window.openFile = openFile;
+window.switchTab = switchTab;
+window.renderDiffPane = renderDiffPane;
 
 // ── Live / Diff mission control ─────────────────────────
 function pushLiveEvent({ kind, title, sub, running = false, projectId = null }) {

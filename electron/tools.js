@@ -159,6 +159,9 @@ function createTools(workspaceRoot) {
     const hits = [];
     const q = String(query || '').toLowerCase();
     if (!q) return { hits: [], error: 'Empty query' };
+    const hint = String(globHint || '')
+      .replace(/^\*\./, '.')
+      .toLowerCase();
 
     function walk(dir) {
       if (hits.length >= maxHits) return;
@@ -177,8 +180,8 @@ function createTools(workspaceRoot) {
           walk(full);
           continue;
         }
-        if (globHint && !ent.name.includes(globHint.replace('*', ''))) {
-          // soft filter by extension-ish substring
+        if (hint && !ent.name.toLowerCase().includes(hint) && !full.toLowerCase().includes(hint)) {
+          continue;
         }
         try {
           const stat = fs.statSync(full);
@@ -203,6 +206,55 @@ function createTools(workspaceRoot) {
 
     walk(root);
     return { hits, count: hits.length };
+  }
+
+  /** Path / filename search (quick open) */
+  function searchPaths(query, maxHits = 80) {
+    const hits = [];
+    const q = String(query || '').toLowerCase().replace(/\\/g, '/');
+    if (!q) return { hits: [], count: 0 };
+
+    function score(rel, name) {
+      const r = rel.toLowerCase();
+      const n = name.toLowerCase();
+      if (n === q) return 100;
+      if (n.startsWith(q)) return 80;
+      if (n.includes(q)) return 60;
+      if (r.includes(q)) return 40;
+      // fuzzy chars in order
+      let j = 0;
+      for (let i = 0; i < n.length && j < q.length; i++) {
+        if (n[i] === q[j]) j++;
+      }
+      return j === q.length ? 20 : 0;
+    }
+
+    function walk(dir) {
+      if (hits.length >= maxHits * 3) return; // gather then rank
+      let entries;
+      try {
+        entries = fs.readdirSync(dir, { withFileTypes: true });
+      } catch {
+        return;
+      }
+      for (const ent of entries) {
+        if (IGNORE.has(ent.name)) continue;
+        if (ent.name.startsWith('.') && ent.name !== '.gitignore' && ent.name !== '.env') continue;
+        const full = path.join(dir, ent.name);
+        if (ent.isDirectory()) {
+          walk(full);
+          continue;
+        }
+        const rel = toRel(full);
+        const s = score(rel, ent.name);
+        if (s > 0) hits.push({ path: rel, name: ent.name, score: s });
+      }
+    }
+
+    walk(root);
+    hits.sort((a, b) => b.score - a.score || a.path.localeCompare(b.path));
+    const top = hits.slice(0, maxHits);
+    return { hits: top, count: top.length };
   }
 
   function runCommand(command, { timeoutMs = 30000 } = {}) {
@@ -358,6 +410,7 @@ function createTools(workspaceRoot) {
     writeFile,
     deleteFile,
     searchFiles,
+    searchPaths,
     runCommand,
     exists,
     statFile,

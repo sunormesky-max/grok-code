@@ -10,6 +10,8 @@
   <link rel="stylesheet" href="density.css" />
   <link rel="stylesheet" href="help-overlay.css" />
   <link rel="stylesheet" href="tree-polish.css" />
+  <link rel="stylesheet" href="search-ui.css" />
+  <link rel="stylesheet" href="split-layout.css" />
 </head>
 <body class="theme-grok booting">
   <a class="skip-link" href="#app" data-i18n="a11y.skip">跳到主内容</a>
@@ -179,6 +181,7 @@
             <button type="button" class="tab active" data-tab="live" title="任务实时动态" data-i18n="tab.live">Live</button>
             <button type="button" class="tab" data-tab="editor" title="代码" data-i18n="tab.code">Code</button>
             <button type="button" class="tab" data-tab="diff" title="变更 diff" data-i18n="tab.diff">Diff</button>
+            <button type="button" class="btn small ghost" id="btnSplitLayout" title="Code | Diff 并排" data-i18n-title="split.title" aria-pressed="false">⧉ Split</button>
             <span class="live-badge hidden" id="liveBadge">● LIVE</span>
             <span class="file-path" id="currentPath">—</span>
             <span class="dirty-badge hidden" id="dirtyBadge">未保存</span>
@@ -370,7 +373,7 @@
       <span id="sbCli">CLI —</span>
       <span class="sep">·</span>
       <span id="sbAgent">待命</span>
-      <span class="ml-auto" id="sbHint">Ctrl+K · Ctrl+/ 快捷键 · Ctrl+O 项目 · Ctrl+T 任务</span>
+      <span class="ml-auto" id="sbHint">Ctrl+K · Ctrl+P 文件 · Ctrl+Shift+F 内容 · Ctrl+/ 帮助</span>
     </footer>
   </div>
 
@@ -785,6 +788,8 @@
   <script src="themes.js"></script>
   <script src="density.js"></script>
   <script src="shortcuts-overlay.js"></script>
+  <script src="global-search.js"></script>
+  <script src="split-layout.js"></script>
   <script src="live-virtual.js"></script>
   <script src="chat-virtual.js"></script>
   <script src="diff-util.js"></script>

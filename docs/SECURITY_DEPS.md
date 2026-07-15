@@ -13,15 +13,15 @@ Chinese npm mirrors often do **not** implement the audit API. Use the official r
 npm audit --registry=https://registry.npmjs.org/
 ```
 
-## Current posture (v1.2.3)
+## Current posture (v1.2.6+)
 
 | Package | Notes |
 |---------|--------|
-| `electron-builder` ≥26 | Fixes historical `tar` high vulns in the packaging toolchain |
-| `electron` 37–39 | Reduces older advisories; **some** Electron CVEs only fixed on newer majors (40+) |
+| `electron-builder` ≥26 | Packaging toolchain |
+| `electron` **43.x** | Current major; retest installers after upgrades |
 | App hardening | `contextIsolation: true`, `nodeIntegration: false`, no custom protocol handlers by default |
 
-Jumping to Electron 40+ / 43 is tracked as a deliberate major upgrade (retest `dist:win` / `dist:linux` / `dist:mac`).
+Run `npm run audit:official` after dependency bumps.
 
 ## App-level mitigations
 

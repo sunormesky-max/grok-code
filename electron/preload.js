@@ -29,6 +29,19 @@ contextBridge.exposeInMainWorld('grok', {
     ipcRenderer.invoke('fs:exists', { projectId, relPath }),
   statFile: (projectId, relPath) =>
     ipcRenderer.invoke('fs:stat', { projectId, relPath }),
+  searchContent: (projectId, query, opts = {}) =>
+    ipcRenderer.invoke('fs:search', {
+      projectId,
+      query,
+      hint: opts.hint || '',
+      maxHits: opts.maxHits || 60,
+    }),
+  searchPaths: (projectId, query, opts = {}) =>
+    ipcRenderer.invoke('fs:searchPaths', {
+      projectId,
+      query,
+      maxHits: opts.maxHits || 80,
+    }),
 
   runTerminal: (projectId, command) =>
     ipcRenderer.invoke('terminal:run', { projectId, command }),
