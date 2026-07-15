@@ -11,6 +11,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 - See [ROADMAP.md](ROADMAP.md)
 
+## [1.2.2] — 2026-07-16
+
+### Added
+
+- **GitHub Pages** workflow for community catalog (`docs/catalog/` → Actions Pages)
+- **App icon** generator (`npm run icons` → `build/icon.png`) wired into electron-builder + BrowserWindow
+- **Chat virtualization** for long threads (render tail, “load earlier” bar)
+- Release pipeline runs catalog + icons before packaging
+
 ## [1.2.1] — 2026-07-15
 
 ### Fixed
@@ -80,7 +89,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Requires installed Grok CLI + auth (`grok login` or `XAI_API_KEY`)
 - YOLO / always-approve is full workspace trust
 
-[Unreleased]: https://github.com/sunormesky-max/grok-code/compare/v1.2.1...HEAD
+[Unreleased]: https://github.com/sunormesky-max/grok-code/compare/v1.2.2...HEAD
+[1.2.2]: https://github.com/sunormesky-max/grok-code/compare/v1.2.1...v1.2.2
 [1.2.1]: https://github.com/sunormesky-max/grok-code/compare/v1.2.0...v1.2.1
 [1.2.0]: https://github.com/sunormesky-max/grok-code/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/sunormesky-max/grok-code/compare/v1.0.0...v1.1.0

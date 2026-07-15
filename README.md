@@ -135,6 +135,7 @@ Open **Settings → MCP / Skills** in the app.
 | `npm run dev` | Launch with DevTools |
 | `npm run check` | Syntax + unit tests + catalog build |
 | `npm run catalog` | Generate Settings catalog from `examples/` |
+| `npm run icons` | Generate `build/icon.png` for packaging |
 | `npm test` | Unit tests |
 | `npm run pack` | electron-builder unpacked dir |
 | `npm run dist:win` | Windows NSIS + portable → `release/` |
@@ -149,6 +150,14 @@ Installers ship on [GitHub Releases](https://github.com/sunormesky-max/grok-code
 git tag v1.0.0
 git push origin v1.0.0
 ```
+
+## Catalog site
+
+Community MCP / Skills catalog is published via GitHub Pages (Actions):
+
+https://sunormesky-max.github.io/grok-code/
+
+(Repo **Settings → Pages → Source: GitHub Actions** once.)
 
 ## Ecosystem
 

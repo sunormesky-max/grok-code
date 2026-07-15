@@ -40,8 +40,10 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Build catalog
-        run: npm run catalog
+      - name: Build catalog & icons
+        run: |
+          npm run catalog
+          npm run icons
 
       - name: Build distributables
         run: ${{ matrix.cmd }}

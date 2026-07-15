@@ -243,6 +243,7 @@ function requireProject(projectId) {
 }
 
 function createWindow(opts = {}) {
+  const iconPath = path.join(__dirname, '..', 'build', 'icon.png');
   const win = new BrowserWindow({
     width: 1440,
     height: 920,
@@ -253,6 +254,7 @@ function createWindow(opts = {}) {
     frame: false,
     autoHideMenuBar: true,
     titleBarStyle: 'hidden',
+    icon: fs.existsSync(iconPath) ? iconPath : undefined,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,

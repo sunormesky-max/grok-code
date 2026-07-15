@@ -3510,3 +3510,14 @@ body.theme-ember {
   margin-bottom: 10px;
 }
 .theme-file { display: none; }
+
+/* chat virtualization */
+.chat-virt-bar {
+  display: flex;
+  justify-content: center;
+  padding: 10px 8px 6px;
+}
+.chat-virt-more {
+  font-size: 11.5px !important;
+  opacity: 0.9;
+}

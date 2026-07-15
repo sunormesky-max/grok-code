@@ -340,12 +340,23 @@ async function restoreProjectFromDisk(proj) {
 
 function rebuildTaskMessages(task) {
   if (!task?.pane) return;
-  task.pane.innerHTML = '';
   const msgs = task.messages || [];
   if (!msgs.length) {
+    task.pane.innerHTML = '';
     showWelcome(task.pane);
     return;
   }
+  // 长对话：虚拟化（只渲染尾部 + 加载更早）
+  if (window.GrokChatVirtual && msgs.length > window.GrokChatVirtual.TAIL) {
+    window.GrokChatVirtual.rebuildVirtual(task.pane, msgs, {
+      showWelcome: () => showWelcome(task.pane),
+      renderOne: (m) =>
+        window.GrokChatVirtual.makeMessageEl(m, { renderMarkdown, esc }),
+    });
+    scrollMessages(true, task);
+    return;
+  }
+  task.pane.innerHTML = '';
   for (const m of msgs) {
     // persist:false 避免重复写入 messages
     appendMessage(m.role, m.content, { markdown: m.role === 'assistant', persist: false }, task);
@@ -2579,6 +2590,13 @@ function finalizeLiveMessages(task) {
     body.classList.remove('stream-body');
     body.innerHTML = renderMarkdown(text);
     delete el.dataset.live;
+  }
+  // 对话很长时压缩历史 DOM（保留 task.messages 全量）
+  if (window.GrokChatVirtual && (task.messages || []).length > window.GrokChatVirtual.TAIL + 15) {
+    window.GrokChatVirtual.maybeCompact(task.pane, task.messages, {
+      renderOne: (m) =>
+        window.GrokChatVirtual.makeMessageEl(m, { renderMarkdown, esc }),
+    });
   }
   const thought =
     task.liveThoughtEl ||
