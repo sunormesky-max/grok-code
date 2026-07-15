@@ -11,6 +11,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 - See [ROADMAP.md](ROADMAP.md)
 
+## [1.2.3] — 2026-07-16
+
+### Added
+
+- **Command palette** (`Ctrl+K` / `Cmd+K`) for navigation, settings, theme, doctor, docs
+- **Dependabot** weekly updates for npm + GitHub Actions
+- MCP / Skills management **i18n** (toasts, empty states, actions)
+- `npm run audit:official` and [docs/SECURITY_DEPS.md](docs/SECURITY_DEPS.md)
+
+### Security / deps
+
+- Upgrade **electron-builder** to v26 (clears packaging `tar` advisories)
+- Upgrade **Electron** toward current 39.x line (remaining Electron CVEs need major 40+; documented)
+
 ## [1.2.2] — 2026-07-16
 
 ### Added
@@ -89,7 +103,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Requires installed Grok CLI + auth (`grok login` or `XAI_API_KEY`)
 - YOLO / always-approve is full workspace trust
 
-[Unreleased]: https://github.com/sunormesky-max/grok-code/compare/v1.2.2...HEAD
+[Unreleased]: https://github.com/sunormesky-max/grok-code/compare/v1.2.3...HEAD
+[1.2.3]: https://github.com/sunormesky-max/grok-code/compare/v1.2.2...v1.2.3
 [1.2.2]: https://github.com/sunormesky-max/grok-code/compare/v1.2.1...v1.2.2
 [1.2.1]: https://github.com/sunormesky-max/grok-code/compare/v1.2.0...v1.2.1
 [1.2.0]: https://github.com/sunormesky-max/grok-code/compare/v1.1.0...v1.2.0

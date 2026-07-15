@@ -1,6 +1,6 @@
 /**
  * Settings → MCP / Skills 管理
- * 对接 grok mcp CLI 与 ~/.grok/skills
+ * 对接 grok mcp CLI 与 ~/.grok/skills · 文案走 i18n
  */
 (function (global) {
   const $ = (s) => document.querySelector(s);
@@ -8,6 +8,10 @@
   function toast(msg, type) {
     if (typeof global.toast === 'function') global.toast(msg, type);
     else console.log(msg);
+  }
+
+  function t(key, fallback, vars) {
+    return global.GrokI18n?.t?.(key, fallback, vars) || fallback || key;
   }
 
   function esc(s) {
@@ -38,12 +42,14 @@
   async function refreshMcp() {
     const host = $('#mcpList');
     if (!host) return;
-    host.innerHTML = '<div class="muted pad">加载中…</div>';
+    host.innerHTML = `<div class="muted pad">${esc(t('mcp.loading'))}</div>`;
     try {
       const list = await window.grok.mcpList();
       if (!list.length) {
-        host.innerHTML =
-          '<div class="muted pad">暂无 MCP Server<br>可添加 filesystem / github / 远程 HTTP 等</div>';
+        host.innerHTML = `<div class="muted pad">${t('mcp.empty')
+          .split('\n')
+          .map(esc)
+          .join('<br>')}</div>`;
         return;
       }
       host.innerHTML = list
@@ -54,15 +60,15 @@
             '—';
           const on = s.enabled !== false;
           return `<div class="mgmt-item${on ? '' : ' off'}" data-name="${esc(s.name)}">
-            <button type="button" class="toggle${on ? ' on' : ''}" data-toggle="${esc(s.name)}" title="启用/禁用"></button>
+            <button type="button" class="toggle${on ? ' on' : ''}" data-toggle="${esc(s.name)}" title="enable/disable"></button>
             <div class="mi-main">
               <div class="mi-name">${esc(s.name)}<span class="mi-scope">${esc(s.scope || 'user')}</span></div>
               <div class="mi-meta">${esc(cmd)}</div>
             </div>
             <div class="mi-actions">
-              <button class="btn small ghost" data-doctor="${esc(s.name)}">诊断</button>
-              <button class="btn small ghost" data-timeout="${esc(s.name)}" title="远程 MCP 建议">超时120s</button>
-              <button class="btn small danger" data-rm="${esc(s.name)}">删除</button>
+              <button class="btn small ghost" data-doctor="${esc(s.name)}">${esc(t('mcp.doctor'))}</button>
+              <button class="btn small ghost" data-timeout="${esc(s.name)}" title="remote MCP">${esc(t('mcp.timeout'))}</button>
+              <button class="btn small danger" data-rm="${esc(s.name)}">${esc(t('common.delete'))}</button>
             </div>
           </div>`;
         })
@@ -74,23 +80,26 @@
           const next = !btn.classList.contains('on');
           try {
             await window.grok.mcpToggle({ name, enabled: next });
-            toast(next ? `已启用 ${name}` : `已禁用 ${name}`, 'ok');
+            toast(
+              next ? t('mcp.enabled', null, { name }) : t('mcp.disabled', null, { name }),
+              'ok'
+            );
             refreshMcp();
           } catch (e) {
-            toast(e.message || '切换失败', 'err');
+            toast(e.message || t('mcp.toggleFail'), 'err');
           }
         };
       });
       host.querySelectorAll('[data-rm]').forEach((btn) => {
         btn.onclick = async () => {
           const name = btn.dataset.rm;
-          if (!confirm(`删除 MCP「${name}」？`)) return;
+          if (!confirm(t('mcp.confirmDelete', null, { name }))) return;
           try {
             await window.grok.mcpRemove({ name });
-            toast(`已删除 ${name}`, 'ok');
+            toast(t('mcp.deleted', null, { name }), 'ok');
             refreshMcp();
           } catch (e) {
-            toast(e.message || '删除失败', 'err');
+            toast(e.message || t('mcp.deleteFail'), 'err');
           }
         };
       });
@@ -102,26 +111,26 @@
           const name = btn.dataset.timeout;
           try {
             await window.grok.mcpSetTimeout({ name, seconds: 120 });
-            toast(`已将 ${name} 启动超时设为 120s，请再点诊断`, 'ok');
+            toast(t('mcp.timeoutOk', null, { name }), 'ok');
           } catch (e) {
-            toast(e.message || '设置失败', 'err');
+            toast(e.message || t('mcp.toggleFail'), 'err');
           }
         };
       });
     } catch (e) {
-      host.innerHTML = `<div class="muted pad">加载失败：${esc(e.message)}</div>`;
+      host.innerHTML = `<div class="muted pad">${esc(t('mcp.loadFail', null, { msg: e.message }))}</div>`;
     }
   }
 
   function formatDoctorReport(res, name) {
-    if (!res) return '无结果';
+    if (!res) return '—';
     if (res.raw && !res.servers) return String(res.raw);
-    if (res.error && !res.servers) return `错误：${res.error}`;
+    if (res.error && !res.servers) return `Error: ${res.error}`;
 
     const lines = [];
     const servers = res.servers || (res.name ? [res] : []);
     if (res.sources) {
-      lines.push('【配置源】');
+      lines.push('[sources]');
       for (const s of res.sources) {
         const st = s.status?.status || '?';
         const n = s.status?.server_count;
@@ -130,34 +139,33 @@
       lines.push('');
     }
     if (!servers.length) {
-      lines.push(name ? `未找到服务器 ${name}` : '未发现 MCP 服务器');
+      lines.push(name ? `Server not found: ${name}` : 'No MCP servers');
       return lines.join('\n');
     }
     for (const srv of servers) {
       const ok = srv.healthy === true;
-      lines.push(`【${srv.name || name || 'server'}】 ${ok ? '✓ 健康' : '✗ 未就绪'}`);
-      if (srv.transport) lines.push(`  传输: ${srv.transport}`);
-      if (srv.target) lines.push(`  目标: ${srv.target}`);
-      if (srv.source) lines.push(`  来源: ${srv.source}`);
+      lines.push(`[${srv.name || name || 'server'}] ${ok ? 'OK' : 'FAIL'}`);
+      if (srv.transport) lines.push(`  transport: ${srv.transport}`);
+      if (srv.target) lines.push(`  target: ${srv.target}`);
+      if (srv.source) lines.push(`  source: ${srv.source}`);
       const checks = srv.checks || [];
       for (const c of checks) {
-        const mark = c.passed ? '✓' : '✗';
+        const mark = c.passed ? '+' : '-';
         lines.push(`  ${mark} ${c.label}${c.detail ? ` — ${c.detail}` : ''}`);
-        if (c.hint) lines.push(`      提示: ${c.hint}`);
+        if (c.hint) lines.push(`      hint: ${c.hint}`);
       }
-      // 超时失败时给出可操作建议
       const timedOut = checks.some(
         (c) => !c.passed && /timeout|timed out/i.test(c.label + ' ' + (c.detail || ''))
       );
       if (timedOut) {
         lines.push('');
-        lines.push('建议: 远程 MCP 启动较慢，可点列表中的「超时120s」后重试诊断。');
-        lines.push('或在 ~/.grok/config.toml 该 server 下设置 startup_timeout_sec = 120');
+        lines.push('Tip: use Timeout 120s then re-run Doctor.');
+        lines.push('Or set startup_timeout_sec = 120 in ~/.grok/config.toml');
       }
       lines.push('');
     }
     if (res.healthy_count != null) {
-      lines.push(`汇总: 健康 ${res.healthy_count} · 失败 ${res.failing_count ?? 0}`);
+      lines.push(`summary: healthy ${res.healthy_count} · failing ${res.failing_count ?? 0}`);
     }
     return lines.join('\n');
   }
@@ -167,13 +175,12 @@
     log?.classList.remove('hidden');
     if (log) {
       log.textContent = name
-        ? `正在诊断 ${name}（远程 MCP 可能需 30–120 秒）…`
-        : '正在诊断全部 MCP…';
+        ? t('mcp.doctor.running', null, { name })
+        : t('mcp.doctor.all');
     }
     try {
       const res = await window.grok.mcpDoctor(name ? { name } : {});
       if (log) log.textContent = formatDoctorReport(res, name);
-      // 列表项上显示状态徽章
       if (res?.servers) {
         for (const srv of res.servers) {
           const item = document.querySelector(`.mgmt-item[data-name="${CSS.escape(srv.name)}"]`);
@@ -184,7 +191,9 @@
             badge.className = 'mi-health';
             item.querySelector('.mi-name')?.appendChild(badge);
           }
-          badge.textContent = srv.healthy ? ' · 已连接' : ' · 未连接';
+          badge.textContent = srv.healthy
+            ? t('mcp.doctor.connected')
+            : t('mcp.doctor.disconnected');
           badge.style.color = srv.healthy ? 'var(--ok)' : 'var(--danger)';
         }
       }
@@ -202,8 +211,8 @@
       $('#mcpAddForm')?.classList.add('hidden');
     });
     $('#mcpTransport')?.addEventListener('change', () => {
-      const t = $('#mcpTransport').value;
-      const stdio = t === 'stdio';
+      const tr = $('#mcpTransport').value;
+      const stdio = tr === 'stdio';
       $('#mcpCmdField')?.classList.toggle('hidden', !stdio);
       $('#mcpUrlField')?.classList.toggle('hidden', stdio);
       $('#mcpHeaderField')?.classList.toggle('hidden', stdio);
@@ -221,7 +230,7 @@
       };
       try {
         await window.grok.mcpAdd(payload);
-        toast('MCP 已添加', 'ok');
+        toast(t('mcp.added'), 'ok');
         $('#mcpAddForm')?.classList.add('hidden');
         $('#mcpName').value = '';
         $('#mcpCommand').value = '';
@@ -229,7 +238,7 @@
         $('#mcpHeader').value = '';
         refreshMcp();
       } catch (e) {
-        toast(e.message || '添加失败', 'err');
+        toast(e.message || t('mcp.addFail'), 'err');
       }
     });
   }
@@ -240,29 +249,32 @@
   async function refreshSkills() {
     const host = $('#skillsList');
     if (!host) return;
-    host.innerHTML = '<div class="muted pad">加载中…</div>';
+    host.innerHTML = `<div class="muted pad">${esc(t('skill.loading'))}</div>`;
     try {
       const projectPath = global.ProjectStore?.active?.()?.path || null;
       const list = await window.grok.skillsList({ projectPath });
       if (!list.length) {
-        host.innerHTML = '<div class="muted pad">未发现技能<br>可新建或放入 ~/.grok/skills</div>';
+        host.innerHTML = `<div class="muted pad">${t('skill.empty')
+          .split('\n')
+          .map(esc)
+          .join('<br>')}</div>`;
         return;
       }
       host.innerHTML = list
         .map((s) => {
           const on = s.enabled !== false;
           return `<div class="mgmt-item${on ? '' : ' off'}" data-name="${esc(s.name)}">
-            <button type="button" class="toggle${on ? ' on' : ''}" data-stoggle="${esc(s.name)}" title="启用/禁用"></button>
+            <button type="button" class="toggle${on ? ' on' : ''}" data-stoggle="${esc(s.name)}" title="enable/disable"></button>
             <div class="mi-main">
               <div class="mi-name">${esc(s.name)}<span class="mi-scope">${esc(s.scope || 'user')}</span></div>
               <div class="mi-meta">${esc(s.description || s.path || '')}</div>
             </div>
             <div class="mi-actions">
-              <button class="btn small ghost" data-sedit="${esc(s.skillFile || s.path)}">编辑</button>
+              <button class="btn small ghost" data-sedit="${esc(s.skillFile || s.path)}">${esc(t('skill.edit'))}</button>
               ${
                 s.scope === 'bundled'
                   ? ''
-                  : `<button class="btn small danger" data-sdel="${esc(s.path)}">删除</button>`
+                  : `<button class="btn small danger" data-sdel="${esc(s.path)}">${esc(t('skill.delete'))}</button>`
               }
             </div>
           </div>`;
@@ -275,10 +287,13 @@
           const next = !btn.classList.contains('on');
           try {
             await window.grok.skillsToggle({ name, enabled: next });
-            toast(next ? `已启用 ${name}` : `已禁用 ${name}`, 'ok');
+            toast(
+              next ? t('skill.enabled', null, { name }) : t('skill.disabled', null, { name }),
+              'ok'
+            );
             refreshSkills();
           } catch (e) {
-            toast(e.message || '切换失败', 'err');
+            toast(e.message || t('mcp.toggleFail'), 'err');
           }
         };
       });
@@ -292,24 +307,24 @@
             $('#skillEditForm')?.classList.remove('hidden');
             $('#skillAddForm')?.classList.add('hidden');
           } catch (e) {
-            toast(e.message || '读取失败', 'err');
+            toast(e.message || t('skill.readFail'), 'err');
           }
         };
       });
       host.querySelectorAll('[data-sdel]').forEach((btn) => {
         btn.onclick = async () => {
-          if (!confirm('删除此技能目录？')) return;
+          if (!confirm(t('skill.confirmDelete'))) return;
           try {
             await window.grok.skillsDelete({ path: btn.dataset.sdel });
-            toast('已删除', 'ok');
+            toast(t('skill.deleted'), 'ok');
             refreshSkills();
           } catch (e) {
-            toast(e.message || '删除失败', 'err');
+            toast(e.message || t('mcp.deleteFail'), 'err');
           }
         };
       });
     } catch (e) {
-      host.innerHTML = `<div class="muted pad">加载失败：${esc(e.message)}</div>`;
+      host.innerHTML = `<div class="muted pad">${esc(t('skill.loadFail', null, { msg: e.message }))}</div>`;
     }
   }
 
@@ -337,14 +352,14 @@
       const projectPath = global.ProjectStore?.active?.()?.path || null;
       try {
         await window.grok.skillsCreate({ name, description, body, scope, projectPath });
-        toast('技能已创建', 'ok');
+        toast(t('skill.created'), 'ok');
         $('#skillAddForm')?.classList.add('hidden');
         $('#skillName').value = '';
         $('#skillDesc').value = '';
         $('#skillBody').value = '';
         refreshSkills();
       } catch (e) {
-        toast(e.message || '创建失败', 'err');
+        toast(e.message || t('skill.createFail'), 'err');
       }
     });
     $('#btnSkillEditSave')?.addEventListener('click', async () => {
@@ -354,32 +369,50 @@
           skillFile: editingSkillFile,
           content: $('#skillEditRaw').value,
         });
-        toast('已保存 SKILL.md', 'ok');
+        toast(t('skill.saved'), 'ok');
         $('#skillEditForm')?.classList.add('hidden');
         editingSkillFile = null;
         refreshSkills();
       } catch (e) {
-        toast(e.message || '保存失败', 'err');
+        toast(e.message || t('skill.saveFail'), 'err');
       }
     });
+  }
+
+  function applyStaticI18n() {
+    // toolbar hints that are static in HTML
+    const mcpHint = document.querySelector('#stab-mcp .mgmt-hint');
+    if (mcpHint) mcpHint.innerHTML = esc(t('mcp.hint')).replace(/~\/\.grok\/config\.toml/g, '<code>~/.grok/config.toml</code>').replace(/grok mcp/g, '<code>grok mcp</code>');
+    const skillHint = document.querySelector('#stab-skills .mgmt-hint');
+    if (skillHint) {
+      skillHint.innerHTML = esc(t('skill.hint'))
+        .replace(/~\/\.grok\/skills/g, '<code>~/.grok/skills</code>')
+        .replace(/\.grok\/skills/g, '<code>.grok/skills</code>');
+    }
+    const br = $('#btnMcpRefresh');
+    if (br) br.textContent = t('mcp.refresh');
+    const ba = $('#btnMcpShowAdd');
+    if (ba) ba.textContent = t('mcp.add');
+    const bd = $('#btnMcpDoctor');
+    if (bd) bd.textContent = t('mcp.doctor');
+    const sr = $('#btnSkillsRefresh');
+    if (sr) sr.textContent = t('skill.refresh');
+    const so = $('#btnSkillsOpenDir');
+    if (so) so.textContent = t('skill.openDir');
+    const sn = $('#btnSkillShowAdd');
+    if (sn) sn.textContent = t('skill.new');
   }
 
   function init() {
     bindSettingsTabs();
     bindMcpForm();
     bindSkillsForm();
+    applyStaticI18n();
+    window.addEventListener('grok:locale', () => applyStaticI18n());
   }
 
-  // expose for openSettings refresh
-  global.SettingsMcpSkills = {
-    init,
-    refreshMcp,
-    refreshSkills,
-  };
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
+  else init();
 
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', init);
-  } else {
-    init();
-  }
-})(window);
+  global.GrokMcpSkillsUi = { refreshMcp, refreshSkills, runDoctor };
+})(typeof window !== 'undefined' ? window : globalThis);

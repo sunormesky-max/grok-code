@@ -23,7 +23,7 @@
 | **Context inheritance** | Persist chats under `~/.grok-code/sessions`; L0–L3 (+ optional LLM) |
 | **Settings** | CLI, model, YOLO, **MCP**, **Skills**, **Plugins**, **Catalog** |
 | **Appearance** | **i18n** en/zh · theme packs (+ JSON import) · profiles |
-| **UI** | Sci-fi Grok aesthetic + boot sequence + onboarding doctor |
+| **UI** | Sci-fi HUD · boot · onboarding · **Ctrl+K** command palette |
 
 ---
 
@@ -136,6 +136,7 @@ Open **Settings → MCP / Skills** in the app.
 | `npm run check` | Syntax + unit tests + catalog build |
 | `npm run catalog` | Generate Settings catalog from `examples/` |
 | `npm run icons` | Generate `build/icon.png` for packaging |
+| `npm run audit:official` | `npm audit` against registry.npmjs.org |
 | `npm test` | Unit tests |
 | `npm run pack` | electron-builder unpacked dir |
 | `npm run dist:win` | Windows NSIS + portable → `release/` |

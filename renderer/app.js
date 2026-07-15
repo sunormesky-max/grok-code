@@ -1037,7 +1037,14 @@ function bindShortcuts() {
       addTask();
     }
     if (e.key === 'Escape') {
-      if (!$('#settingsModal').classList.contains('hidden')) closeSettings();
+      if (window.GrokCommandPalette?.isOpen?.()) {
+        window.GrokCommandPalette.close();
+        return;
+      }
+      if (!$('#settingsModal')?.classList.contains('hidden')) closeSettings();
+      if (!$('#onboardingModal')?.classList.contains('hidden')) {
+        $('#onboardingModal')?.classList.add('hidden');
+      }
     }
   });
 }
