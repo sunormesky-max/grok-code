@@ -2080,8 +2080,13 @@ async function onTermKey(e) {
 
 async function runTerminal(cmd) {
   appendTerm(`❯ ${cmd}`, 'cmd');
-  if (!state.workspace) {
-    appendTerm('请先打开工作区。', 'err');
+  if (!P()) {
+    appendTerm(t('term.needWs', '请先打开工作区。'), 'err');
+    return;
+  }
+  if (state.workMode === 'ask') {
+    appendTerm('Ask 模式：已拦截终端命令。请切换到 Craft / Plan。', 'err');
+    toast('Ask 模式禁止终端写操作', 'err');
     return;
   }
   try {

@@ -36,6 +36,8 @@
     if (pp) pp.value = cfg.personalProtect || 'standard';
     const tr = $('#cfgTrashOnDelete');
     if (tr) tr.checked = cfg.trashOnDelete !== false;
+    const sk = $('#cfgInjectSkills');
+    if (sk) sk.checked = cfg.injectSkillsIndex !== false;
     const tel = $('#cfgTelemetry');
     if (tel) tel.checked = Boolean(cfg.telemetryEnabled);
     const telEp = $('#cfgTelemetryEndpoint');
@@ -60,6 +62,8 @@
     if (pp) partial.personalProtect = pp.value || 'standard';
     const tr = $('#cfgTrashOnDelete');
     if (tr) partial.trashOnDelete = tr.checked;
+    const sk = $('#cfgInjectSkills');
+    if (sk) partial.injectSkillsIndex = sk.checked;
     const tel = $('#cfgTelemetry');
     if (tel) partial.telemetryEnabled = tel.checked;
     const telEp = $('#cfgTelemetryEndpoint');
@@ -154,6 +158,7 @@
       stylePack: partial.stylePack,
       personalProtect: partial.personalProtect,
       trashOnDelete: partial.trashOnDelete,
+      injectSkillsIndex: partial.injectSkillsIndex,
       telemetryEnabled: partial.telemetryEnabled,
       telemetryEndpoint: partial.telemetryEndpoint,
     });

@@ -59,6 +59,8 @@ const store = new Store({
     personalProtect: 'standard',
     /** UI delete → recycle bin when possible */
     trashOnDelete: true,
+    /** inject skill name+description index into agent prompt */
+    injectSkillsIndex: true,
   },
 });
 
@@ -109,6 +111,7 @@ function getConfig() {
     stylePack,
     personalProtect: store.get('personalProtect') || 'standard',
     trashOnDelete: store.get('trashOnDelete') !== false,
+    injectSkillsIndex: store.get('injectSkillsIndex') !== false,
   };
 }
 
@@ -392,6 +395,7 @@ ipcMain.handle('config:get', () => {
     stylePack: getConfig().stylePack,
     personalProtect: getConfig().personalProtect,
     trashOnDelete: getConfig().trashOnDelete,
+    injectSkillsIndex: getConfig().injectSkillsIndex,
     modes: modes.listModes(),
     styles: modes.listStyles(),
   };
@@ -443,6 +447,9 @@ ipcMain.handle('config:set', (_e, partial) => {
   }
   if (partial.trashOnDelete !== undefined) {
     store.set('trashOnDelete', Boolean(partial.trashOnDelete));
+  }
+  if (partial.injectSkillsIndex !== undefined) {
+    store.set('injectSkillsIndex', Boolean(partial.injectSkillsIndex));
   }
   return true;
 });
@@ -566,6 +573,44 @@ function resolveProjectId(payload, fallback) {
   return payload?.projectId || fallback;
 }
 
+/** Ask 模式：UI 层禁止写/删/跑命令（硬拦，不只靠 prompt） */
+function assertMutationsAllowed(action = 'write') {
+  const mode = store.get('workMode') || 'craft';
+  if (mode === 'ask') {
+    throw new Error(
+      `当前为 Ask 模式（只读），已拦截「${action}」。请切换到 Craft 或 Plan 后再操作。`
+    );
+  }
+}
+
+/** 个人目录保护：对越界绝对路径的提示（工作区工具已 resolveSafe，主要拦 terminal） */
+function assertTerminalSafe(command) {
+  assertMutationsAllowed('terminal');
+  const mode = store.get('workMode') || 'craft';
+  const protect = store.get('personalProtect') || 'standard';
+  if (protect === 'off' || mode === 'ask') return;
+  const cmd = String(command || '');
+  // destructive patterns outside workspace
+  if (
+    protect === 'strict' &&
+    /(rm\s+-rf|del\s+\/s|rd\s+\/s|Remove-Item\s+-Recurse|Format-Volume)/i.test(cmd)
+  ) {
+    throw new Error(
+      '个人目录保护（严格）：已拦截疑似高危删除/格式化命令。请改写为更具体、更安全的命令。'
+    );
+  }
+  if (
+    protect === 'standard' &&
+    /(Desktop|Downloads|Documents|桌面|下载|文档).{0,40}(rm\s+-rf|del\s+\/s|Remove-Item\s+-Recurse)/i.test(
+      cmd
+    )
+  ) {
+    throw new Error(
+      '个人目录保护：检测到针对桌面/下载/文档的危险删除命令，已拦截。'
+    );
+  }
+}
+
 ipcMain.handle('fs:list', async (_e, payload = {}) => {
   const projectId = typeof payload === 'string' ? null : payload.projectId;
   const relPath = typeof payload === 'string' ? payload : payload.relPath || '.';
@@ -587,11 +632,13 @@ ipcMain.handle('fs:read', async (_e, payload) => {
 });
 
 ipcMain.handle('fs:write', async (_e, payload) => {
+  assertMutationsAllowed('write');
   const p = requireProject(payload.projectId);
   return p.tools.writeFile(payload.relPath ?? payload.path, payload.content);
 });
 
 ipcMain.handle('fs:delete', async (_e, payload) => {
+  assertMutationsAllowed('delete');
   const p = requireProject(payload.projectId);
   const trash = payload.trash !== undefined ? Boolean(payload.trash) : store.get('trashOnDelete') !== false;
   return p.tools.deleteFile(payload.relPath ?? payload.path, { trash });
@@ -630,6 +677,7 @@ ipcMain.handle('terminal:run', async (_e, payload) => {
   const projectId = typeof payload === 'string' ? null : payload.projectId;
   const p = projectId ? requireProject(projectId) : projects.values().next().value;
   if (!p) throw new Error('尚未打开项目');
+  assertTerminalSafe(command);
   return p.tools.runCommand(command, { timeoutMs: 60000 });
 });
 
@@ -712,11 +760,20 @@ ipcMain.handle('agent:run', async (_e, payload) => {
     : getConfig().stylePack;
 
   const modePrefix = modes.modePromptPrefix(workMode, message);
+  let skillsIndex = '';
+  try {
+    if (store.get('injectSkillsIndex') !== false) {
+      skillsIndex = mcpSkills.buildSkillsIndexPrompt(p.path, { maxItems: 20 });
+      if (skillsIndex) skillsIndex += '\n\n';
+    }
+  } catch {
+    /* ignore */
+  }
   const basePrompt = buildContextPrompt(context, message, {
     projectName: p.name,
     taskTitle: taskTitle || tid,
   });
-  const fullPrompt = modePrefix + basePrompt;
+  const fullPrompt = modePrefix + skillsIndex + basePrompt;
 
   // merged rules for CLI
   const mergedRules = modes.buildRules({

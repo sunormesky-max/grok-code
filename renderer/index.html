@@ -13,6 +13,7 @@
   <link rel="stylesheet" href="search-ui.css" />
   <link rel="stylesheet" href="split-layout.css" />
   <link rel="stylesheet" href="work-mode.css" />
+  <link rel="stylesheet" href="outline.css" />
 </head>
 <body class="theme-grok booting">
   <a class="skip-link" href="#app" data-i18n="a11y.skip">跳到主内容</a>
@@ -619,6 +620,13 @@
           <input type="checkbox" id="cfgTrashOnDelete" checked />
           <span><strong data-i18n="protect.trash">删除进回收站</strong></span>
         </label>
+        <label class="field check">
+          <input type="checkbox" id="cfgInjectSkills" checked />
+          <span>
+            <strong>注入 Skills 索引</strong>
+            <small>仅 name+description；Agent 按需再读 SKILL.md</small>
+          </span>
+        </label>
         <label class="field">
           <span data-i18n="theme.label">主题</span>
           <select id="cfgTheme">
@@ -820,6 +828,7 @@
   <script src="shortcuts-overlay.js"></script>
   <script src="global-search.js"></script>
   <script src="split-layout.js"></script>
+  <script src="outline.js"></script>
   <script src="live-virtual.js"></script>
   <script src="chat-virtual.js"></script>
   <script src="diff-util.js"></script>

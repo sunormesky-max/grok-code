@@ -16,13 +16,14 @@ Living plan for the GrokCode open-source ecosystem. Order may change based on co
 - [x] Keyboard cheatsheet · density themes · file tree polish
 - [x] Global file/content search · Code|Diff split · Electron 43
 - [x] Craft/Plan/Ask modes · style packs · personal protect / trash delete
+- [x] Ask IPC hard-block · outline · split width persist · skills index inject
 
 ## Next
 
-- [ ] Hard Ask-mode tool block at IPC for UI terminal (beyond CLI rules)
-- [ ] Symbol/outline light search in open file
-- [ ] Persist split divider width per project
-- [ ] Skill progressive loader (inject description only until triggered)
+- [ ] Per-project split width (not only global)
+- [ ] Outline for more languages / nested symbols
+- [ ] Skill full-body load tool hint UX when matched
+- [ ] Plan mode: one-click「执行方案」chip after plan reply
 
 ## Later
 

@@ -323,6 +323,29 @@ function listSkills(projectPath) {
     .sort((a, b) => a.name.localeCompare(b.name));
 }
 
+/**
+ * Progressive skill index for agent injection:
+ * only name + description (L1), not full SKILL.md bodies.
+ * Agent should read SKILL.md when a skill matches.
+ */
+function buildSkillsIndexPrompt(projectPath, { maxItems = 24, maxDesc = 160 } = {}) {
+  const list = listSkills(projectPath).filter((s) => s.enabled !== false);
+  if (!list.length) return '';
+  const lines = list.slice(0, maxItems).map((s) => {
+    const desc = String(s.description || '')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .slice(0, maxDesc);
+    const loc = s.skillFile || s.path || '';
+    return `- ${s.name}: ${desc}${loc ? ` 〔${loc}〕` : ''}`;
+  });
+  return [
+    '【可用 Skills 索引 · 渐进加载】',
+    '以下仅元数据。若某 skill 的 description 匹配当前任务，请用读文件工具打开对应 SKILL.md 再按其中步骤执行；不要假装已内置全文。',
+    ...lines,
+  ].join('\n');
+}
+
 function setSkillEnabled(name, enabled) {
   const disabled = new Set(readDisabledSkills());
   if (enabled) disabled.delete(name);
@@ -414,6 +437,7 @@ module.exports = {
   doctorMcp,
   setMcpEnabled,
   setMcpStartupTimeout,
+  buildSkillsIndexPrompt,
   listSkills,
   setSkillEnabled,
   createSkill,

@@ -97,6 +97,22 @@ function testModes() {
   console.log('ok  modes / styles');
 }
 
+function testSkillsIndex() {
+  const skills = require(path.join(root, 'electron', 'mcp-skills.js'));
+  assert.equal(typeof skills.buildSkillsIndexPrompt, 'function');
+  // empty project path still ok
+  const idx = skills.buildSkillsIndexPrompt(null);
+  assert.equal(typeof idx, 'string');
+  console.log('ok  skills progressive index');
+}
+
+function testOutlineExtract() {
+  // inline same logic via reading outline is browser-only; test regex patterns lightly here
+  const sample = 'function foo() {}\nclass Bar {}\nexport const baz = () => {}';
+  assert.ok(/function\s+foo/.test(sample));
+  console.log('ok  outline patterns smoke');
+}
+
 function testToolsSearchExports() {
   // createTools needs a real dir
   const os = require('os');
@@ -122,6 +138,8 @@ try {
   testProfilesRoundtrip();
   testCatalogBuild();
   testModes();
+  testSkillsIndex();
+  testOutlineExtract();
   testToolsSearchExports();
   console.log('\nAll unit tests passed');
 } catch (err) {

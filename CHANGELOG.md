@@ -11,6 +11,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 - See [ROADMAP.md](ROADMAP.md)
 
+## [1.2.8] — 2026-07-16
+
+### Added / hardened
+
+- **Ask hard-block**: UI `fs:write` / `fs:delete` / `terminal:run` rejected in Ask mode
+- Personal-protect heuristics on dangerous terminal patterns
+- **Split divider width** persisted (`localStorage`)
+- **Code Outline** panel (functions/classes/headings → jump)
+- **Skills progressive index** injected into agent (name+description only; toggle in Appearance)
+
 ## [1.2.7] — 2026-07-16
 
 ### Added (WorkBuddy-inspired, GrokCode-native)
@@ -143,7 +153,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Requires installed Grok CLI + auth (`grok login` or `XAI_API_KEY`)
 - YOLO / always-approve is full workspace trust
 
-[Unreleased]: https://github.com/sunormesky-max/grok-code/compare/v1.2.7...HEAD
+[Unreleased]: https://github.com/sunormesky-max/grok-code/compare/v1.2.8...HEAD
+[1.2.8]: https://github.com/sunormesky-max/grok-code/compare/v1.2.7...v1.2.8
 [1.2.7]: https://github.com/sunormesky-max/grok-code/compare/v1.2.6...v1.2.7
 [1.2.6]: https://github.com/sunormesky-max/grok-code/compare/v1.2.5...v1.2.6
 [1.2.5]: https://github.com/sunormesky-max/grok-code/compare/v1.2.4...v1.2.5

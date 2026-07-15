@@ -3,9 +3,27 @@
  */
 (function (global) {
   const KEY = 'grokcode-split-layout';
+  const WIDTH_KEY = 'grokcode-split-width';
 
   function isSplit() {
     return document.body.classList.contains('layout-split');
+  }
+
+  function getSavedWidth() {
+    try {
+      const n = Number(localStorage.getItem(WIDTH_KEY));
+      return n > 160 && n < 2000 ? n : null;
+    } catch {
+      return null;
+    }
+  }
+
+  function saveWidth(px) {
+    try {
+      localStorage.setItem(WIDTH_KEY, String(Math.round(px)));
+    } catch {
+      /* ignore */
+    }
   }
 
   function setSplit(on) {
@@ -65,6 +83,8 @@
     host.appendChild(diff);
     code.classList.remove('hidden');
     diff.classList.remove('hidden');
+    const w = getSavedWidth();
+    if (w) code.style.flex = `0 0 ${w}px`;
     bindDivider(divider, host, code);
   }
 
@@ -93,9 +113,11 @@
         const total = host.getBoundingClientRect().width;
         let w = Math.min(total - 200, Math.max(180, startW + dx));
         codePane.style.flex = `0 0 ${w}px`;
+        codePane._splitW = w;
       };
       const onUp = () => {
         divider.classList.remove('active');
+        if (codePane._splitW) saveWidth(codePane._splitW);
         window.removeEventListener('mousemove', onMove);
         window.removeEventListener('mouseup', onUp);
       };
