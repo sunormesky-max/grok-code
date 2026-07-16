@@ -62,6 +62,10 @@ const state = {
   diffSelected: new Set(),
   /** unified | split */
   diffViewMode: loadJson('grokcode-diff-view', 'unified') || 'unified',
+  /** composer paste attachments (session-only) */
+  attachments: [],
+  /** play chime when background task finishes */
+  notifySound: loadJson('grokcode-notify-sound', true) !== false,
 };
 
 /** 当前激活任务 */
@@ -1249,6 +1253,8 @@ function bindUi() {
   bindSlashCommands();
   bindChatSearch();
   bindAtMentions();
+  bindComposerAttachments();
+  bindRulesQuickEdit();
   // restore draft for active task after UI ready
   setTimeout(() => loadPromptDraft(T()), 0);
 
@@ -2365,6 +2371,320 @@ function bindChatSearch() {
 window.openChatSearch = openChatSearch;
 window.toggleDiffViewMode = toggleDiffViewMode;
 
+// ── Background flight complete notify ───────────────────
+function playCompleteChime() {
+  if (state.notifySound === false) return;
+  try {
+    const Ctx = window.AudioContext || window.webkitAudioContext;
+    if (!Ctx) return;
+    const ctx = playCompleteChime._ctx || new Ctx();
+    playCompleteChime._ctx = ctx;
+    if (ctx.state === 'suspended') ctx.resume?.();
+    const now = ctx.currentTime;
+    const notes = [523.25, 659.25, 783.99]; // C5 E5 G5
+    notes.forEach((freq, i) => {
+      const o = ctx.createOscillator();
+      const g = ctx.createGain();
+      o.type = 'sine';
+      o.frequency.value = freq;
+      g.gain.value = 0.0001;
+      g.gain.exponentialRampToValueAtTime(0.05, now + 0.02 + i * 0.08);
+      g.gain.exponentialRampToValueAtTime(0.0001, now + 0.28 + i * 0.08);
+      o.connect(g);
+      g.connect(ctx.destination);
+      o.start(now + i * 0.08);
+      o.stop(now + 0.35 + i * 0.08);
+    });
+  } catch {
+    /* ignore */
+  }
+}
+
+function notifyFlightComplete(task, stats = {}) {
+  if (!task) return;
+  const bg = !isActiveTask(task) || document.hidden;
+  if (!bg && task.turnMode !== 'craft') return;
+  // Always soft-notify when not focused / not active task
+  if (!bg && !document.hidden) {
+    // active craft still gets a short toast if multi-task running elsewhere only
+    return;
+  }
+  const files = stats.files || 0;
+  const tools = stats.tools || 0;
+  const msg = localeIsEn()
+    ? `Flight done · ${task.title} · ${tools} tools · ${files} files`
+    : `飞行完成 · ${task.title} · ${tools} 工具 · ${files} 文件`;
+  toast(msg, 'ok');
+  playCompleteChime();
+  try {
+    if (document.hidden && typeof Notification !== 'undefined') {
+      if (Notification.permission === 'granted') {
+        new Notification('GrokCode', { body: msg, silent: true });
+      } else if (Notification.permission !== 'denied') {
+        Notification.requestPermission?.();
+      }
+    }
+  } catch {
+    /* ignore */
+  }
+}
+
+// ── Rules quick edit from status bar ────────────────────
+function bindRulesQuickEdit() {
+  let chip = document.getElementById('sbRules');
+  if (!chip) {
+    const foot = document.querySelector('.statusbar');
+    if (!foot) return;
+    chip = document.createElement('button');
+    chip.type = 'button';
+    chip.id = 'sbRules';
+    chip.className = 'sb-rules';
+    chip.textContent = 'rules';
+    const agent = document.getElementById('sbAgent');
+    if (agent?.nextSibling) foot.insertBefore(chip, agent.nextSibling);
+    else foot.appendChild(chip);
+  }
+  const refresh = async () => {
+    try {
+      const cfg = await window.grok.getConfig();
+      const rules = String(cfg.rules || '').trim();
+      chip.textContent = rules ? `rules · ${rules.slice(0, 18)}${rules.length > 18 ? '…' : ''}` : 'rules';
+      chip.title = rules || (localeIsEn() ? 'Click to edit --rules' : '点击编辑 --rules');
+      chip.classList.toggle('has-rules', Boolean(rules));
+    } catch {
+      /* ignore */
+    }
+  };
+  chip.onclick = () => openRulesQuickEdit();
+  refresh();
+  window.refreshRulesChip = refresh;
+}
+
+window.openRulesQuickEdit = openRulesQuickEdit;
+async function openRulesQuickEdit() {
+  let cfg;
+  try {
+    cfg = await window.grok.getConfig();
+  } catch {
+    cfg = {};
+  }
+  let root = document.getElementById('rulesQuickModal');
+  if (!root) {
+    root = document.createElement('div');
+    root.id = 'rulesQuickModal';
+    root.className = 'gc-modal hidden';
+    root.setAttribute('role', 'dialog');
+    document.body.appendChild(root);
+  }
+  const en = localeIsEn();
+  root.classList.remove('hidden');
+  root.innerHTML = `
+    <div class="gc-modal-backdrop" data-close="1"></div>
+    <div class="gc-modal-card glass" style="width:min(520px,94vw)">
+      <div class="gc-modal-head">
+        <div>
+          <div class="skill-preview-kicker">--rules</div>
+          <h2>${en ? 'Project rules' : '附加规则'}</h2>
+          <p class="skill-preview-desc">${en ? 'Injected into every agent turn' : '注入每一轮 Agent 请求'}</p>
+        </div>
+        <button type="button" class="icon-btn" data-close="1">✕</button>
+      </div>
+      <textarea id="rulesQuickText" class="rules-quick-ta" rows="8" placeholder="${en ? 'e.g. Prefer Chinese; no git commit' : '例如：优先中文；不要 git commit'}"></textarea>
+      <div class="gc-modal-actions">
+        <button type="button" class="btn small ghost" data-act="sound">${state.notifySound !== false ? (en ? 'Chime on' : '提示音开') : en ? 'Chime off' : '提示音关'}</button>
+        <button type="button" class="btn small ghost" data-close="1">${en ? 'Cancel' : '取消'}</button>
+        <button type="button" class="btn small primary" data-act="save">${en ? 'Save' : '保存'}</button>
+      </div>
+    </div>`;
+  const ta = root.querySelector('#rulesQuickText');
+  if (ta) ta.value = cfg.rules || '';
+  const close = () => root.classList.add('hidden');
+  root.querySelectorAll('[data-close]').forEach((el) => {
+    el.onclick = () => close();
+  });
+  root.querySelector('[data-act="sound"]').onclick = (e) => {
+    state.notifySound = state.notifySound === false;
+    saveJson('grokcode-notify-sound', state.notifySound);
+    e.currentTarget.textContent =
+      state.notifySound !== false ? (en ? 'Chime on' : '提示音开') : en ? 'Chime off' : '提示音关';
+    if (state.notifySound !== false) playCompleteChime();
+  };
+  root.querySelector('[data-act="save"]').onclick = async () => {
+    const rules = ta?.value || '';
+    try {
+      await window.grok.setConfig({ rules });
+      const cfgEl = document.getElementById('cfgRules');
+      if (cfgEl) cfgEl.value = rules;
+      window.refreshRulesChip?.();
+      toast(en ? 'Rules saved' : '规则已保存', 'ok');
+      close();
+    } catch (err) {
+      toast(err.message || 'save failed', 'err');
+    }
+  };
+  ta?.focus();
+}
+
+// ── Composer paste attachments ──────────────────────────
+function bindComposerAttachments() {
+  const ta = document.getElementById('prompt');
+  if (!ta || ta._attachBound) return;
+  ta._attachBound = true;
+  ta.addEventListener('paste', onComposerPaste);
+  ensureAttachBar();
+}
+
+function ensureAttachBar() {
+  let bar = document.getElementById('attachBar');
+  if (bar) return bar;
+  const box = document.querySelector('.composer-box');
+  if (!box) return null;
+  bar = document.createElement('div');
+  bar.id = 'attachBar';
+  bar.className = 'attach-bar hidden';
+  box.parentElement?.insertBefore(bar, box);
+  return bar;
+}
+
+function renderAttachBar() {
+  const bar = ensureAttachBar();
+  if (!bar) return;
+  if (!state.attachments.length) {
+    bar.classList.add('hidden');
+    bar.innerHTML = '';
+    return;
+  }
+  bar.classList.remove('hidden');
+  bar.innerHTML =
+    state.attachments
+      .map(
+        (a, i) =>
+          `<span class="attach-chip" title="${esc(a.mime || '')} · ${formatBytes(a.size || 0)}">
+            ${a.kind === 'image' ? '🖼' : a.kind === 'text' ? '📄' : '📎'} ${esc(a.name)}
+            <button type="button" data-i="${i}" aria-label="remove">×</button>
+          </span>`
+      )
+      .join('') +
+    `<button type="button" class="link-btn" id="attachClearAll">${localeIsEn() ? 'Clear' : '清空'}</button>`;
+  bar.querySelectorAll('button[data-i]').forEach((btn) => {
+    btn.onclick = () => {
+      state.attachments.splice(Number(btn.dataset.i), 1);
+      renderAttachBar();
+    };
+  });
+  bar.querySelector('#attachClearAll')?.addEventListener('click', () => clearAttachments());
+}
+
+function clearAttachments() {
+  state.attachments = [];
+  renderAttachBar();
+}
+
+function buildAttachmentContextNote() {
+  if (!state.attachments.length) return '';
+  const lines = [
+    localeIsEn()
+      ? '【Pasted attachments — context notes for the agent】'
+      : '【粘贴附件 · 供 Agent 参考的上下文笔记】',
+  ];
+  for (const a of state.attachments) {
+    if (a.kind === 'text' && a.text) {
+      lines.push(`\n### ${a.name} (${a.mime || 'text'})\n\`\`\`\n${a.text.slice(0, 12000)}\n\`\`\``);
+    } else if (a.kind === 'image') {
+      lines.push(
+        `\n### ${a.name} (image/${(a.mime || '').replace('image/', '') || 'png'} · ${formatBytes(a.size || 0)})\n` +
+          (localeIsEn()
+            ? 'User pasted an image in the desktop UI. Image bytes are not sent to CLI; treat as visual intent and follow the user text. Preview data-url length: '
+            : '用户在桌面端粘贴了图片；图片字节未上传 CLI，请结合用户文字理解意图。data-url 长度：') +
+          `${(a.dataUrl || '').length}`
+      );
+    } else {
+      lines.push(`\n### ${a.name} (${a.mime || 'file'} · ${formatBytes(a.size || 0)})`);
+    }
+  }
+  return lines.join('\n');
+}
+
+async function onComposerPaste(e) {
+  const cd = e.clipboardData;
+  if (!cd) return;
+  const files = [...(cd.files || [])];
+  // also items
+  if (!files.length && cd.items) {
+    for (const item of cd.items) {
+      if (item.kind === 'file') {
+        const f = item.getAsFile();
+        if (f) files.push(f);
+      }
+    }
+  }
+  if (!files.length) return;
+  e.preventDefault();
+  for (const file of files.slice(0, 6)) {
+    await addAttachmentFromFile(file);
+  }
+  renderAttachBar();
+  toast(
+    localeIsEn()
+      ? `Attached ${state.attachments.length} item(s)`
+      : `已附加 ${state.attachments.length} 项`,
+    'ok'
+  );
+}
+
+function readFileAsDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => resolve(r.result);
+    r.onerror = () => reject(r.error);
+    r.readAsDataURL(file);
+  });
+}
+
+function readFileAsText(file) {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => resolve(r.result);
+    r.onerror = () => reject(r.error);
+    r.readAsText(file);
+  });
+}
+
+async function addAttachmentFromFile(file) {
+  if (!file) return;
+  const name = file.name || `paste-${Date.now()}`;
+  const mime = file.type || 'application/octet-stream';
+  const size = file.size || 0;
+  if (mime.startsWith('image/')) {
+    if (size > 4_000_000) {
+      toast(localeIsEn() ? 'Image too large (>4MB)' : '图片过大（>4MB）', 'err');
+      return;
+    }
+    const dataUrl = await readFileAsDataUrl(file);
+    state.attachments.push({ kind: 'image', name, mime, size, dataUrl });
+    return;
+  }
+  // text-like
+  if (
+    mime.startsWith('text/') ||
+    /\.(md|txt|json|js|ts|tsx|jsx|css|html|py|go|rs|java|yml|yaml|toml|xml|csv|log)$/i.test(name) ||
+    size < 200_000
+  ) {
+    if (size > 200_000) {
+      toast(localeIsEn() ? 'Text file too large' : '文本文件过大', 'err');
+      return;
+    }
+    try {
+      const text = await readFileAsText(file);
+      state.attachments.push({ kind: 'text', name, mime, size, text: String(text || '') });
+      return;
+    } catch {
+      /* fallthrough */
+    }
+  }
+  state.attachments.push({ kind: 'file', name, mime, size });
+}
+
 // ── @file mentions ──────────────────────────────────────
 let atIndex = 0;
 let atHits = [];
@@ -2728,6 +3048,17 @@ async function recordFileChange(path, { reason = 'change' } = {}) {
       return; // 相对缓存无变化
     }
     const recomputed = window.DiffUtil.computeLineDiff(keepBefore, after);
+    const task = T();
+    const turnMeta = {
+      turnId: task?.turnId || null,
+      taskId: task?.id || null,
+      taskTitle: task?.title || null,
+      prompt: task?.lastPrompt || null,
+      ts: Date.now(),
+      reason,
+    };
+    const turns = Array.isArray(prev?.turns) ? prev.turns.slice(-8) : [];
+    if (turnMeta.turnId || turnMeta.taskTitle) turns.push(turnMeta);
     const entry = {
       path,
       before: keepBefore,
@@ -2736,9 +3067,14 @@ async function recordFileChange(path, { reason = 'change' } = {}) {
       ops: recomputed.ops,
       created: (prev && !prev.restored ? prev.created : false) || keepBefore === '',
       ts: Date.now(),
-      turnId: T()?.turnId || null,
+      turnId: turnMeta.turnId,
+      taskTitle: turnMeta.taskTitle,
+      taskId: turnMeta.taskId,
+      prompt: turnMeta.prompt,
+      turns,
       reason,
       restored: false,
+      reviewed: prev && !prev.restored ? Boolean(prev.reviewed) : false,
     };
     changesMap().set(path, entry);
     // 更新缓存到最新，便于后续二次修改
@@ -2824,6 +3160,17 @@ async function recordFileChangeForProject(proj, filePath, { reason = 'change' } 
     if (keepBefore === after && prev && !prev.restored) return;
     if (cached != null && cached === after && !prev) return;
     const recomputed = window.DiffUtil.computeLineDiff(keepBefore, after);
+    const runningTask = (proj.tasks || []).find((t) => t.running) || null;
+    const turnMeta = {
+      turnId: runningTask?.turnId || null,
+      taskId: runningTask?.id || null,
+      taskTitle: runningTask?.title || proj.name,
+      prompt: runningTask?.lastPrompt || null,
+      ts: Date.now(),
+      reason,
+    };
+    const turns = Array.isArray(prev?.turns) ? prev.turns.slice(-8) : [];
+    if (turnMeta.turnId || turnMeta.taskTitle) turns.push(turnMeta);
     proj.changes.set(filePath, {
       path: filePath,
       before: keepBefore,
@@ -2832,8 +3179,14 @@ async function recordFileChangeForProject(proj, filePath, { reason = 'change' } 
       ops: recomputed.ops,
       created: (prev && !prev.restored ? prev.created : false) || keepBefore === '',
       ts: Date.now(),
+      turnId: turnMeta.turnId,
+      taskTitle: turnMeta.taskTitle,
+      taskId: turnMeta.taskId,
+      prompt: turnMeta.prompt,
+      turns,
       reason,
       restored: false,
+      reviewed: prev && !prev.restored ? Boolean(prev.reviewed) : false,
     });
     proj.contentCache.set(filePath, after);
     pushLiveEvent({
@@ -3087,12 +3440,26 @@ function renderDiffPane() {
   }
 
   const viewMode = state.diffViewMode === 'split' ? 'split' : 'unified';
+  const lastTurn = Array.isArray(cur.turns) && cur.turns.length ? cur.turns[cur.turns.length - 1] : null;
+  const blame = {
+    turnId: cur.turnId || lastTurn?.turnId || '',
+    taskTitle: cur.taskTitle || lastTurn?.taskTitle || '',
+    prompt: cur.prompt || lastTurn?.prompt || '',
+    ts: cur.ts || lastTurn?.ts || null,
+    reason: cur.reason || lastTurn?.reason || '',
+    turns: cur.turns || [],
+  };
+  if (blame.taskTitle || blame.turnId) {
+    const when = blame.ts ? new Date(blame.ts).toLocaleTimeString() : '';
+    banner += `<div class="diff-banner blame-banner">Agent turn · ${esc(blame.taskTitle || 'task')}${when ? ` · ${esc(when)}` : ''}${blame.prompt ? ` · ${esc(String(blame.prompt).slice(0, 80))}` : ''} · hover +/- 行看详情</div>`;
+  }
   const bodyHtml =
     viewMode === 'split'
-      ? window.DiffUtil.toSideBySideHtml(cur.ops, { context: 3 })
+      ? window.DiffUtil.toSideBySideHtml(cur.ops, { context: 3, blame })
       : window.DiffUtil.toUnifiedHtml(cur.ops, {
           context: 3,
           collapsed: state.diffHunkCollapsed,
+          blame,
         });
 
   content.innerHTML =
@@ -3109,6 +3476,8 @@ function renderDiffPane() {
       <span class="muted" style="font-size:11px"><kbd>j</kbd>/<kbd>k</kbd> 文件 · <kbd>a</kbd> 审阅 · <kbd>s</kbd> 切换视图</span>
     </div>` +
     bodyHtml;
+
+  bindDiffBlameTooltips(content, blame);
 
   content.querySelector('[data-diff-act="unified"]')?.addEventListener('click', () => {
     state.diffViewMode = 'unified';
@@ -3144,6 +3513,49 @@ function toggleDiffViewMode() {
   saveJson('grokcode-diff-view', state.diffViewMode);
   if (state.activeTab === 'diff') renderDiffPane();
   toast(state.diffViewMode === 'split' ? 'Side-by-side' : 'Unified', 'ok');
+}
+
+/** Richer floating tooltip for blamed +/- lines */
+function bindDiffBlameTooltips(root, blame) {
+  if (!root || !blame) return;
+  let tip = document.getElementById('diffBlameTip');
+  if (!tip) {
+    tip = document.createElement('div');
+    tip.id = 'diffBlameTip';
+    tip.className = 'diff-blame-tip hidden';
+    document.body.appendChild(tip);
+  }
+  const show = (e, el) => {
+    const title = el.getAttribute('title') || '';
+    if (!title) return;
+    const turns = Array.isArray(blame.turns) ? blame.turns : [];
+    const hist =
+      turns.length > 1
+        ? `<div class="dbt-hist">${turns
+            .slice(-4)
+            .map(
+              (t) =>
+                `<div>${esc(t.taskTitle || 'task')} · ${t.ts ? esc(new Date(t.ts).toLocaleTimeString()) : ''}</div>`
+            )
+            .join('')}</div>`
+        : '';
+    tip.innerHTML = `<div class="dbt-title">Agent 归属</div><div class="dbt-body">${esc(title)}</div>${hist}`;
+    tip.classList.remove('hidden');
+    const x = Math.min(e.clientX + 12, window.innerWidth - 280);
+    const y = Math.min(e.clientY + 14, window.innerHeight - 120);
+    tip.style.left = `${x}px`;
+    tip.style.top = `${y}px`;
+  };
+  const hide = () => tip.classList.add('hidden');
+  root.querySelectorAll('.diff-row.has-blame, .diff-sbs-row.has-blame').forEach((el) => {
+    el.addEventListener('mouseenter', (e) => show(e, el));
+    el.addEventListener('mousemove', (e) => {
+      if (tip.classList.contains('hidden')) return;
+      tip.style.left = `${Math.min(e.clientX + 12, window.innerWidth - 280)}px`;
+      tip.style.top = `${Math.min(e.clientY + 14, window.innerHeight - 120)}px`;
+    });
+    el.addEventListener('mouseleave', hide);
+  });
 }
 
 function ensureDiffMultiBar() {
@@ -3607,6 +4019,12 @@ function bindAgentEvents() {
         if (nRun === 0) setAgentStatus('待命', false);
         scheduleTreeRefresh(true);
       }
+      // background / unfocused flight complete signal
+      notifyFlightComplete(task, {
+        files: fileCount,
+        tools: task.toolCount || 0,
+        mode: task.turnMode || 'craft',
+      });
     }),
     window.grok.on('fs:changed', (d) => onFsChanged(d)),
   ];
@@ -3692,9 +4110,14 @@ async function sendPrompt(opts = {}) {
     return;
   }
 
-  const text = $('#prompt').value.trim();
+  let text = $('#prompt').value.trim();
+  const attachNote = buildAttachmentContextNote();
+  if (attachNote) {
+    text = text ? `${attachNote}\n\n${text}` : attachNote;
+  }
   if (!text) return;
   await runTaskPrompt(task, text, { fromComposer: true, forceCraft: Boolean(opts.forceCraft) });
+  clearAttachments();
 }
 
 /**
@@ -4687,6 +5110,7 @@ async function saveSettings() {
   state.model = partial.model || '';
   saveJson(MODEL_KEY, state.model);
   applyModelChip();
+  window.refreshRulesChip?.();
   closeSettings();
   await refreshCliStatus();
   toast(t('toast.saved', '设置已保存'), 'ok');

@@ -23,13 +23,14 @@ Living plan for the GrokCode open-source ecosystem. Order may change based on co
 - [x] Task rename · Live filters · Diff hunk fold · Composer model chip
 - [x] Diff review/j-k/multi-select · slash cmds · chat message search
 - [x] @file mentions · Diff side-by-side · task pin/reorder · prompt drafts
+- [x] Diff blame hover · paste attach · rules chip · bg flight notify
 
 ## Next
 
-- [ ] Inline blame-style hover on Diff changed lines (author = agent turn)
-- [ ] Composer image/file paste attach as context note
-- [ ] Project-level “rules” quick edit from status bar
-- [ ] Optional sound/toast when Craft flight completes in background
+- [ ] Checkpoint restore: jump Diff file to a prior agent turn snapshot
+- [ ] Composer drag-drop files (same path as paste attach)
+- [ ] Per-project rules override (workspace `.grok/rules`)
+- [ ] Quiet hours / mute chime schedule
 
 ## Later
 

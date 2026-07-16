@@ -11,6 +11,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 - See [ROADMAP.md](ROADMAP.md)
 
+## [1.3.6] — 2026-07-16
+
+### Signal & context
+
+- **Diff blame hover**: +/- lines show Agent turn / task / prompt; banner + multi-turn history tip
+- **Paste attachments**: paste images/text files into composer → chips + context note on send
+- **Status bar rules**: click `rules` chip for quick `--rules` edit (+ chime toggle)
+- **Background flight done**: toast + soft chime when a non-active / unfocused task finishes
+
 ## [1.3.5] — 2026-07-16
 
 ### Composer & task polish

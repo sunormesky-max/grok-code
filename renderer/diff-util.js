@@ -88,7 +88,26 @@
    * Build foldable unified hunks from line ops.
    * @returns {{ html: string, hunkCount: number }}
    */
-  function toUnifiedHtml(ops, { context = 3, maxRows = 800, collapsed = null } = {}) {
+  function blameAttrs(blame, kind) {
+    if (!blame || kind === 'same') return { cls: '', attrs: '' };
+    const title = [
+      blame.taskTitle ? `Task: ${blame.taskTitle}` : '',
+      blame.turnId ? `Turn: ${blame.turnId}` : '',
+      blame.ts ? `At: ${new Date(blame.ts).toLocaleString()}` : '',
+      blame.prompt ? `Prompt: ${String(blame.prompt).slice(0, 120)}` : '',
+      blame.reason ? `Via: ${blame.reason}` : '',
+    ]
+      .filter(Boolean)
+      .join(' · ');
+    return {
+      cls: ' has-blame',
+      attrs: ` data-kind="${kind}" data-turn="${escapeHtml(blame.turnId || '')}"${
+        title ? ` title="${escapeHtml(title)}"` : ''
+      }`,
+    };
+  }
+
+  function toUnifiedHtml(ops, { context = 3, maxRows = 800, collapsed = null, blame = null } = {}) {
     // 只展示有变更的上下文窗口
     const show = new Array(ops.length).fill(false);
     for (let i = 0; i < ops.length; i++) {
@@ -182,9 +201,11 @@
           if (o.type === 'same') {
             html += `<div class="diff-row same"><span class="ln">${lineAAt[i]}</span><span class="sign"> </span><span class="tx">${text}</span></div>`;
           } else if (o.type === 'del') {
-            html += `<div class="diff-row del"><span class="ln">${lineAAt[i]}</span><span class="sign">-</span><span class="tx">${text}</span></div>`;
+            const b = blameAttrs(blame, 'del');
+            html += `<div class="diff-row del${b.cls}"${b.attrs}><span class="ln">${lineAAt[i]}</span><span class="sign">-</span><span class="tx">${text}</span></div>`;
           } else {
-            html += `<div class="diff-row add"><span class="ln">${lineBAt[i]}</span><span class="sign">+</span><span class="tx">${text}</span></div>`;
+            const b = blameAttrs(blame, 'add');
+            html += `<div class="diff-row add${b.cls}"${b.attrs}><span class="ln">${lineBAt[i]}</span><span class="sign">+</span><span class="tx">${text}</span></div>`;
           }
           rows++;
         }
@@ -205,7 +226,7 @@
   /**
    * Side-by-side diff HTML from the same ops (context-windowed like unified).
    */
-  function toSideBySideHtml(ops, { context = 3, maxRows = 800 } = {}) {
+  function toSideBySideHtml(ops, { context = 3, maxRows = 800, blame = null } = {}) {
     const show = new Array(ops.length).fill(false);
     for (let i = 0; i < ops.length; i++) {
       if (ops[i].type !== 'same') {
@@ -241,18 +262,19 @@
         break;
       }
       const text = escapeHtml(o.text);
+      const ba = blameAttrs(blame, o.type);
       if (o.type === 'same') {
         html += `<div class="diff-sbs-row same">
           <div class="sbs-cell"><span class="ln">${lineA}</span><span class="tx">${text}</span></div>
           <div class="sbs-cell"><span class="ln">${lineB}</span><span class="tx">${text}</span></div>
         </div>`;
       } else if (o.type === 'del') {
-        html += `<div class="diff-sbs-row del">
+        html += `<div class="diff-sbs-row del${ba.cls}"${ba.attrs}>
           <div class="sbs-cell del"><span class="ln">${lineA}</span><span class="sign">-</span><span class="tx">${text}</span></div>
           <div class="sbs-cell empty"></div>
         </div>`;
       } else {
-        html += `<div class="diff-sbs-row add">
+        html += `<div class="diff-sbs-row add${ba.cls}"${ba.attrs}>
           <div class="sbs-cell empty"></div>
           <div class="sbs-cell add"><span class="ln">${lineB}</span><span class="sign">+</span><span class="tx">${text}</span></div>
         </div>`;

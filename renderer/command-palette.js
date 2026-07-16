@@ -411,6 +411,13 @@
             global.renderTaskTabs?.();
           }
         }),
+      },
+      {
+        id: 'rules.edit',
+        title: t('cmd.rules.edit', '快速编辑 --rules'),
+        keywords: 'rules 规则',
+        group: 'actions',
+        run: run(() => global.openRulesQuickEdit?.()),
       }
     );
   }
