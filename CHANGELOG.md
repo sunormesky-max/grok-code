@@ -11,6 +11,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 - See [ROADMAP.md](ROADMAP.md)
 
+## [1.9.0] — 2026-07-16
+
+### Core — task flow & streaming pipeline
+
+- **Phase machine** on each run: `boot → thinking → tool → streaming → done` via `agent:phase`
+- **Status throttle**: no longer spam `speaking…` on every token
+- **Streaming JSON**: broader event types; sessionId/usage/`stopReason` from `end`
+- **Chat stream UX**: caret on live assistant bubble; role shows `stream` / `think` / `tool`
+- **Task tabs**: live phase chip (思考 / 工具 / 输出) + color dots
+- **Usage footer** on completed assistant turn (`in` / `out` tokens when CLI provides)
+- `agent:usage` event for Live phase / metrics
+
 ## [1.8.2] — 2026-07-16
 
 ### Fix Craft / Plan / Ask mode switching

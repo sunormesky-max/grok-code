@@ -3736,6 +3736,65 @@ button.pill:hover {
 .msg.assistant .body.stream-body {
   min-height: 1.2em;
 }
+.msg.assistant.is-streaming {
+  border-color: rgba(125, 211, 252, 0.28);
+  box-shadow:
+    0 0 0 1px rgba(56, 189, 248, 0.12),
+    0 8px 28px rgba(0, 0, 0, 0.25);
+}
+.msg.assistant .body.stream-body.is-streaming::after {
+  content: "";
+  display: inline-block;
+  width: 0.55em;
+  height: 1.05em;
+  margin-left: 2px;
+  vertical-align: text-bottom;
+  background: linear-gradient(180deg, #7dd3fc, #38bdf8);
+  border-radius: 1px;
+  box-shadow: 0 0 8px rgba(56, 189, 248, 0.55);
+  animation: streamCaret 0.9s steps(1) infinite;
+}
+@keyframes streamCaret {
+  50% { opacity: 0; }
+}
+.msg.assistant .stream-usage {
+  margin-top: 8px;
+  padding-top: 6px;
+  border-top: 1px dashed rgba(125, 211, 252, 0.15);
+  font-family: var(--mono, monospace);
+  font-size: 10px;
+  color: var(--faint, #71717a);
+  letter-spacing: 0.04em;
+}
+.task-tab .task-phase {
+  font-family: var(--mono, monospace);
+  font-size: 9px;
+  letter-spacing: 0.04em;
+  color: #7dd3fc;
+  opacity: 0.85;
+  flex-shrink: 0;
+  max-width: 48px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.task-tab.phase-thinking .task-dot {
+  background: #a78bfa;
+  box-shadow: 0 0 8px rgba(167, 139, 250, 0.55);
+}
+.task-tab.phase-tool .task-dot {
+  background: #fbbf24;
+  box-shadow: 0 0 8px rgba(251, 191, 36, 0.5);
+}
+.task-tab.phase-streaming .task-dot {
+  background: #38bdf8;
+  box-shadow: 0 0 8px rgba(56, 189, 248, 0.55);
+}
+@media (prefers-reduced-motion: reduce) {
+  .msg.assistant .body.stream-body.is-streaming::after {
+    animation: none;
+    opacity: 0.7;
+  }
+}
 .msg .role {
   display: flex;
   align-items: center;

@@ -873,6 +873,21 @@ function ensureAtLeastOneTask() {
   window.TaskStore.onProjectSwitch();
 }
 
+function taskPhaseLabel(t) {
+  if (!t?.running) return '';
+  const p = t.phase || 'running';
+  const map = {
+    boot: '启动',
+    running: '运行',
+    thinking: '思考',
+    tool: '工具',
+    streaming: '输出',
+    retry: '重试',
+    max_turns: '轮次上限',
+  };
+  return map[p] || p;
+}
+
 function renderTaskTabs() {
   const host = $('#taskTabs');
   if (!host) return;
@@ -883,10 +898,15 @@ function renderTaskTabs() {
       const act = t.id === activeId ? ' active' : '';
       const run = t.running ? ' running' : '';
       const pin = t.pinned ? ' pinned' : '';
-      return `<div class="task-tab${act}${run}${pin}" data-id="${t.id}" draggable="true" title="${esc(t.title)} · 双击重命名 · 拖拽排序">
+      const phase = t.running && t.phase ? ` phase-${esc(t.phase)}` : '';
+      const phaseTip = t.running
+        ? ` · ${taskPhaseLabel(t)}${t.phaseDetail ? `: ${t.phaseDetail}` : ''}`
+        : '';
+      return `<div class="task-tab${act}${run}${pin}${phase}" data-id="${t.id}" draggable="true" title="${esc(t.title)}${esc(phaseTip)} · 双击重命名 · 拖拽排序">
         <button type="button" class="task-pin" data-pin="${t.id}" title="${t.pinned ? '取消固定' : '固定'}">${t.pinned ? '📌' : '📍'}</button>
         <span class="task-dot"></span>
         <span class="task-name" data-rename="${t.id}">${esc(t.title)}</span>
+        ${t.running ? `<span class="task-phase">${esc(taskPhaseLabel(t))}</span>` : ''}
         <button type="button" class="task-x" data-close="${t.id}" title="关闭任务">×</button>
       </div>`;
     })
@@ -7884,30 +7904,70 @@ function isActiveProjectId(projectId) {
   return Boolean(P() && P().id === projectId);
 }
 
+function setTaskPhase(task, phase, detail) {
+  if (!task) return;
+  const next = phase || 'running';
+  const det = detail || '';
+  if (task.phase === next && task.phaseDetail === det) return;
+  task.phase = next;
+  task.phaseDetail = det;
+  // Coalesce tab re-renders during token flood
+  if (task._phaseTabRaf) return;
+  task._phaseTabRaf = requestAnimationFrame(() => {
+    task._phaseTabRaf = null;
+    renderTaskTabs();
+  });
+}
+
+function formatUsageBrief(usage) {
+  if (!usage || typeof usage !== 'object') return '';
+  const inT = usage.input_tokens ?? usage.inputTokens;
+  const outT = usage.output_tokens ?? usage.outputTokens;
+  const total = usage.total_tokens ?? usage.totalTokens;
+  const bits = [];
+  if (inT != null) bits.push(`in ${inT}`);
+  if (outT != null) bits.push(`out ${outT}`);
+  if (total != null && !bits.length) bits.push(`Σ ${total}`);
+  else if (total != null) bits.push(`Σ ${total}`);
+  return bits.join(' · ');
+}
+
 function bindAgentEvents() {
   state.unsubs.forEach((u) => u());
   state.unsubs = [
+    window.grok.on('agent:phase', (d) => {
+      const task = taskFromEvent(d);
+      if (!task?.running) return;
+      setTaskPhase(task, d.phase || d.status, d.detail || '');
+      if (isActiveTask(task)) {
+        setAgentStatus(d.detail || d.phase || 'running', true);
+        setLivePhase(d.detail || d.phase || 'running', `${task.title} · ${d.phase || 'run'}`);
+      }
+    }),
     window.grok.on('agent:status', (d) => {
       const task = taskFromEvent(d);
       if (!task?.running) return;
+      // Prefer agent:phase when present; keep status as fallback
+      if (d.status && !d.phase) setTaskPhase(task, d.status, d.detail || '');
       if (isActiveTask(task)) {
         setAgentStatus(d.detail || d.status, true);
         setLivePhase(d.detail || d.status || 'running', `${task.title} · CLI`);
       }
-      renderTaskTabs();
     }),
     window.grok.on('agent:text', (d) => {
       const task = taskFromEvent(d);
       if (!task) return;
-      task.streamBuf = d.text ?? task.streamBuf;
-      if (d.delta && !d.text) task.streamBuf += d.delta;
+      if (typeof d.text === 'string') task.streamBuf = d.text;
+      else if (d.delta) task.streamBuf = (task.streamBuf || '') + d.delta;
+      if (task.running) setTaskPhase(task, 'streaming', 'speaking…');
       scheduleStreamPaint(task);
     }),
     window.grok.on('agent:thought', (d) => {
       const task = taskFromEvent(d);
       if (!task) return;
-      task.thoughtBuf = d.text ?? task.thoughtBuf;
-      if (d.delta && !d.text) task.thoughtBuf += d.delta;
+      if (typeof d.text === 'string') task.thoughtBuf = d.text;
+      else if (d.delta) task.thoughtBuf = (task.thoughtBuf || '') + d.delta;
+      if (task.running) setTaskPhase(task, 'thinking', 'thinking…');
       if (task.thoughtRaf) return;
       task.thoughtRaf = requestAnimationFrame(() => {
         task.thoughtRaf = null;
@@ -7920,9 +7980,9 @@ function bindAgentEvents() {
     window.grok.on('agent:tool_start', (d) => {
       const task = taskFromEvent(d);
       if (!task) return;
-      const proj = window.ProjectStore.get(task.projectId);
       appendToolStart(d, task);
       task.toolCount += 1;
+      setTaskPhase(task, 'tool', `${d.name || 'tool'}…`);
       const fpath = window.DiffUtil.extractPathFromTool(d.name, d.args || {});
       const write = window.DiffUtil.isWriteTool(d.name);
       if (write) task.writeCount = (task.writeCount || 0) + 1;
@@ -7973,9 +8033,19 @@ function bindAgentEvents() {
       }
       if (isActiveTask(task)) scheduleTreeRefresh();
     }),
+    window.grok.on('agent:usage', (d) => {
+      const task = taskFromEvent(d);
+      if (!task) return;
+      task.lastUsage = d.usage || null;
+      if (isActiveTask(task) && d.usage) {
+        const brief = formatUsageBrief(d.usage);
+        if (brief) setLivePhase('usage', brief);
+      }
+    }),
     window.grok.on('agent:error', (d) => {
       const task = taskFromEvent(d);
       if (task) {
+        setTaskPhase(task, 'error', d.error || 'error');
         withTask(task, () => {
           if (task.liveAssistantEl || task.streamBuf) {
             const prev = task.streamBuf ? task.streamBuf + '\n\n' : '';
@@ -8004,14 +8074,18 @@ function bindAgentEvents() {
         task.streamBuf = d.text;
       }
       if (d?.sessionId) task.sessionId = d.sessionId;
+      if (d?.usage) task.lastUsage = d.usage;
       flushStreamPaint(task);
       finalizeLiveMessages(task);
       task.running = false;
+      task.phase = 'done';
+      task.phaseDetail = '';
       const fileCount = proj?.changes?.size || 0;
+      const usageBit = formatUsageBrief(d?.usage || task.lastUsage);
       pushLiveEvent({
         kind: 'done',
         title: `${task.title} 完成`,
-        sub: `${task.toolCount} tools · ${fileCount} files`,
+        sub: `${task.toolCount} tools · ${fileCount} files${usageBit ? ` · ${usageBit}` : ''}`,
         projectId: task.projectId,
       });
       renderTaskTabs();
@@ -8023,12 +8097,11 @@ function bindAgentEvents() {
         setRunningUi(false);
         setLivePhase(
           nRun > 0 ? `${nRun} 个任务运行中` : '完成',
-          fileCount ? `捕获 ${fileCount} 个文件变更` : '无文件变更'
+          usageBit || (fileCount ? `捕获 ${fileCount} 个文件变更` : '无文件变更')
         );
         if (nRun === 0) setAgentStatus('待命', false);
         scheduleTreeRefresh(true);
       }
-      // background / unfocused flight complete signal
       notifyFlightComplete(task, {
         files: fileCount,
         tools: task.toolCount || 0,
@@ -8077,6 +8150,10 @@ function flushStreamPaint(task) {
   if (task.thoughtRaf) {
     cancelAnimationFrame(task.thoughtRaf);
     task.thoughtRaf = null;
+  }
+  if (task._phaseTabRaf) {
+    cancelAnimationFrame(task._phaseTabRaf);
+    task._phaseTabRaf = null;
   }
   if (task.streamBuf) upsertAssistant(task.streamBuf, true, task);
   if (task.thoughtBuf) upsertThought(task.thoughtBuf, false, task);
@@ -8196,9 +8273,12 @@ async function runTaskPrompt(task, text, opts = {}) {
 
   task.lastPrompt = text;
   task.running = true;
+  task.phase = 'boot';
+  task.phaseDetail = 'booting CLI…';
   task.turnId = `turn-${Date.now()}`;
   task.streamBuf = '';
   task.thoughtBuf = '';
+  task.lastUsage = null;
   task.liveAssistantEl = null;
   task.liveThoughtEl = null;
   task.toolCount = 0;
@@ -8247,6 +8327,7 @@ async function runTaskPrompt(task, text, opts = {}) {
 
     const finalText = result?.text || task.streamBuf || '';
     if (result?.sessionId) task.sessionId = result.sessionId;
+    if (result?.usage) task.lastUsage = result.usage;
     if (result?.context) {
       task.context = result.context;
       task.contextTiers = result.contextTiers || result.context.tiers;
@@ -8306,9 +8387,12 @@ async function runTaskPrompt(task, text, opts = {}) {
   } finally {
     clearInterval(liveTick);
     task.running = false;
+    if (task.phase !== 'error') task.phase = 'idle';
+    task.phaseDetail = '';
     task.liveAssistantEl = null;
     task.liveThoughtEl = null;
     stopElapsed(task);
+    renderTaskTabs();
     schedulePersist(true);
     if (isActiveTask(task)) {
       setRunningUi(false);
@@ -8881,10 +8965,10 @@ function ensureLiveAssistant(task) {
     box.querySelector('.msg.assistant[data-live="1"]');
   if (!el) {
     el = document.createElement('div');
-    el.className = 'msg assistant';
+    el.className = 'msg assistant is-streaming';
     el.dataset.live = '1';
     if (task.turnId) el.dataset.turn = task.turnId;
-    el.innerHTML = `<div class="role">Grok</div><div class="body stream-body"></div>`;
+    el.innerHTML = `<div class="role">Grok · stream</div><div class="body stream-body is-streaming"></div>`;
     box.appendChild(el);
   }
   task.liveAssistantEl = el;
@@ -8896,16 +8980,27 @@ function upsertAssistant(text, streaming, task) {
   if (!task) return null;
   const el = ensureLiveAssistant(task);
   const body = el.querySelector('.body');
+  const role = el.querySelector('.role');
   if (streaming) {
     el.dataset.live = '1';
+    el.classList.add('is-streaming');
     body.classList.remove('md');
-    body.classList.add('stream-body');
-    body.textContent = text || '';
+    body.classList.add('stream-body', 'is-streaming');
+    const next = text || '';
+    // Coalesced full replace (rAF); still cheap vs markdown reparse
+    if (body.textContent !== next) body.textContent = next;
+    if (role) {
+      const phase = task.phase === 'tool' ? 'tool' : task.phase === 'thinking' ? 'think' : 'stream';
+      role.textContent =
+        phase === 'tool' ? 'Grok · tool' : phase === 'think' ? 'Grok · think' : 'Grok · stream';
+    }
   } else {
+    el.classList.remove('is-streaming');
     body.classList.add('md');
-    body.classList.remove('stream-body');
+    body.classList.remove('stream-body', 'is-streaming');
     body.innerHTML = renderMarkdown(text || '');
     delete el.dataset.live;
+    if (role) role.textContent = 'Grok';
   }
   scrollMessages(false, task);
   return el;
@@ -8920,11 +9015,25 @@ function finalizeLiveMessages(task) {
     task.pane.querySelector('.msg.assistant[data-live="1"]');
   if (el) {
     const body = el.querySelector('.body');
+    const role = el.querySelector('.role');
     const text = task.streamBuf || body.textContent || '';
+    el.classList.remove('is-streaming');
     body.classList.add('md');
-    body.classList.remove('stream-body');
+    body.classList.remove('stream-body', 'is-streaming');
     body.innerHTML = renderMarkdown(text);
     delete el.dataset.live;
+    if (role) role.textContent = 'Grok';
+    // Optional usage footer on this turn
+    const brief = formatUsageBrief(task.lastUsage);
+    if (brief) {
+      let foot = el.querySelector('.stream-usage');
+      if (!foot) {
+        foot = document.createElement('div');
+        foot.className = 'stream-usage';
+        el.appendChild(foot);
+      }
+      foot.textContent = brief;
+    }
   }
   // 对话很长时压缩历史 DOM（保留 task.messages 全量）
   if (window.GrokChatVirtual && (task.messages || []).length > window.GrokChatVirtual.TAIL + 15) {

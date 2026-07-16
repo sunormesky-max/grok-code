@@ -104,8 +104,12 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
 
     const emitT = (event, payload) => emit(event, { ...payload, taskId });
 
+    emitT('agent:phase', {
+      phase: 'boot',
+      detail: sessionId ? 'resuming…' : 'booting CLI…',
+    });
     emitT('agent:status', {
-      status: 'running',
+      status: 'boot',
       detail: sessionId ? 'resuming…' : 'booting CLI…',
     });
     emitT('agent:cli', {
@@ -128,6 +132,12 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
       let settled = false;
       let stdoutBuf = '';
       let stderrBuf = '';
+      let lastPhase = '';
+      let lastStatusKey = '';
+      let toolDepth = 0;
+      let usage = null;
+      let stopReason = null;
+      let numTurns = 0;
 
       const cleanup = () => {
         try {
@@ -137,6 +147,15 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
         }
         children.delete(taskId);
         if (signal) signal.removeEventListener?.('abort', onAbort);
+      };
+
+      /** Phase machine for UI: boot → thinking → tool → streaming → done */
+      const setPhase = (phase, detail) => {
+        if (phase === lastPhase && detail === lastStatusKey) return;
+        lastPhase = phase;
+        lastStatusKey = detail || phase;
+        emitT('agent:phase', { phase, detail: detail || phase });
+        emitT('agent:status', { status: phase, detail: detail || phase });
       };
 
       const finish = (result) => {
@@ -152,10 +171,7 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
         cleanup();
         const msg = err.message || String(err);
         if (isResumeError(msg)) {
-          emitT('agent:status', {
-            status: 'retry',
-            detail: '会话失效，无 resume 重试…',
-          });
+          setPhase('retry', '会话失效，无 resume 重试…');
           run({
             message,
             sessionId: null,
@@ -180,7 +196,8 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
       const onAbort = () => {
         stop(taskId);
         emitT('agent:error', { error: '已由用户停止' });
-        finish({ text: finalText, stopped: true, sessionId: newSessionId, taskId });
+        setPhase('stopped', '已停止');
+        finish({ text: finalText, stopped: true, sessionId: newSessionId, taskId, usage });
       };
 
       if (signal) {
@@ -212,68 +229,140 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
       children.set(taskId, child);
       try {
         child.stdout.setEncoding('utf8');
-        if (typeof child.stdout._readableState === 'object') {
-          child.stdout._readableState.highWaterMark = 1;
-        }
       } catch {
         /* ignore */
       }
 
+      const pickChunk = (ev) => {
+        if (ev == null) return '';
+        if (typeof ev.data === 'string') return ev.data;
+        if (typeof ev.delta === 'string') return ev.delta;
+        if (typeof ev.text === 'string' && !ev.accumulated) return ev.text;
+        if (typeof ev.content === 'string') return ev.content;
+        if (Array.isArray(ev.content)) {
+          return ev.content
+            .map((c) => (typeof c === 'string' ? c : c?.text || c?.data || ''))
+            .join('');
+        }
+        return '';
+      };
+
       const handleEvent = (ev) => {
         if (!ev || typeof ev !== 'object') return;
-        const type = ev.type;
+        const type = String(ev.type || '').toLowerCase();
 
-        if (type === 'text' || type === 'message' || type === 'assistant' || type === 'content') {
-          const chunk =
-            ev.data ??
-            ev.delta ??
-            (typeof ev.text === 'string' && !ev.accumulated ? ev.text : '') ??
-            (typeof ev.content === 'string' ? ev.content : '') ??
-            '';
-          if (typeof ev.text === 'string' && ev.text.length > finalText.length && !ev.data && !ev.delta) {
+        // Session id may appear mid-stream
+        if (ev.sessionId && typeof ev.sessionId === 'string') {
+          newSessionId = ev.sessionId;
+        }
+
+        if (
+          type === 'text' ||
+          type === 'message' ||
+          type === 'assistant' ||
+          type === 'content' ||
+          type === 'response_text' ||
+          type === 'output_text'
+        ) {
+          const chunk = pickChunk(ev);
+          // Accumulated full text from CLI
+          if (
+            typeof ev.text === 'string' &&
+            ev.text.length > finalText.length &&
+            !ev.data &&
+            !ev.delta &&
+            (ev.accumulated || ev.full)
+          ) {
             finalText = ev.text;
+          } else if (
+            typeof ev.text === 'string' &&
+            ev.text.length > finalText.length &&
+            !ev.data &&
+            !ev.delta
+          ) {
+            // Some builds send full text each time
+            if (ev.text.startsWith(finalText)) finalText = ev.text;
+            else if (chunk) finalText += chunk;
+            else finalText = ev.text;
           } else if (chunk) {
             finalText += chunk;
           }
-          emitT('agent:text', { text: finalText, delta: chunk || '', partial: true });
-          emitT('agent:status', { status: 'streaming', detail: 'speaking…' });
-        } else if (type === 'thought' || type === 'reasoning' || type === 'thinking') {
-          const chunk = ev.data ?? ev.delta ?? ev.text ?? '';
+          emitT('agent:text', {
+            text: finalText,
+            delta: chunk || '',
+            partial: true,
+            phase: 'streaming',
+          });
+          if (toolDepth <= 0) setPhase('streaming', 'speaking…');
+        } else if (
+          type === 'thought' ||
+          type === 'reasoning' ||
+          type === 'thinking' ||
+          type === 'reasoning_text'
+        ) {
+          const chunk = pickChunk(ev);
           if (chunk) thoughtText += chunk;
-          emitT('agent:thought', { text: thoughtText, delta: chunk });
-          emitT('agent:status', { status: 'thinking', detail: 'thinking…' });
-        } else if (type === 'tool' || type === 'tool_call' || type === 'tool_start') {
+          else if (typeof ev.text === 'string' && ev.text.length > thoughtText.length) {
+            thoughtText = ev.text;
+          }
+          emitT('agent:thought', {
+            text: thoughtText,
+            delta: chunk || '',
+            phase: 'thinking',
+          });
+          if (toolDepth <= 0) setPhase('thinking', 'thinking…');
+        } else if (
+          type === 'tool' ||
+          type === 'tool_call' ||
+          type === 'tool_start' ||
+          type === 'tool_use' ||
+          type === 'function_call'
+        ) {
+          toolDepth += 1;
+          const name = ev.name || ev.tool || ev.function?.name || 'tool';
           emitT('agent:tool_start', {
-            id: ev.id || ev.tool_call_id || String(Date.now()),
-            name: ev.name || ev.tool || 'tool',
-            args: ev.args || ev.input || {},
+            id: ev.id || ev.tool_call_id || ev.call_id || `tool-${Date.now()}`,
+            name,
+            args: ev.args || ev.input || ev.function?.arguments || {},
           });
-          emitT('agent:status', {
-            status: 'tool',
-            detail: `${ev.name || ev.tool || 'tool'}…`,
-          });
-        } else if (type === 'tool_result' || type === 'tool_end') {
+          setPhase('tool', `${name}…`);
+        } else if (
+          type === 'tool_result' ||
+          type === 'tool_end' ||
+          type === 'tool_result_end' ||
+          type === 'function_result'
+        ) {
+          toolDepth = Math.max(0, toolDepth - 1);
           emitT('agent:tool_end', {
-            id: ev.id || ev.tool_call_id || '',
+            id: ev.id || ev.tool_call_id || ev.call_id || '',
             name: ev.name || ev.tool || 'tool',
             args: ev.args || {},
             result:
               typeof ev.result === 'string'
                 ? ev.result
                 : JSON.stringify(ev.result ?? ev.output ?? ''),
-            ok: ev.ok !== false,
+            ok: ev.ok !== false && ev.is_error !== true,
           });
+          if (toolDepth <= 0 && finalText) setPhase('streaming', 'speaking…');
+          else if (toolDepth <= 0) setPhase('running', 'working…');
         } else if (type === 'end' || type === 'result' || type === 'done') {
           if (ev.sessionId) newSessionId = ev.sessionId;
+          if (ev.usage) usage = ev.usage;
+          if (ev.stopReason) stopReason = ev.stopReason;
+          if (typeof ev.num_turns === 'number') numTurns = ev.num_turns;
+          if (typeof ev.numTurns === 'number') numTurns = ev.numTurns;
           if (typeof ev.text === 'string' && ev.text.length > finalText.length) {
             finalText = ev.text;
             emitT('agent:text', { text: finalText, delta: '', partial: false });
           }
-          emitT('agent:status', { status: 'done', detail: 'done' });
+          if (usage) emitT('agent:usage', { usage, stopReason, numTurns, sessionId: newSessionId });
+          setPhase('done', 'done');
         } else if (type === 'error') {
           emitT('agent:error', { error: ev.message || ev.error || 'Grok CLI error' });
         } else if (type === 'max_turns_reached') {
-          emitT('agent:status', { status: 'max_turns', detail: 'max turns' });
+          setPhase('max_turns', 'max turns');
+        } else if (type === 'status' && ev.status) {
+          setPhase(String(ev.status), ev.detail || ev.message || String(ev.status));
         }
       };
 
@@ -283,8 +372,10 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
         try {
           handleEvent(JSON.parse(trimmed));
         } catch {
-          finalText += trimmed;
+          // Non-JSON fallback: treat as plain text stream
+          finalText += (finalText && !finalText.endsWith('\n') ? '\n' : '') + trimmed;
           emitT('agent:text', { text: finalText, delta: trimmed, partial: true });
+          setPhase('streaming', 'speaking…');
         }
       };
 
@@ -292,7 +383,7 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
         stdoutBuf += typeof chunk === 'string' ? chunk : chunk.toString('utf8');
         let idx;
         while ((idx = stdoutBuf.search(/\r?\n/)) >= 0) {
-          const nl = stdoutBuf[idx] === '\r' ? 2 : 1;
+          const nl = stdoutBuf[idx] === '\r' && stdoutBuf[idx + 1] === '\n' ? 2 : 1;
           const line = stdoutBuf.slice(0, idx);
           stdoutBuf = stdoutBuf.slice(idx + nl);
           consumeLine(line);
@@ -314,7 +405,7 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
         if (settled) return;
 
         if (signal?.aborted) {
-          finish({ text: finalText, stopped: true, sessionId: newSessionId, taskId });
+          finish({ text: finalText, stopped: true, sessionId: newSessionId, taskId, usage });
           return;
         }
 
@@ -337,7 +428,6 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
           }
 
           if (!finalText) {
-            // fail() 内处理 resume 重试；仅非 resume 时 emit error
             if (!isResumeError(errMsg)) {
               emitT('agent:error', { error: errMsg });
             }
@@ -349,6 +439,10 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
             sessionId: newSessionId,
             code,
             warning: errMsg,
+            usage,
+            stopReason,
+            numTurns,
+            thought: thoughtText || undefined,
           });
           finish({
             text: finalText,
@@ -357,6 +451,9 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
             code,
             warning: errMsg,
             taskId,
+            usage,
+            stopReason,
+            numTurns,
           });
           return;
         }
@@ -368,6 +465,9 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
           text: finalText,
           sessionId: newSessionId,
           thought: thoughtText || undefined,
+          usage,
+          stopReason,
+          numTurns,
         });
         finish({
           text: finalText,
@@ -375,6 +475,9 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
           sessionId: newSessionId,
           thought: thoughtText || undefined,
           taskId,
+          usage,
+          stopReason,
+          numTurns,
         });
       });
     });

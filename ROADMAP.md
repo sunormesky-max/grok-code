@@ -56,6 +56,13 @@ Living plan for the GrokCode open-source ecosystem. Order may change based on co
 - [x] Storyboard mini-diff → before reconstruct (v1.7.0)
 - [x] Plugin marketplace TUI filter/action parity (v1.7.1)
 - [x] Default shell converge · Work/Review primary (v1.8.0)
+- [x] Core task flow + streaming pipeline (v1.9.0)
+
+## Now (core)
+
+- [x] Task phase machine + stream paint (v1.9.0)
+- [ ] Turn timeline / interrupt-resume polish
+- [ ] Multi-task stream fairness under heavy tool load
 
 ## Now (UI / experience)
 
