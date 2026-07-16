@@ -11,6 +11,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 - See [ROADMAP.md](ROADMAP.md)
 
+## [1.10.1] — 2026-07-16
+
+### Fix — stop/kill no longer surfaces fake `4294967295`
+
+- **Root cause**: Windows `taskkill` / forced process end reports exit `-1` (`4294967295`). Old agent treated it as a hard CLI failure.
+- **intentionalStops**: user stop, replace-run, and cleanup mark the task so close resolves as **stopped** (keeps partial text), not as Error.
+- Unexpected kill still maps to a readable Chinese message and **auto-retries once without resume**.
+- `scripts/start-dev.ps1` — launch **repo** build so fixes apply (installed `Program Files\GrokCode` lags git).
+
 ## [1.10.0] — 2026-07-16
 
 ### Goal mode + architecture / perf / UI converge

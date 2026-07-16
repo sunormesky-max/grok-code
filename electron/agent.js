@@ -11,6 +11,12 @@ const { resolveGrokBinary } = require('./grok-cli');
 function createAgent({ getConfig, workspaceRoot, emit }) {
   /** @type {Map<string, import('child_process').ChildProcess>} */
   const children = new Map();
+  /**
+   * taskIds we intentionally stopped (user stop / replace / external cleanup).
+   * Without this, Windows taskkill surfaces exit 4294967295 and UI shows a fake hard error.
+   * @type {Set<string>}
+   */
+  const intentionalStops = new Set();
 
   function killProc(child) {
     if (!child || child.killed) return;
@@ -30,6 +36,7 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
 
   function stop(taskId) {
     if (taskId) {
+      intentionalStops.add(String(taskId));
       const child = children.get(taskId);
       if (child) {
         killProc(child);
@@ -38,6 +45,7 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
       return;
     }
     for (const [id, child] of children) {
+      intentionalStops.add(String(id));
       killProc(child);
       children.delete(id);
     }
@@ -51,6 +59,13 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
     return [...children.keys()];
   }
 
+  function takeIntentionalStop(taskId) {
+    const key = String(taskId);
+    if (!intentionalStops.has(key)) return false;
+    intentionalStops.delete(key);
+    return true;
+  }
+
   async function run({ message, sessionId = null, signal, taskId = 'default', _resumeRetried = false }) {
     const cfg = getConfig();
     const cwd = workspaceRoot;
@@ -58,10 +73,12 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
       throw new Error('请先打开一个项目工作区');
     }
 
-    // 同一 task 不允许并发叠跑；新请求先停旧的
+    // 同一 task 不允许并发叠跑；新请求先停旧的（标记 intentional，避免 4294967295 假错误）
     if (children.has(taskId)) {
       stop(taskId);
     }
+    // New run supersedes any stale intentional-stop flag for this taskId
+    intentionalStops.delete(String(taskId));
 
     const grokBin = resolveGrokBinary(cfg.grokPath);
     if (!grokBin) {
@@ -184,6 +201,7 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
       const finish = (result) => {
         if (settled) return;
         settled = true;
+        intentionalStops.delete(String(taskId));
         cleanup();
         resolve(result);
       };
@@ -191,6 +209,7 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
       const fail = (err) => {
         if (settled) return;
         settled = true;
+        intentionalStops.delete(String(taskId));
         cleanup();
         const msg = err.message || String(err);
         if (isResumeError(msg)) {
@@ -444,8 +463,32 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
         stdoutBuf = '';
         if (settled) return;
 
-        if (signal?.aborted) {
-          finish({ text: finalText, stopped: true, sessionId: newSessionId, taskId, usage });
+        // Always drop map entry for this pid/task when process exits
+        if (children.get(taskId) === child) {
+          children.delete(taskId);
+        }
+
+        const intentional = takeIntentionalStop(taskId) || Boolean(signal?.aborted);
+        if (intentional) {
+          if (finalText) {
+            emitT('agent:text', { text: finalText, delta: '', partial: false });
+          }
+          emitT('agent:done', {
+            text: finalText,
+            sessionId: newSessionId,
+            stopped: true,
+            thought: thoughtText || undefined,
+            usage,
+          });
+          setPhase('stopped', '已停止');
+          finish({
+            text: finalText,
+            stopped: true,
+            sessionId: newSessionId,
+            taskId,
+            usage,
+            thought: thoughtText || undefined,
+          });
           return;
         }
 
@@ -469,11 +512,11 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
           }
 
           // Forced kill / crash with no text: drop broken resume and retry once
+          // (covers external taskkill AND stale --resume after interrupt)
           if (
             !finalText &&
-            sessionId &&
             !_resumeRetried &&
-            (isForcedKillExit(code) || isResumeError(errMsg))
+            (isForcedKillExit(code) || (sessionId && isResumeError(errMsg)))
           ) {
             setPhase('retry', 'CLI 中断或会话异常，无 resume 重试…');
             run({
@@ -501,7 +544,7 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
             fail(new Error(errMsg));
             return;
           }
-          // Partial output after kill: treat as interrupted stop (keep text)
+          // Partial output after unexpected kill: treat as interrupted stop (keep text)
           if (isForcedKillExit(code)) {
             emitT('agent:done', {
               text: finalText,
