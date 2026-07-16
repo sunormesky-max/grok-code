@@ -1082,6 +1082,31 @@ ipcMain.handle('profile:import', async (e) => {
 ipcMain.handle('profile:list', () => profiles.listProfiles());
 ipcMain.handle('profile:dir', () => profiles.profilesDir());
 
+// ── Session share export ────────────────────────────────
+ipcMain.handle('session:exportShare', async (e, payload = {}) => {
+  const win = BrowserWindow.fromWebContents(e.sender);
+  const markdown = String(payload.markdown || '');
+  const json = String(payload.json || '');
+  const defaultName = String(payload.defaultName || 'grok-session.md').replace(/[<>:"|?*]/g, '-');
+  const save = await dialog.showSaveDialog(win, {
+    title: '导出 GrokCode 会话',
+    defaultPath: path.join(osHomedir(), defaultName),
+    filters: [
+      { name: 'Markdown', extensions: ['md'] },
+      { name: 'JSON', extensions: ['json'] },
+      { name: 'All', extensions: ['*'] },
+    ],
+  });
+  if (save.canceled || !save.filePath) return { ok: false, canceled: true };
+  try {
+    const out = save.filePath.toLowerCase().endsWith('.json') ? json || markdown : markdown || json;
+    fs.writeFileSync(save.filePath, out, 'utf8');
+    return { ok: true, file: save.filePath };
+  } catch (err) {
+    return { ok: false, error: err.message || String(err) };
+  }
+});
+
 // ── Telemetry ───────────────────────────────────────────
 ipcMain.handle('telemetry:report', (_e, payload = {}) => {
   return reportIfEnabled(payload.message || payload.error || 'renderer-error', {

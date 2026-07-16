@@ -100,6 +100,9 @@ contextBridge.exposeInMainWorld('grok', {
   profileList: () => ipcRenderer.invoke('profile:list'),
   profileDir: () => ipcRenderer.invoke('profile:dir'),
 
+  // Session share card
+  sessionExportShare: (payload) => ipcRenderer.invoke('session:exportShare', payload || {}),
+
   // Telemetry
   telemetryReport: (payload) => ipcRenderer.invoke('telemetry:report', payload || {}),
   telemetryList: () => ipcRenderer.invoke('telemetry:list'),

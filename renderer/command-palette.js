@@ -319,6 +319,13 @@
         keywords: 'mode cycle 切换 模式 craft plan ask',
         group: 'actions',
         run: run(() => global.cycleWorkMode?.()),
+      },
+      {
+        id: 'session.share',
+        title: t('cmd.session.share', '导出会话分享卡'),
+        keywords: 'export session share markdown 导出 会话 分享',
+        group: 'actions',
+        run: run(() => global.openSessionShareCard?.()),
       }
     );
   }

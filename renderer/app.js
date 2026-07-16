@@ -955,6 +955,7 @@ function bindUi() {
   $('#btnSend').onclick = sendPrompt;
   $('#btnStop').onclick = stopAgent;
   $('#btnNewChat').onclick = () => addTask();
+  $('#btnShareSession')?.addEventListener('click', () => openSessionShareCard());
   $('#btnAddTask')?.addEventListener('click', () => addTask());
   $('#btnSave').onclick = saveCurrentFile;
   $('#btnClearTerm').onclick = () => {
@@ -2629,11 +2630,19 @@ async function runTaskPrompt(task, text, opts = {}) {
       upsertAssistant('（无文本输出 — 可能只做了工具操作，请看资源管理器 / Diff）', true, task);
     }
     finalizeLiveMessages(task);
-    // Plan 模式：非「执行」类消息后，给出一键执行
+    // Plan：模式标志 或 回复像可执行方案 → 一键执行条
     const wasExec =
       /^(执行|开干|按方案|implement|execute|do it|lgtm|开搞)/i.test(String(text || '').trim());
-    if (modeUsed === 'plan' && !wasExec && !result?.stopped && finalText) {
-      appendPlanExecuteBar(task);
+    if (
+      !wasExec &&
+      !result?.stopped &&
+      finalText &&
+      modeUsed !== 'ask' &&
+      (modeUsed === 'plan' || looksLikePlan(finalText))
+    ) {
+      appendPlanExecuteBar(task, {
+        autoDetected: modeUsed !== 'plan' && looksLikePlan(finalText),
+      });
     }
     // Craft mission summary
     if (modeUsed === 'craft' && !result?.stopped) {
@@ -2733,14 +2742,17 @@ function appendCraftMissionBar(task, stats = {}) {
   scrollMessages(true, task);
 }
 
-/** Plan 模式：确认后一键执行方案 */
-function appendPlanExecuteBar(task) {
+/** Plan / 自动识别方案：确认后一键执行 */
+function appendPlanExecuteBar(task, opts = {}) {
   if (!task?.pane) return;
   task.pane.querySelectorAll('.plan-exec-bar').forEach((el) => el.remove());
   const bar = document.createElement('div');
-  bar.className = 'plan-exec-bar';
+  bar.className = 'plan-exec-bar' + (opts.autoDetected ? ' plan-exec-auto' : '');
+  const hint = opts.autoDetected
+    ? '检测到方案结构 · 确认后切换 Craft 并执行'
+    : '方案已就绪 · 确认后切换 Craft 并执行';
   bar.innerHTML = `
-    <span class="plan-exec-hint">方案已就绪 · 确认后切换 Craft 并执行</span>
+    <span class="plan-exec-hint">${hint}</span>
     <div class="retry-actions">
       <button type="button" class="btn small primary" data-act="exec">▶ 执行方案</button>
       <button type="button" class="btn small ghost" data-act="dismiss">稍后</button>
@@ -2756,11 +2768,137 @@ function appendPlanExecuteBar(task) {
     }
     runTaskPrompt(task, '执行方案：按你上一条给出的步骤动手实现，保持聚焦，改完做必要检查。', {
       fromComposer: false,
+      forceCraft: true,
     });
   };
   bar.querySelector('[data-act="dismiss"]').onclick = () => bar.remove();
   task.pane.appendChild(bar);
   scrollMessages(true, task);
+}
+
+/** Heuristic: assistant reply looks like an actionable plan */
+function looksLikePlan(text) {
+  const t = String(text || '');
+  if (t.length < 60) return false;
+  let score = 0;
+  if (/(目标|步骤|涉及文件|风险|实施计划|执行步骤|plan|steps?|risks?|files?\s*(to\s*)?(change|touch)?)/i.test(t)) {
+    score += 2;
+  }
+  const nums = t.match(/(^|\n)\s*(\d+[\.\)、]|[一二三四五六七八九十]+[、\.\)])\s+\S+/g);
+  if (nums && nums.length >= 2) score += 3;
+  else if (nums && nums.length === 1) score += 1;
+  const bullets = t.match(/(^|\n)\s*[-*•]\s+\S+/g);
+  if (bullets && bullets.length >= 3) score += 2;
+  if (/(接下来|然后|首先|最后|TODO|实施|改动)/i.test(t)) score += 1;
+  if (/`[^`]+\.(js|ts|tsx|py|go|rs|java|css|html|md)`/i.test(t) || /[\w./\\-]+\.(js|ts|tsx|py)\b/.test(t)) {
+    score += 1;
+  }
+  // long pure code dump is not a plan
+  const codeBlocks = (t.match(/```/g) || []).length;
+  if (codeBlocks >= 4 && score < 4) return false;
+  return score >= 4;
+}
+
+/** Skill preview modal — works for user/bundled skills outside workspace */
+async function openSkillPreview(skillFile, displayName) {
+  if (!skillFile) {
+    toast('无 skill 路径', 'err');
+    return;
+  }
+  let data;
+  try {
+    data = await window.grok.skillsRead({ path: skillFile });
+  } catch (e) {
+    toast(e.message || '无法读取 SKILL.md', 'err');
+    return;
+  }
+  const name = displayName || data?.meta?.name || 'Skill';
+  const desc = data?.meta?.description || '';
+  const body = data?.body || data?.raw || '';
+  const raw = data?.raw || body;
+  const file = data?.path || skillFile;
+
+  let root = document.getElementById('skillPreviewModal');
+  if (!root) {
+    root = document.createElement('div');
+    root.id = 'skillPreviewModal';
+    root.className = 'gc-modal hidden';
+    root.setAttribute('role', 'dialog');
+    root.setAttribute('aria-modal', 'true');
+    document.body.appendChild(root);
+  }
+  root.classList.remove('hidden');
+  root.innerHTML = `
+    <div class="gc-modal-backdrop" data-close="1"></div>
+    <div class="gc-modal-card glass skill-preview-card">
+      <div class="gc-modal-head">
+        <div>
+          <div class="skill-preview-kicker">SKILL · 只读预览</div>
+          <h2 id="skillPreviewTitle">${esc(name)}</h2>
+          ${desc ? `<p class="skill-preview-desc">${esc(desc)}</p>` : ''}
+        </div>
+        <button type="button" class="icon-btn" data-close="1" aria-label="close">✕</button>
+      </div>
+      <div class="skill-preview-path" title="${esc(file)}">${esc(file)}</div>
+      <pre class="skill-preview-body" id="skillPreviewBody"></pre>
+      <div class="gc-modal-actions">
+        <button type="button" class="btn small ghost" data-act="copy">复制</button>
+        <button type="button" class="btn small ghost" data-act="folder">打开目录</button>
+        <button type="button" class="btn small ghost" data-act="editor">工作区内打开</button>
+        <button type="button" class="btn small primary" data-close="1">关闭</button>
+      </div>
+    </div>`;
+  const pre = root.querySelector('#skillPreviewBody');
+  if (pre) pre.textContent = raw;
+
+  const close = () => root.classList.add('hidden');
+  root.querySelectorAll('[data-close]').forEach((el) => {
+    el.onclick = (e) => {
+      if (e.target === el || el.dataset.close) close();
+    };
+  });
+  root.querySelector('[data-act="copy"]').onclick = async () => {
+    try {
+      await navigator.clipboard.writeText(raw);
+      toast('已复制 SKILL.md', 'ok');
+    } catch {
+      toast('复制失败', 'err');
+    }
+  };
+  root.querySelector('[data-act="folder"]').onclick = async () => {
+    try {
+      const dir = file.replace(/[/\\]SKILL\.md$/i, '');
+      await window.grok.skillsOpenDir({ path: dir });
+    } catch (e) {
+      toast(e.message || '无法打开目录', 'err');
+    }
+  };
+  root.querySelector('[data-act="editor"]').onclick = async () => {
+    const proj = P();
+    if (!proj) {
+      toast('请先打开项目', 'err');
+      return;
+    }
+    const norm = (p) => String(p || '').replace(/\\/g, '/').toLowerCase();
+    const base = norm(proj.path);
+    const f = norm(file);
+    if (f.startsWith(base + '/') || f.startsWith(base + '\\') || f.startsWith(base)) {
+      const rel = file.slice(proj.path.length).replace(/^[/\\]+/, '');
+      close();
+      await openFile(rel);
+      if (typeof switchTab === 'function') switchTab('editor');
+    } else {
+      toast('Skill 不在当前工作区，请用只读预览', 'ok');
+    }
+  };
+  // Esc
+  const onKey = (e) => {
+    if (e.key === 'Escape') {
+      close();
+      window.removeEventListener('keydown', onKey);
+    }
+  };
+  window.addEventListener('keydown', onKey);
 }
 
 /** 根据用户句匹配 skills 元数据，提示可读 SKILL.md */
@@ -2804,31 +2942,17 @@ async function showSkillHints(userText, task) {
           ({ s }) =>
             `<button type="button" class="skill-hint-chip" data-file="${esc(
               s.skillFile || s.path || ''
-            )}" title="${esc(s.description || '')}">${esc(s.name)}</button>`
+            )}" data-name="${esc(s.name || '')}" title="${esc(s.description || '')}">${esc(s.name)}</button>`
         )
         .join('')}
     </div>
-    <span class="skill-hint-tip">Agent 已见索引；也可点开 SKILL.md</span>`;
+    <span class="skill-hint-tip">点击芯片可只读预览 SKILL.md（含工作区外）</span>`;
   bar.querySelectorAll('.skill-hint-chip').forEach((btn) => {
     btn.onclick = async () => {
       const file = btn.dataset.file;
       if (!file) return;
       try {
-        // open skill file in code if under project; else toast path
-        const proj = P();
-        if (proj && file.replace(/\\/g, '/').includes(proj.path.replace(/\\/g, '/'))) {
-          const rel = file.replace(/\\/g, '/').replace(proj.path.replace(/\\/g, '/') + '/', '');
-          await openFile(rel);
-        } else {
-          toast(`Skill: ${file}`, 'ok');
-          try {
-            await window.grok.skillsRead({ path: file });
-            // show brief in toast
-            toast(`已加载 ${btn.textContent} 元数据`, 'ok');
-          } catch {
-            /* ignore */
-          }
-        }
+        await openSkillPreview(file, btn.dataset.name || btn.textContent);
       } catch (e) {
         toast(e.message || '无法打开 skill', 'err');
       }
@@ -2837,6 +2961,141 @@ async function showSkillHints(userText, task) {
   task.pane.appendChild(bar);
   scrollMessages(true, task);
 }
+
+/** Build markdown + JSON share payload for current task */
+function buildSessionShare(task) {
+  task = task || T();
+  const proj = task ? window.ProjectStore.get(task.projectId) : P();
+  const msgs = Array.isArray(task?.messages) ? task.messages : [];
+  const exportedAt = new Date().toISOString();
+  const title = task?.title || 'session';
+  const mode = state.workMode || 'craft';
+  const header = [
+    `# GrokCode Session · ${title}`,
+    '',
+    `- **Project**: ${proj?.name || '—'}`,
+    `- **Path**: ${proj?.path || '—'}`,
+    `- **Mode**: ${mode}`,
+    `- **Exported**: ${exportedAt}`,
+    `- **Messages**: ${msgs.length}`,
+    '',
+    '---',
+    '',
+  ].join('\n');
+  const body = msgs
+    .map((m) => {
+      const role = m.role === 'user' ? 'User' : m.role === 'assistant' ? 'Assistant' : m.role || 'Note';
+      const content = String(m.content || '').trim();
+      return `### ${role}\n\n${content || '_(empty)_'}\n`;
+    })
+    .join('\n');
+  const markdown = header + body + '\n---\n\n_Shared from [GrokCode](https://github.com/sunormesky-max/grok-code)_\n';
+  const json = {
+    format: 'grokcode-session-v1',
+    title,
+    project: { name: proj?.name || null, path: proj?.path || null },
+    mode,
+    exportedAt,
+    messages: msgs.map((m) => ({
+      role: m.role,
+      content: m.content,
+      ts: m.ts || null,
+    })),
+  };
+  return { markdown, json, title, exportedAt };
+}
+
+async function openSessionShareCard(task) {
+  task = task || T();
+  if (!task) {
+    toast(localeIsEn() ? 'No active task' : '无活动任务', 'err');
+    return;
+  }
+  const pack = buildSessionShare(task);
+  if (!pack.json.messages.length) {
+    toast(localeIsEn() ? 'Empty session' : '会话为空', 'err');
+    return;
+  }
+  let root = document.getElementById('sessionShareModal');
+  if (!root) {
+    root = document.createElement('div');
+    root.id = 'sessionShareModal';
+    root.className = 'gc-modal hidden';
+    root.setAttribute('role', 'dialog');
+    root.setAttribute('aria-modal', 'true');
+    document.body.appendChild(root);
+  }
+  const en = localeIsEn();
+  root.classList.remove('hidden');
+  root.innerHTML = `
+    <div class="gc-modal-backdrop" data-close="1"></div>
+    <div class="gc-modal-card glass session-share-card">
+      <div class="gc-modal-head">
+        <div>
+          <div class="skill-preview-kicker">SESSION SHARE</div>
+          <h2>${esc(pack.title)}</h2>
+          <p class="skill-preview-desc">${pack.json.messages.length} msgs · ${esc(pack.exportedAt.slice(0, 19).replace('T', ' '))}</p>
+        </div>
+        <button type="button" class="icon-btn" data-close="1" aria-label="close">✕</button>
+      </div>
+      <pre class="skill-preview-body session-share-preview" id="sessionSharePreview"></pre>
+      <div class="gc-modal-actions">
+        <button type="button" class="btn small ghost" data-act="copy-md">${en ? 'Copy Markdown' : '复制 Markdown'}</button>
+        <button type="button" class="btn small ghost" data-act="copy-json">${en ? 'Copy JSON' : '复制 JSON'}</button>
+        <button type="button" class="btn small primary" data-act="save">${en ? 'Save…' : '保存…'}</button>
+        <button type="button" class="btn small ghost" data-close="1">${en ? 'Close' : '关闭'}</button>
+      </div>
+    </div>`;
+  const pre = root.querySelector('#sessionSharePreview');
+  if (pre) pre.textContent = pack.markdown.slice(0, 12000) + (pack.markdown.length > 12000 ? '\n…' : '');
+
+  const close = () => root.classList.add('hidden');
+  root.querySelectorAll('[data-close]').forEach((el) => {
+    el.onclick = () => close();
+  });
+  root.querySelector('[data-act="copy-md"]').onclick = async () => {
+    try {
+      await navigator.clipboard.writeText(pack.markdown);
+      toast(en ? 'Markdown copied' : '已复制 Markdown', 'ok');
+    } catch {
+      toast('复制失败', 'err');
+    }
+  };
+  root.querySelector('[data-act="copy-json"]').onclick = async () => {
+    try {
+      await navigator.clipboard.writeText(JSON.stringify(pack.json, null, 2));
+      toast(en ? 'JSON copied' : '已复制 JSON', 'ok');
+    } catch {
+      toast('复制失败', 'err');
+    }
+  };
+  root.querySelector('[data-act="save"]').onclick = async () => {
+    try {
+      const safe = String(pack.title || 'session')
+        .replace(/[^\w\u4e00-\u9fff.-]+/g, '-')
+        .slice(0, 48);
+      const r = await window.grok.sessionExportShare({
+        markdown: pack.markdown,
+        json: JSON.stringify(pack.json, null, 2),
+        defaultName: `grok-session-${safe}.md`,
+      });
+      if (r?.canceled) return;
+      if (r?.ok) toast((en ? 'Saved: ' : '已保存：') + (r.file || ''), 'ok');
+      else toast(r?.error || '保存失败', 'err');
+    } catch (e) {
+      toast(e.message || '保存失败', 'err');
+    }
+  };
+  const onKey = (e) => {
+    if (e.key === 'Escape') {
+      close();
+      window.removeEventListener('keydown', onKey);
+    }
+  };
+  window.addEventListener('keydown', onKey);
+}
+window.openSessionShareCard = openSessionShareCard;
+window.openSkillPreview = openSkillPreview;
 
 /** 失败后可一键重试 / 清空 session 重试 / 导出诊断 */
 function appendRetryBar(task, promptText, errMsg) {

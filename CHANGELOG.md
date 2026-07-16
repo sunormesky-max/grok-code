@@ -11,6 +11,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 - See [ROADMAP.md](ROADMAP.md)
 
+## [1.3.2] — 2026-07-16
+
+### Next-batch UX
+
+- **Skill chip preview**: open SKILL.md in a read-only modal even outside the workspace (copy / open folder / open in project editor)
+- **Outline sticky highlight**: current symbol tracks scroll & caret; auto-scroll outline into view
+- **Plan auto-detect**: plan-like assistant replies show **执行方案** even outside Plan mode (Ask still excluded)
+- **Session export share card**: Markdown/JSON copy + save dialog (chat header ⇪ · Ctrl+K)
+
 ## [1.3.1] — 2026-07-16
 
 ### Craft flight deck

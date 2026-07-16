@@ -104,6 +104,42 @@ function testModes() {
   console.log('ok  modes / styles');
 }
 
+/** Mirrors renderer looksLikePlan heuristic for regression */
+function looksLikePlan(text) {
+  const t = String(text || '');
+  if (t.length < 60) return false;
+  let score = 0;
+  if (/(目标|步骤|涉及文件|风险|实施计划|执行步骤|plan|steps?|risks?)/i.test(t)) score += 2;
+  const nums = t.match(/(^|\n)\s*(\d+[\.\)、]|[一二三四五六七八九十]+[、\.\)])\s+\S+/g);
+  if (nums && nums.length >= 2) score += 3;
+  else if (nums && nums.length === 1) score += 1;
+  const bullets = t.match(/(^|\n)\s*[-*•]\s+\S+/g);
+  if (bullets && bullets.length >= 3) score += 2;
+  if (/(接下来|然后|首先|最后|TODO|实施|改动)/i.test(t)) score += 1;
+  if (/`[^`]+\.(js|ts|tsx|py|go|rs|java|css|html|md)`/i.test(t) || /[\w./\\-]+\.(js|ts|tsx|py)\b/.test(t)) {
+    score += 1;
+  }
+  const codeBlocks = (t.match(/```/g) || []).length;
+  if (codeBlocks >= 4 && score < 4) return false;
+  return score >= 4;
+}
+
+function testLooksLikePlan() {
+  const planZh = [
+    '目标：修好登录',
+    '步骤：',
+    '1. 检查 auth.js',
+    '2. 修 token 刷新',
+    '3. 跑测试',
+    '涉及文件：src/auth.js',
+    '风险：会话失效',
+  ].join('\n');
+  assert.ok(looksLikePlan(planZh), 'structured zh plan');
+  assert.ok(!looksLikePlan('ok'), 'too short');
+  assert.ok(!looksLikePlan('这里只是一句闲聊，没有方案结构'), 'chatty non-plan');
+  console.log('ok  looksLikePlan heuristic');
+}
+
 function testSkillsIndex() {
   const skills = require(path.join(root, 'electron', 'mcp-skills.js'));
   assert.equal(typeof skills.buildSkillsIndexPrompt, 'function');
@@ -145,6 +181,7 @@ try {
   testProfilesRoundtrip();
   testCatalogBuild();
   testModes();
+  testLooksLikePlan();
   testSkillsIndex();
   testOutlineExtract();
   testToolsSearchExports();

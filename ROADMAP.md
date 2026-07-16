@@ -19,13 +19,14 @@ Living plan for the GrokCode open-source ecosystem. Order may change based on co
 - [x] Ask IPC hard-block · outline · split width persist · skills index inject
 - [x] Plan execute chip · per-project split width · multi-lang outline · skill match chips
 - [x] Craft flight deck (one-shot Craft, mission bar, mode HUD)
+- [x] Skill preview modal · outline sticky · plan auto-detect · session share card
 
 ## Next
 
-- [ ] Open skill file from chip even outside workspace (read-only preview modal)
-- [ ] Outline sticky current-symbol highlight while scrolling
-- [ ] Plan mode auto-detect plan-like replies (not only mode flag)
-- [ ] Session export share card
+- [ ] Diff hunk fold / stage-selected UX polish
+- [ ] Task rename from tab double-click
+- [ ] Live timeline filter (tools / writes / errors only)
+- [ ] Optional local model picker shortcuts in composer
 
 ## Later
 

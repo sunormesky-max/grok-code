@@ -211,6 +211,15 @@
     return panel;
   }
 
+  function lineHeight(ed) {
+    if (!ed) return 18;
+    const cs = getComputedStyle(ed);
+    const lh = parseFloat(cs.lineHeight);
+    if (Number.isFinite(lh) && lh > 0) return lh;
+    const fs = parseFloat(cs.fontSize) || 13;
+    return fs * 1.45;
+  }
+
   function jumpToLine(line) {
     const ed = document.getElementById('editor');
     if (!ed || !line) return;
@@ -219,8 +228,50 @@
     for (let i = 0; i < line - 1 && i < lines.length; i++) pos += lines[i].length + 1;
     ed.focus();
     ed.setSelectionRange(pos, pos);
-    const lineH = 18;
+    const lineH = lineHeight(ed);
     ed.scrollTop = Math.max(0, (line - 4) * lineH);
+    requestAnimationFrame(() => highlightCurrentSymbol());
+  }
+
+  /** Sticky highlight: symbol covering current scroll/cursor position */
+  function currentEditorLine(ed) {
+    if (!ed) return 1;
+    const lineH = lineHeight(ed);
+    // Prefer caret when focused
+    if (document.activeElement === ed && typeof ed.selectionStart === 'number') {
+      const before = ed.value.slice(0, ed.selectionStart);
+      return Math.max(1, before.split('\n').length);
+    }
+    // Otherwise: ~1/4 down the viewport (reads like "current" while scrolling)
+    const mid = ed.scrollTop + ed.clientHeight * 0.22;
+    return Math.max(1, Math.floor(mid / lineH) + 1);
+  }
+
+  function highlightCurrentSymbol() {
+    const list = document.getElementById('outlineList');
+    const ed = document.getElementById('editor');
+    if (!list || !ed) return;
+    const items = [...list.querySelectorAll('.outline-item[data-line]')];
+    if (!items.length) return;
+    const cur = currentEditorLine(ed);
+    let active = null;
+    for (const btn of items) {
+      const ln = Number(btn.dataset.line) || 0;
+      if (ln <= cur) active = btn;
+      else break;
+    }
+    items.forEach((b) => {
+      const on = b === active;
+      b.classList.toggle('active', on);
+      b.setAttribute('aria-current', on ? 'true' : 'false');
+    });
+    if (active) {
+      const lr = list.getBoundingClientRect();
+      const br = active.getBoundingClientRect();
+      if (br.top < lr.top + 4 || br.bottom > lr.bottom - 4) {
+        active.scrollIntoView({ block: 'nearest' });
+      }
+    }
   }
 
   function refresh() {
@@ -250,6 +301,7 @@
     list.querySelectorAll('.outline-item').forEach((btn) => {
       btn.onclick = () => jumpToLine(Number(btn.dataset.line));
     });
+    highlightCurrentSymbol();
   }
 
   function escapeHtml(s) {
@@ -265,10 +317,29 @@
     timer = setTimeout(refresh, 200);
   }
 
+  let stickyRaf = null;
+  function scheduleSticky() {
+    if (stickyRaf) return;
+    stickyRaf = requestAnimationFrame(() => {
+      stickyRaf = null;
+      highlightCurrentSymbol();
+    });
+  }
+
+  function bindSticky(ed) {
+    if (!ed || ed._outlineStickyBound) return;
+    ed._outlineStickyBound = true;
+    ed.addEventListener('scroll', scheduleSticky, { passive: true });
+    ed.addEventListener('click', scheduleSticky);
+    ed.addEventListener('keyup', scheduleSticky);
+    ed.addEventListener('select', scheduleSticky);
+  }
+
   function init() {
     ensurePanel();
     const ed = document.getElementById('editor');
     ed?.addEventListener('input', schedule);
+    bindSticky(ed);
     const pathEl = document.getElementById('currentPath');
     if (pathEl) {
       const obs = new MutationObserver(schedule);
@@ -277,7 +348,7 @@
     document.querySelector('.tab[data-tab="editor"]')?.addEventListener('click', () => setTimeout(refresh, 50));
   }
 
-  global.GrokOutline = { extractOutline, refresh, init };
+  global.GrokOutline = { extractOutline, refresh, init, highlightCurrentSymbol };
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
   else init();
 })(typeof window !== 'undefined' ? window : globalThis);
