@@ -80,6 +80,8 @@ Use after UI/visual changes. Prefer a **wide window (≥1600px)** and **Normal F
 - [ ] Enter sends chat; Shift+Enter newline
 - [ ] Open project; Agent run shows Live + Diff bridge
 - [ ] Layout Auto (if enabled) does not fight Review/Full
+- [ ] Import storyboard with mini-diffs: Diff shows unified/SBS ops (recon badge), not only raw text
+- [ ] With project open + paths exist: rehydrate may show **recon full** / disk before
 
 ## Notes
 

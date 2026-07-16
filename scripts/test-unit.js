@@ -167,14 +167,36 @@ function testOutlineExtract() {
 }
 
 function testDiffHunks() {
-  // load diff-util is browser IIFE — reimplement thin check via vm is heavy;
-  // smoke: module file exists and exports via reading source
-  const src = fs.readFileSync(path.join(root, 'renderer', 'diff-util.js'), 'utf8');
-  assert.ok(src.includes('diff-hunk'), 'foldable hunk markup');
-  assert.ok(src.includes('toUnifiedHtml'), 'toUnifiedHtml present');
-  assert.ok(src.includes('toSideBySideHtml'), 'side-by-side present');
-  assert.ok(src.includes('diff-sbs'), 'sbs markup');
-  console.log('ok  diff hunk fold smoke');
+  const DiffUtil = require(path.join(root, 'renderer', 'diff-util.js'));
+  assert.equal(typeof DiffUtil.toUnifiedHtml, 'function');
+  assert.equal(typeof DiffUtil.toSideBySideHtml, 'function');
+  assert.equal(typeof DiffUtil.reconstructFromUnified, 'function');
+
+  const before = ['alpha', 'bravo', 'charlie', 'delta', 'echo'].join('\n');
+  const after = ['alpha', 'bravo', 'CHARLIE', 'delta', 'echo'].join('\n');
+  const { ops } = DiffUtil.computeLineDiff(before, after);
+  const text = DiffUtil.toUnifiedText(ops, { context: 1, maxRows: 40 });
+  assert.ok(text.includes('- charlie') || text.includes('-charlie'), 'mini-diff has del');
+  assert.ok(text.includes('+ CHARLIE') || text.includes('+CHARLIE'), 'mini-diff has add');
+
+  // Full reverse: mini-diff + full after → reconstruct original before
+  const full = DiffUtil.reconstructFromUnified(text, { after });
+  assert.ok(full.ok, 'full reconstruct ok');
+  assert.equal(full.mode, 'full', 'mode full when after matches');
+  assert.equal(full.before, before, 'before restored from mini-diff + after');
+
+  // Snippet-only (no after)
+  const snip = DiffUtil.reconstructFromUnified(text);
+  assert.ok(snip.ok && snip.mode === 'snippet', 'snippet mode without after');
+  assert.ok(snip.ops.some((o) => o.type === 'del'), 'snippet ops have del');
+  assert.ok(snip.ops.some((o) => o.type === 'add'), 'snippet ops have add');
+
+  // Truncated mini-diff still yields ops
+  const trunc = DiffUtil.reconstructFromUnified(text + '\n… (truncated)');
+  assert.ok(trunc.ok, 'truncated reconstruct ok');
+  assert.ok(trunc.truncated, 'flags truncated');
+
+  console.log('ok  diff hunk + mini-diff reconstruct');
 }
 
 function testToolsSearchExports() {

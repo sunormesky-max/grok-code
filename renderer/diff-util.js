@@ -379,15 +379,207 @@
     return lines.join('\n');
   }
 
-  global.DiffUtil = {
+  /**
+   * Parse storyboard mini-diff text (toUnifiedText format) → ops + snippets.
+   * Lines: "  ctx" | "- del" | "+ add" | "···" | "… (truncated)" | "(no line diff)"
+   */
+  function parseUnifiedText(text) {
+    const ops = [];
+    let truncated = false;
+    let empty = false;
+    const raw = String(text || '');
+    if (!raw.trim()) {
+      return { ops: [], truncated: false, empty: true, beforeLines: [], afterLines: [] };
+    }
+    for (const line of raw.split(/\r?\n/)) {
+      if (line === '(no line diff)') {
+        empty = true;
+        continue;
+      }
+      // Context gap (omit unchanged middle) — after-snippet may still be contiguous
+      if (line === '···' || line === '...') {
+        continue;
+      }
+      // Hit maxRows in toUnifiedText — reverse full-file match may be incomplete
+      if (line.startsWith('…') || /^…\s*\(truncated\)/i.test(line) || /\(truncated\)\s*$/i.test(line)) {
+        truncated = true;
+        continue;
+      }
+      if (line.startsWith('+') && !line.startsWith('+++')) {
+        const t = line.startsWith('+ ') ? line.slice(2) : line.slice(1);
+        ops.push({ type: 'add', text: t });
+        continue;
+      }
+      if (line.startsWith('-') && !line.startsWith('---')) {
+        const t = line.startsWith('- ') ? line.slice(2) : line.slice(1);
+        ops.push({ type: 'del', text: t });
+        continue;
+      }
+      if (line.startsWith('  ')) {
+        ops.push({ type: 'same', text: line.slice(2) });
+        continue;
+      }
+      // bare context (rare) — treat as same if non-empty
+      if (line.length) ops.push({ type: 'same', text: line });
+    }
+    const beforeLines = [];
+    const afterLines = [];
+    let adds = 0;
+    let dels = 0;
+    for (const o of ops) {
+      if (o.type === 'same') {
+        beforeLines.push(o.text);
+        afterLines.push(o.text);
+      } else if (o.type === 'del') {
+        beforeLines.push(o.text);
+        dels++;
+      } else if (o.type === 'add') {
+        afterLines.push(o.text);
+        adds++;
+      }
+    }
+    return {
+      ops,
+      truncated,
+      empty: empty && !ops.length,
+      beforeLines,
+      afterLines,
+      stats: { adds, dels, beforeLines: beforeLines.length, afterLines: afterLines.length },
+      beforeSnippet: beforeLines.join('\n'),
+      afterSnippet: afterLines.join('\n'),
+    };
+  }
+
+  /**
+   * Find first index where `needle` lines match a contiguous slice of `hay`.
+   * Returns -1 if not found or needle empty.
+   */
+  function findLineSlice(hay, needle) {
+    if (!needle.length) return needle.length === 0 && hay.length === 0 ? 0 : -1;
+    if (needle.length > hay.length) return -1;
+    outer: for (let i = 0; i <= hay.length - needle.length; i++) {
+      for (let k = 0; k < needle.length; k++) {
+        if (hay[i + k] !== needle[k]) continue outer;
+      }
+      return i;
+    }
+    return -1;
+  }
+
+  /**
+   * Reconstruct before (and optionally full-file before) from mini-diff.
+   * @param {string} text - importDiffText / toUnifiedText output
+   * @param {{ after?: string }} [opts] - full file after (e.g. disk rehydrate)
+   * @returns {{
+   *   ok: boolean,
+   *   ops: array,
+   *   stats: object,
+   *   before: string,
+   *   after: string,
+   *   truncated: boolean,
+   *   fullBefore: boolean,
+   *   mode: 'snippet'|'full'|'empty'|'fail'
+   * }}
+   */
+  function reconstructFromUnified(text, opts = {}) {
+    const parsed = parseUnifiedText(text);
+    if (parsed.empty || !parsed.ops.length) {
+      const after = opts.after != null ? String(opts.after) : parsed.afterSnippet || '';
+      return {
+        ok: false,
+        ops: [],
+        stats: { adds: 0, dels: 0 },
+        before: '',
+        after,
+        truncated: parsed.truncated,
+        fullBefore: false,
+        mode: 'empty',
+      };
+    }
+
+    const snippetBefore = parsed.beforeSnippet;
+    const snippetAfter = parsed.afterSnippet;
+
+    // Full-file reverse when we have after content and a matchable after-snippet
+    if (opts.after != null && String(opts.after).length >= 0 && !parsed.truncated) {
+      const fullAfter = String(opts.after);
+      const hay = splitLines(fullAfter);
+      const needle = parsed.afterLines;
+      // Pure deletions: after snippet is only context (or empty)
+      if (needle.length === 0 && parsed.beforeLines.length) {
+        // cannot locate without context — fall through to snippet
+      } else if (needle.length === 0 && !parsed.beforeLines.length) {
+        return {
+          ok: true,
+          ops: parsed.ops,
+          stats: parsed.stats,
+          before: '',
+          after: fullAfter,
+          truncated: false,
+          fullBefore: true,
+          mode: 'full',
+        };
+      } else {
+        const at = findLineSlice(hay, needle);
+        if (at >= 0) {
+          const next = [
+            ...hay.slice(0, at),
+            ...parsed.beforeLines,
+            ...hay.slice(at + needle.length),
+          ];
+          const fullBefore = next.join('\n');
+          // Prefer full recompute for consistent ops / line numbers
+          const recomputed = computeLineDiff(fullBefore, fullAfter);
+          return {
+            ok: true,
+            ops: recomputed.ops,
+            stats: recomputed.stats,
+            before: fullBefore,
+            after: fullAfter,
+            truncated: false,
+            fullBefore: true,
+            mode: 'full',
+          };
+        }
+      }
+    }
+
+    // Partial: mini-diff snippet only (still better than raw text for side-by-side)
+    const after =
+      opts.after != null && String(opts.after) !== ''
+        ? String(opts.after)
+        : snippetAfter;
+    return {
+      ok: true,
+      ops: parsed.ops,
+      stats: parsed.stats,
+      before: snippetBefore,
+      after: opts.after != null && String(opts.after) !== '' ? String(opts.after) : snippetAfter,
+      truncated: parsed.truncated,
+      fullBefore: false,
+      mode: 'snippet',
+      afterSnippet: snippetAfter,
+      beforeSnippet: snippetBefore,
+    };
+  }
+
+  const api = {
     computeLineDiff,
     toUnifiedHtml,
     toSideBySideHtml,
     toUnifiedText,
+    parseUnifiedText,
+    reconstructFromUnified,
+    findLineSlice,
     extractPathFromTool,
     isWriteTool,
     isReadTool,
     splitLines,
     heatFromTs,
   };
-})(window);
+
+  global.DiffUtil = api;
+  if (typeof module !== 'undefined' && module.exports) {
+    module.exports = api;
+  }
+})(typeof window !== 'undefined' ? window : globalThis);

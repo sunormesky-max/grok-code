@@ -53,6 +53,7 @@ Living plan for the GrokCode open-source ecosystem. Order may change based on co
 - [x] Help overlay · compact audit · themed boot (v1.6.1)
 - [x] Outline / split / tree flight-deck pass (v1.6.2)
 - [x] Optional cinematic idle ambient (v1.6.3)
+- [x] Storyboard mini-diff → before reconstruct (v1.7.0)
 
 ## Now (UI / experience)
 
@@ -68,7 +69,7 @@ Living plan for the GrokCode open-source ecosystem. Order may change based on co
 
 ## Later
 
-- [ ] Storyboard: reconstruct before from mini-diff when possible
+- [x] Storyboard: reconstruct before from mini-diff when possible
 - [ ] Full accessibility audit (screen readers)
 - [ ] Plugin marketplace filters parity with every TUI flag
 

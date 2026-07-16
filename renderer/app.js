@@ -4746,6 +4746,11 @@ function hydrateStoryboardOverlay(pack, file) {
       }
     }
   }
+  // Offline: reconstruct ops (and snippet before) from mini-diffs when no disk yet
+  for (const [, entry] of changesMap()) {
+    if (!entry.fromImport && !(entry.checkpoints || []).some((c) => c.fromImport)) continue;
+    applyMiniDiffReconstruct(entry, { allowSnippetBefore: true });
+  }
   // pick first file if none selected
   if (P() && !P().selectedDiffPath && changesMap().size) {
     P().selectedDiffPath = changesMap().keys().next().value;
@@ -4753,8 +4758,84 @@ function hydrateStoryboardOverlay(pack, file) {
 }
 
 /**
+ * Reconstruct before / ops from storyboard mini-diff when possible.
+ * Full-file before when disk `after` matches the mini-diff after-snippet;
+ * otherwise snippet-level ops for side-by-side / unified view.
+ */
+function applyMiniDiffReconstruct(entry, opts = {}) {
+  if (!entry || !window.DiffUtil?.reconstructFromUnified) return { ok: 0, full: 0, snippet: 0 };
+  let ok = 0;
+  let full = 0;
+  let snippet = 0;
+  const diskAfter = opts.after != null ? opts.after : entry.after;
+  for (const cp of entry.checkpoints || []) {
+    if (!cp.fromImport || !cp.importDiffText) continue;
+    // Skip only when we already have full-file reconstruct unless force
+    if (
+      cp.reconstructed &&
+      cp.reconstructMode === 'full' &&
+      entry.before &&
+      !opts.forceBefore
+    ) {
+      continue;
+    }
+    try {
+      const afterForCp = cp.after != null && cp.after !== '' ? cp.after : diskAfter;
+      const r = window.DiffUtil.reconstructFromUnified(cp.importDiffText, {
+        after: afterForCp != null && afterForCp !== '' ? afterForCp : undefined,
+      });
+      if (!r.ok || !r.ops?.length) continue;
+      cp.importOps = r.ops;
+      cp.importStats = r.stats || cp.importStats;
+      cp.reconstructed = true;
+      cp.reconstructMode = r.mode;
+      cp.truncated = Boolean(r.truncated);
+      if (r.fullBefore && r.before != null) {
+        cp.before = r.before;
+        if (!entry.before || opts.forceBefore) entry.before = r.before;
+        full += 1;
+      } else if (r.before != null && r.mode === 'snippet') {
+        cp.beforeSnippet = r.before;
+        // Only set entry.before from snippet if we have no better baseline
+        if (!entry.before && opts.allowSnippetBefore) entry.before = r.before;
+        snippet += 1;
+      }
+      if (r.mode === 'full' && afterForCp != null) {
+        cp.after = afterForCp;
+        cp.preferDisk = true;
+      }
+      ok += 1;
+    } catch {
+      /* skip checkpoint */
+    }
+  }
+
+  // Entry-level ops from best reconstruct or live recompute
+  if (entry.before != null && entry.after != null && window.DiffUtil.computeLineDiff) {
+    if (entry.before !== '' || entry.after !== '') {
+      try {
+        const recomputed = window.DiffUtil.computeLineDiff(entry.before || '', entry.after || '');
+        entry.ops = recomputed.ops;
+        entry.stats = recomputed.stats || entry.stats;
+      } catch {
+        /* keep */
+      }
+    }
+  } else {
+    // Prefer first reconstructed ops for display
+    const cp = (entry.checkpoints || []).find((c) => c.importOps?.length);
+    if (cp?.importOps) {
+      entry.ops = cp.importOps;
+      if (cp.importStats) entry.stats = cp.importStats;
+    }
+  }
+  return { ok, full, snippet };
+}
+
+/**
  * When paths still exist under the open project, pull disk content into
  * after/ops so Diff can show real line diffs (not only mini-diff text).
+ * Also reverse-apply mini-diff to recover before when possible.
  */
 async function rehydrateStoryboardFromDisk(opts = {}) {
   const en = localeIsEn();
@@ -4832,30 +4913,33 @@ async function rehydrateStoryboardFromDisk(opts = {}) {
       entry.fromImport = entry.fromImport || true;
       contentCacheMap().set(path, after);
 
-      // Prefer full recompute when we have any baseline; else empty→disk
-      const base = before || '';
+      // Prefer existing session before; else reconstruct from mini-diff + disk after
+      if (before) {
+        entry.before = before;
+      }
+      entry.after = after;
+
+      // Upgrade import checkpoints with disk after, then reverse mini-diff → before
+      for (const cp of entry.checkpoints || []) {
+        if (!cp.fromImport) continue;
+        cp.after = after;
+      }
+      const recon = applyMiniDiffReconstruct(entry, {
+        after,
+        forceBefore: !before,
+        allowSnippetBefore: false,
+      });
+
+      const base = entry.before || before || '';
       if (window.DiffUtil?.computeLineDiff) {
         const recomputed = window.DiffUtil.computeLineDiff(base, after);
         entry.ops = recomputed.ops;
         entry.stats = recomputed.stats || entry.stats;
-        if (!entry.before && base === '') {
-          // no historical before — still show full file as added-like snapshot
-          entry.before = '';
-        } else if (base && !entry.before) {
-          entry.before = base;
-        }
+        if (base && !entry.before) entry.before = base;
       }
-
-      // Upgrade import checkpoints: attach disk after; clear mini-diff when full ops exist
-      for (const cp of entry.checkpoints || []) {
-        if (!cp.fromImport) continue;
-        cp.after = after;
-        if (entry.ops?.length && base !== undefined) {
-          // keep mini-diff as secondary; primary view uses live recompute
-          if (base || after) {
-            cp.importDiffText = cp.importDiffText || '';
-            cp.preferDisk = true;
-          }
+      if (recon.full > 0 || base) {
+        for (const cp of entry.checkpoints || []) {
+          if (cp.fromImport) cp.preferDisk = true;
         }
       }
 
@@ -6498,7 +6582,7 @@ function getDiffViewSnapshot(entry) {
   const cp = cps[idx];
   // Prefer disk-rehydrated content when checkpoint was upgraded
   if (cp?.fromImport && cp.preferDisk && (cp.after != null || entry.after != null)) {
-    const left = entry.before ?? '';
+    const left = cp.before ?? entry.before ?? '';
     const right = cp.after ?? entry.after ?? '';
     const recomputed = window.DiffUtil.computeLineDiff(left, right);
     return {
@@ -6509,10 +6593,42 @@ function getDiffViewSnapshot(entry) {
       checkpoint: cp,
       index: idx,
       rehydrated: true,
+      reconstructed: Boolean(cp.reconstructed && cp.reconstructMode === 'full'),
     };
   }
-  // Offline storyboard mini-diff text (no full before/after)
-  if (cp?.fromImport && cp.importDiffText) {
+  // Reconstructed ops from mini-diff (snippet or full) — prefer over raw text
+  if (cp?.fromImport && (cp.importOps?.length || cp.importDiffText)) {
+    if (!cp.importOps?.length && cp.importDiffText && window.DiffUtil?.reconstructFromUnified) {
+      try {
+        const r = window.DiffUtil.reconstructFromUnified(cp.importDiffText, {
+          after: cp.after ?? entry.after ?? undefined,
+        });
+        if (r.ok && r.ops?.length) {
+          cp.importOps = r.ops;
+          cp.importStats = r.stats || cp.importStats;
+          cp.reconstructed = true;
+          cp.reconstructMode = r.mode;
+          if (r.fullBefore) cp.before = r.before;
+          else if (r.mode === 'snippet') cp.beforeSnippet = r.before;
+        }
+      } catch {
+        /* fall through */
+      }
+    }
+    if (cp.importOps?.length) {
+      return {
+        ops: cp.importOps,
+        stats: cp.importStats || { adds: 0, dels: 0 },
+        after: cp.after ?? entry.after,
+        label: `recon#${idx + 1}`,
+        checkpoint: cp,
+        index: idx,
+        reconstructed: true,
+        reconstructMode: cp.reconstructMode || 'snippet',
+        truncated: Boolean(cp.truncated),
+      };
+    }
+    // Offline storyboard mini-diff text (no reconstructable ops)
     return {
       ops: null,
       importText: cp.importDiffText,
@@ -6887,6 +7003,14 @@ function renderDiffPane() {
       `<span class="a" style="color:var(--ok)">+${snap.stats.adds}</span> · <span class="d" style="color:var(--danger)">-${snap.stats.dels}</span>`,
     ];
     if (snap.importText) bits2.push(`<span style="color:#fbbf24">· import</span>`);
+    else if (snap.reconstructed) {
+      bits2.push(
+        snap.reconstructMode === 'full'
+          ? `<span style="color:#34d399">${localeIsEn() ? '· recon full' : '· 已反推 before'}</span>`
+          : `<span style="color:#fbbf24">${localeIsEn() ? '· recon snippet' : '· 片段反推'}</span>`
+      );
+      if (snap.truncated) bits2.push(`<span style="color:#71717a">${localeIsEn() ? '· truncated' : '· 截断'}</span>`);
+    } else if (snap.rehydrated) bits2.push(`<span style="color:#34d399">· disk</span>`);
     else if (snap.index >= 0) bits2.push(`<span style="color:#fbbf24">· cp#${snap.index + 1}</span>`);
     if (cur.reviewed) bits2.push('<span style="color:#7dd3fc">· 已审阅</span>');
     $('#diffStats').innerHTML = bits2.join(' ');

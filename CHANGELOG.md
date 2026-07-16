@@ -11,6 +11,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 - See [ROADMAP.md](ROADMAP.md)
 
+## [1.7.0] — 2026-07-16
+
+### Storyboard — reconstruct before from mini-diff
+
+- **`DiffUtil.parseUnifiedText` / `reconstructFromUnified`**: reverse mini-diff text into ops; when full disk `after` matches the after-snippet, recover full-file **before**
+- **Import hydrate**: offline packs use reconstructed ops for unified/side-by-side (not only raw text)
+- **Disk rehydrate**: prefer reverse mini-diff → before when session has no baseline
+- Diff stats badges: `recon full` / `recon snippet` / truncated
+- Unit tests for round-trip mini-diff reconstruct
+
 ## [1.6.3] — 2026-07-16
 
 ### Visual impact 10 — cinematic idle ambient
