@@ -201,17 +201,112 @@ function writeProjectRulesFile(projectPath, content) {
   return { ok: true, file };
 }
 
+/** User confirmed “go implement the plan” */
+function isPlanExecutePhrase(text) {
+  const t = String(text || '').trim();
+  if (!t) return false;
+  // Short confirmations
+  if (
+    /^(执行|开干|按方案|按方案做|按方案执行|implement|execute|do it|lgtm|开搞|动手|开始改|开始实现|go|ship it|run it)[\s!！。.~]*$/i.test(
+      t
+    )
+  ) {
+    return true;
+  }
+  // Longer “execute the plan …” messages
+  if (
+    /^(执行方案|执行计划|implement the plan|execute the plan|start implementing)/i.test(t) ||
+    /^(请)?(开始)?(执行|实现|落地).{0,24}(方案|计划|plan)/i.test(t)
+  ) {
+    return true;
+  }
+  return false;
+}
+
+/**
+ * Heuristic: assistant reply looks like an actionable plan (shared with desktop UI tests)
+ */
+function looksLikePlan(text) {
+  const t = String(text || '');
+  if (t.length < 60) return false;
+  let score = 0;
+  if (
+    /(目标|步骤|涉及文件|风险|实施计划|执行步骤|验收|plan|steps?|risks?|files?\s*(to\s*)?(change|touch|edit)?)/i.test(
+      t
+    )
+  ) {
+    score += 2;
+  }
+  const nums = t.match(/(^|\n)\s*(\d+[\.\)、]|[一二三四五六七八九十]+[、\.\)])\s+\S+/g);
+  if (nums && nums.length >= 2) score += 3;
+  else if (nums && nums.length === 1) score += 1;
+  const bullets = t.match(/(^|\n)\s*[-*•]\s+\S+/g);
+  if (bullets && bullets.length >= 3) score += 2;
+  if (/(接下来|然后|首先|最后|TODO|实施|改动|建议)/i.test(t)) score += 1;
+  if (
+    /`[^`]+\.(js|ts|tsx|py|go|rs|java|css|html|md)`/i.test(t) ||
+    /[\w./\\-]+\.(js|ts|tsx|py|go|rs)\b/.test(t)
+  ) {
+    score += 1;
+  }
+  const codeBlocks = (t.match(/```/g) || []).length;
+  if (codeBlocks >= 4 && score < 4) return false;
+  return score >= 4;
+}
+
+/**
+ * Build the Craft-turn prompt used when user confirms a plan.
+ * Embeds a capped plan excerpt so CLI has the steps even if session is thin.
+ */
+function buildPlanExecutePrompt(planText, { locale = 'zh' } = {}) {
+  const plan = String(planText || '').trim();
+  const cap = 7000;
+  const body = plan.length > cap ? plan.slice(0, cap) + '\n…' : plan;
+  if (locale === 'en') {
+    if (!body) {
+      return (
+        'Execute the plan from your previous message. Implement step by step, ' +
+        'skip finished items, keep changes focused, then run necessary checks.'
+      );
+    }
+    return (
+      'Execute this plan now (Craft flight). Implement remaining steps; do not re-plan unless blocked.\n\n' +
+      '—— PLAN ——\n' +
+      body +
+      '\n—— END PLAN ——\n\n' +
+      'Work through the steps, write the code, and summarize what changed + how to verify.'
+    );
+  }
+  if (!body) {
+    return '执行方案：按你上一条给出的步骤动手实现，跳过已完成项，保持聚焦，改完做必要检查。';
+  }
+  return (
+    '执行下列方案（Craft 飞行模式）。按步骤落地；已完成的跳过；缺信息再问；改完做必要检查。\n\n' +
+    '—— 方案 ——\n' +
+    body +
+    '\n—— 方案结束 ——\n\n' +
+    '动手改代码；结束后用 2–5 行说明改了什么、怎么验。'
+  );
+}
+
 /**
  * Extra prompt prefix for modes
  */
 function modePromptPrefix(workMode, userMessage) {
   if (workMode === 'plan') {
-    const exec =
-      /^(执行|开干|按方案|implement|execute|do it|lgtm|开搞)/i.test(String(userMessage || '').trim());
-    if (exec) {
-      return '【Plan 模式 · 用户已确认执行】现在按先前方案动手；保持聚焦，改完检查。\n\n';
+    if (isPlanExecutePhrase(userMessage)) {
+      return (
+        '【Plan → Craft 执行确认】用户已确认执行方案。' +
+        '现在切换为动手模式：按先前（或本消息附带的）方案改代码/跑命令；' +
+        '不要只复述方案；跳过已完成步骤；改完做必要检查。\n\n'
+      );
     }
-    return '【Plan 模式】先输出简洁可执行方案（目标/步骤/文件/风险），除非用户已确认执行，否则不要批量改代码。\n\n';
+    return (
+      '【Plan 模式】先输出简洁可执行方案，建议结构：\n' +
+      '1) 目标 2) 步骤（编号）3) 涉及文件 4) 风险/验收\n' +
+      '除非用户已确认执行（如「执行」「开干」「implement the plan」），否则不要批量改代码。\n' +
+      '方案要短而可执行，避免空话。\n\n'
+    );
   }
   if (workMode === 'ask') {
     return '【Ask 模式 · 只读】只分析与回答；不要写文件、不要删文件、不要跑修改性命令。\n\n';
@@ -250,6 +345,9 @@ module.exports = {
   readProjectRulesFile,
   writeProjectRulesFile,
   modePromptPrefix,
+  isPlanExecutePhrase,
+  looksLikePlan,
+  buildPlanExecutePrompt,
   listModes,
   listStyles,
   isPersonalPath,

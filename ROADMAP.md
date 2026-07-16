@@ -64,6 +64,7 @@ Living plan for the GrokCode open-source ecosystem. Order may change based on co
 - [x] Turn markers + interrupt/resume continue bar (v1.9.1)
 - [x] Multi-task stream fairness under heavy tool load (v1.9.2)
 - [x] Context L0–L3 inheritance quality for long tasks (v1.9.3)
+- [x] Plan → Craft execute chain (v1.9.4)
 
 ## Now (UI / experience)
 

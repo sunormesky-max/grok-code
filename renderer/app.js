@@ -8484,11 +8484,24 @@ async function runTaskPrompt(task, text, opts = {}) {
     clearPromptDraft(task);
   }
 
-  const modeUsed =
+  // Plan confirm phrases ("执行" / "implement the plan") promote this turn to Craft
+  let modeUsed =
     opts.forceCraft || opts.workMode === 'craft'
       ? 'craft'
       : opts.workMode || state.workMode || cfg.workMode || 'craft';
-  if (opts.forceCraft && state.workMode !== 'craft') {
+  const typedPlanExec =
+    modeUsed === 'plan' && isPlanExecutePhrase(text) && !opts.forceCraft;
+  if (typedPlanExec) {
+    modeUsed = 'craft';
+    opts = { ...opts, fromPlanExecute: true, forceCraft: true };
+    if (state.workMode === 'plan') {
+      // Sticky switch so subsequent sends stay in Craft unless user flips back
+      setWorkMode('craft', { toast: false, persistRemote: true });
+    }
+    toast(localeIsEn() ? 'Plan → Craft · executing' : 'Plan → Craft · 开始执行', 'ok');
+  } else if (opts.forceCraft && opts.fromPlanExecute) {
+    toast(localeIsEn() ? 'Plan → Craft · executing' : 'Plan → Craft · 开始执行', 'ok');
+  } else if (opts.forceCraft && state.workMode !== 'craft') {
     toast(localeIsEn() ? 'One-shot Craft' : '单次 Craft 起飞', 'ok');
   }
 
@@ -8577,6 +8590,8 @@ async function runTaskPrompt(task, text, opts = {}) {
       changedFiles: [...changesMap().keys()],
       isContinue: Boolean(opts.isContinue),
       lastStopped: Boolean(opts.isContinue || opts.isStopCleanup),
+      forceCraft: Boolean(opts.forceCraft),
+      fromPlanExecute: Boolean(opts.fromPlanExecute),
     });
     flushStreamPaint(task);
 
@@ -8638,27 +8653,29 @@ async function runTaskPrompt(task, text, opts = {}) {
       tools: task.toolCount || 0,
       usage: result?.usage || task.lastUsage,
     });
-    // Plan：模式标志 或 回复像可执行方案 → 一键执行条
-    const wasExec =
-      /^(执行|开干|按方案|implement|execute|do it|lgtm|开搞)/i.test(String(text || '').trim());
+    // Plan：模式标志 或 回复像可执行方案 → 一键执行条（执行语本身不再弹条）
+    const wasExec = isPlanExecutePhrase(text) || opts.fromPlanExecute || opts.forceCraft;
     if (
       !wasExec &&
       finalText &&
       modeUsed !== 'ask' &&
       (modeUsed === 'plan' || looksLikePlan(finalText))
     ) {
+      task.lastPlan = finalText;
       appendPlanExecuteBar(task, {
         autoDetected: modeUsed !== 'plan' && looksLikePlan(finalText),
+        planText: finalText,
       });
     }
-    // Craft mission summary
-    if (modeUsed === 'craft') {
+    // Craft mission summary (includes Plan→Craft execute flights)
+    if (modeUsed === 'craft' || opts.fromPlanExecute) {
       const filesAfter = P()?.changes?.size || 0;
       const filesDelta = Math.max(0, filesAfter - filesBefore);
       appendCraftMissionBar(task, {
         tools: task.toolCount || 0,
         writes: task.writeCount || 0,
         files: filesDelta || filesAfter,
+        fromPlan: Boolean(opts.fromPlanExecute),
       });
     }
     // Skills 匹配提示
@@ -8763,10 +8780,10 @@ function appendCraftMissionBar(task, stats = {}) {
   if (tools === 0 && writes === 0 && files === 0) return;
   task.pane.querySelectorAll('.craft-mission-bar').forEach((el) => el.remove());
   const bar = document.createElement('div');
-  bar.className = 'craft-mission-bar';
+  bar.className = 'craft-mission-bar' + (stats.fromPlan ? ' from-plan' : '');
   const en = localeIsEn();
   bar.innerHTML = `
-    <span class="craft-mission-label">CRAFT</span>
+    <span class="craft-mission-label">${stats.fromPlan ? 'PLAN→CRAFT' : 'CRAFT'}</span>
     <span class="craft-mission-stats">
       <span class="cms">${tools} ${en ? 'tools' : '工具'}</span>
       <span class="cms">${writes} ${en ? 'writes' : '写入'}</span>
@@ -8784,38 +8801,122 @@ function appendCraftMissionBar(task, stats = {}) {
   scrollMessages(true, task);
 }
 
-/** Plan / 自动识别方案：确认后一键执行 */
+/** Shared with modes.js heuristics (browser copy — keep in sync with electron/modes.js) */
+function isPlanExecutePhrase(text) {
+  const t = String(text || '').trim();
+  if (!t) return false;
+  if (
+    /^(执行|开干|按方案|按方案做|按方案执行|implement|execute|do it|lgtm|开搞|动手|开始改|开始实现|go|ship it|run it)[\s!！。.~]*$/i.test(
+      t
+    )
+  ) {
+    return true;
+  }
+  if (
+    /^(执行方案|执行计划|implement the plan|execute the plan|start implementing)/i.test(t) ||
+    /^(请)?(开始)?(执行|实现|落地).{0,24}(方案|计划|plan)/i.test(t)
+  ) {
+    return true;
+  }
+  return false;
+}
+
+function buildPlanExecutePrompt(planText) {
+  const plan = String(planText || '').trim();
+  const cap = 7000;
+  const body = plan.length > cap ? plan.slice(0, cap) + '\n…' : plan;
+  const en = localeIsEn();
+  if (en) {
+    if (!body) {
+      return 'Execute the plan from your previous message. Implement step by step, skip finished items, keep changes focused, then verify.';
+    }
+    return (
+      'Execute this plan now (Craft). Implement remaining steps; do not re-plan unless blocked.\n\n' +
+      '—— PLAN ——\n' +
+      body +
+      '\n—— END PLAN ——\n\n' +
+      'Work through the steps and summarize what changed + how to verify.'
+    );
+  }
+  if (!body) {
+    return '执行方案：按你上一条给出的步骤动手实现，跳过已完成项，保持聚焦，改完做必要检查。';
+  }
+  return (
+    '执行下列方案（Craft 飞行模式）。按步骤落地；已完成的跳过；缺信息再问；改完做必要检查。\n\n' +
+    '—— 方案 ——\n' +
+    body +
+    '\n—— 方案结束 ——\n\n' +
+    '动手改代码；结束后用 2–5 行说明改了什么、怎么验。'
+  );
+}
+
+/** Plan / 自动识别方案：确认后一键 Craft 执行（注入方案原文） */
 function appendPlanExecuteBar(task, opts = {}) {
   if (!task?.pane) return;
   task.pane.querySelectorAll('.plan-exec-bar').forEach((el) => el.remove());
+  const en = localeIsEn();
+  const planText = opts.planText || task.lastPlan || '';
+  task.lastPlan = planText || task.lastPlan || '';
   const bar = document.createElement('div');
   bar.className = 'plan-exec-bar' + (opts.autoDetected ? ' plan-exec-auto' : '');
   const hint = opts.autoDetected
-    ? '检测到方案结构 · 确认后切换 Craft 并执行'
-    : '方案已就绪 · 确认后切换 Craft 并执行';
+    ? en
+      ? 'Plan-like reply detected · confirm to Craft-execute'
+      : '检测到方案结构 · 确认后切换 Craft 并执行'
+    : en
+      ? 'Plan ready · confirm to Craft-execute'
+      : '方案已就绪 · 确认后切换 Craft 并执行';
+  const preview = oneLinePlanPreview(planText);
   bar.innerHTML = `
-    <span class="plan-exec-hint">${hint}</span>
+    <div class="plan-exec-main">
+      <span class="plan-exec-hint">${esc(hint)}</span>
+      ${preview ? `<span class="plan-exec-preview" title="${esc(planText.slice(0, 400))}">${esc(preview)}</span>` : ''}
+    </div>
     <div class="retry-actions">
-      <button type="button" class="btn small primary" data-act="exec">▶ 执行方案</button>
-      <button type="button" class="btn small ghost" data-act="dismiss">稍后</button>
+      <button type="button" class="btn small primary" data-act="exec">▶ ${en ? 'Execute' : '执行方案'}</button>
+      <button type="button" class="btn small ghost" data-act="refine">${en ? 'Refine' : '调整方案'}</button>
+      <button type="button" class="btn small ghost" data-act="dismiss">${en ? 'Later' : '稍后'}</button>
     </div>`;
   bar.querySelector('[data-act="exec"]').onclick = () => {
     bar.remove();
-    setWorkMode('craft');
+    setWorkMode('craft', { toast: false, persistRemote: true });
+    const execText = buildPlanExecutePrompt(task.lastPlan || planText);
     const prompt = document.getElementById('prompt');
     if (prompt) {
-      prompt.value = '执行方案：按你上一条给出的步骤动手实现，保持聚焦，改完做必要检查。';
+      prompt.value = '';
       autoResizePrompt();
       updateCharCount();
     }
-    runTaskPrompt(task, '执行方案：按你上一条给出的步骤动手实现，保持聚焦，改完做必要检查。', {
+    runTaskPrompt(task, execText, {
       fromComposer: false,
       forceCraft: true,
+      fromPlanExecute: true,
     });
+  };
+  bar.querySelector('[data-act="refine"]').onclick = () => {
+    const prompt = document.getElementById('prompt');
+    if (prompt) {
+      prompt.value = en
+        ? 'Revise the plan: '
+        : '请调整方案：';
+      autoResizePrompt();
+      updateCharCount();
+      prompt.focus();
+    }
+    if (state.workMode !== 'plan') setWorkMode('plan', { toast: true });
   };
   bar.querySelector('[data-act="dismiss"]').onclick = () => bar.remove();
   task.pane.appendChild(bar);
   scrollMessages(true, task);
+}
+
+function oneLinePlanPreview(text) {
+  const t = String(text || '').replace(/\s+/g, ' ').trim();
+  if (!t) return '';
+  // Prefer first numbered step
+  const m = t.match(/(?:^|\s)(?:1[\.)、]|一[、.)])\s*([^\n]{8,80})/);
+  if (m) return (localeIsEn() ? '1. ' : '1. ') + m[1].trim();
+  return t.slice(0, 72) + (t.length > 72 ? '…' : '');
 }
 
 /** Heuristic: assistant reply looks like an actionable plan */
@@ -8823,7 +8924,11 @@ function looksLikePlan(text) {
   const t = String(text || '');
   if (t.length < 60) return false;
   let score = 0;
-  if (/(目标|步骤|涉及文件|风险|实施计划|执行步骤|plan|steps?|risks?|files?\s*(to\s*)?(change|touch)?)/i.test(t)) {
+  if (
+    /(目标|步骤|涉及文件|风险|实施计划|执行步骤|验收|plan|steps?|risks?|files?\s*(to\s*)?(change|touch|edit)?)/i.test(
+      t
+    )
+  ) {
     score += 2;
   }
   const nums = t.match(/(^|\n)\s*(\d+[\.\)、]|[一二三四五六七八九十]+[、\.\)])\s+\S+/g);
@@ -8831,11 +8936,13 @@ function looksLikePlan(text) {
   else if (nums && nums.length === 1) score += 1;
   const bullets = t.match(/(^|\n)\s*[-*•]\s+\S+/g);
   if (bullets && bullets.length >= 3) score += 2;
-  if (/(接下来|然后|首先|最后|TODO|实施|改动)/i.test(t)) score += 1;
-  if (/`[^`]+\.(js|ts|tsx|py|go|rs|java|css|html|md)`/i.test(t) || /[\w./\\-]+\.(js|ts|tsx|py)\b/.test(t)) {
+  if (/(接下来|然后|首先|最后|TODO|实施|改动|建议)/i.test(t)) score += 1;
+  if (
+    /`[^`]+\.(js|ts|tsx|py|go|rs|java|css|html|md)`/i.test(t) ||
+    /[\w./\\-]+\.(js|ts|tsx|py|go|rs)\b/.test(t)
+  ) {
     score += 1;
   }
-  // long pure code dump is not a plan
   const codeBlocks = (t.match(/```/g) || []).length;
   if (codeBlocks >= 4 && score < 4) return false;
   return score >= 4;

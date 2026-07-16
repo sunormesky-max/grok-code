@@ -11,6 +11,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 - See [ROADMAP.md](ROADMAP.md)
 
+## [1.9.4] — 2026-07-16
+
+### Core — Plan → Craft execute chain
+
+- **Shared helpers** in `modes.js`: `isPlanExecutePhrase`, `looksLikePlan`, `buildPlanExecutePrompt`
+- Typing **执行 / implement the plan** in Plan mode auto-promotes turn to Craft (+ sticky mode switch)
+- Execute bar embeds **plan excerpt** into Craft prompt (not a vague one-liner)
+- Actions: **执行方案** · **调整方案** · 稍后；preview of first step
+- Mission bar labels **PLAN→CRAFT** after execute flights; higher max-turns for plan execute
+- Unit tests for phrase / plan detect / execute prompt
+
 ## [1.9.3] — 2026-07-16
 
 ### Core — context inheritance quality (L0–L3)

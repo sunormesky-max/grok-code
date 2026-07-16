@@ -938,27 +938,31 @@ ipcMain.handle('agent:run', async (_e, payload) => {
   });
 
   // Ask: never auto-approve tools; Plan: fewer turns while planning;
+  // Plan+execute phrase or explicit craft: full throttle
   // Craft: flight mode — full throttle (user always-approve + maxTurns as configured)
   let alwaysOverride;
   let maxTurnsOverride;
+  const planExec =
+    workMode === 'plan' && modes.isPlanExecutePhrase(message);
+  const effectiveMode = planExec || payload?.forceCraft ? 'craft' : workMode;
   if (workMode === 'ask') {
     alwaysOverride = false;
     maxTurnsOverride = Math.min(Number(store.get('maxTurns') || 30), 12);
-  } else if (workMode === 'plan') {
-    const exec =
-      /^(执行|开干|按方案|implement|execute|do it|lgtm|开搞)/i.test(String(message || '').trim());
-    if (!exec) {
-      // planning turn: fewer tool turns preferred
-      maxTurnsOverride = Math.min(Number(store.get('maxTurns') || 30), 16);
-    }
-  } else if (workMode === 'craft') {
-    // Prefer finishing the job; do not artificially cap below user setting
+  } else if (workMode === 'plan' && !planExec) {
+    // pure planning turn: fewer tool turns preferred
+    maxTurnsOverride = Math.min(Number(store.get('maxTurns') || 30), 16);
+  } else if (workMode === 'craft' || planExec || payload?.forceCraft) {
     alwaysOverride = undefined; // keep user always-approve
     const base = Number(store.get('maxTurns') || 30);
     if (store.get('alwaysApprove') !== false && base < 24) {
       maxTurnsOverride = 24;
     }
+    // Plan→Craft execute: ensure enough turns to finish multi-step plan
+    if ((planExec || payload?.fromPlanExecute) && base < 28) {
+      maxTurnsOverride = Math.max(maxTurnsOverride || 0, 28);
+    }
   }
+  // note: modePrefix still uses original workMode so plan-exec phrase gets execute banner
 
   if (p.aborts.has(tid)) {
     try {

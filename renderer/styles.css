@@ -3810,6 +3810,53 @@ button.pill:hover {
 .turn-marker .tm-end.stopped { color: #fbbf24; }
 .turn-marker .tm-end.error { color: #fb7185; }
 
+/* Plan execute bar */
+.plan-exec-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 8px 4px 4px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(249, 115, 22, 0.4);
+  background: linear-gradient(90deg, rgba(249, 115, 22, 0.12), rgba(56, 189, 248, 0.06));
+}
+.plan-exec-bar.plan-exec-auto {
+  border-color: rgba(56, 189, 248, 0.4);
+  background: linear-gradient(90deg, rgba(56, 189, 248, 0.1), rgba(249, 115, 22, 0.06));
+}
+.plan-exec-main {
+  flex: 1;
+  min-width: 160px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.plan-exec-hint {
+  font-size: 12px;
+  color: #fde68a;
+  font-weight: 600;
+}
+.plan-exec-bar.plan-exec-auto .plan-exec-hint {
+  color: #7dd3fc;
+}
+.plan-exec-preview {
+  font-family: var(--mono, monospace);
+  font-size: 10.5px;
+  color: #a1a1aa;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+}
+.craft-mission-bar.from-plan .craft-mission-label {
+  background: linear-gradient(105deg, #f97316, #38bdf8);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
 /* Stop / retry action bars */
 .stop-bar,
 .retry-bar {

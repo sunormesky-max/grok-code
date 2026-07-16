@@ -162,32 +162,30 @@ function testModes() {
   assert.ok(pr.text.includes('no force push'));
   assert.equal(m.listModes().length, 3);
   assert.ok(m.listStyles().length >= 3);
-  // plan execute phrase
-  assert.ok(m.modePromptPrefix('plan', '执行').includes('确认') || m.modePromptPrefix('plan', '执行').includes('动手'));
-  console.log('ok  modes / styles');
-}
-
-/** Mirrors renderer looksLikePlan heuristic for regression */
-function looksLikePlan(text) {
-  const t = String(text || '');
-  if (t.length < 60) return false;
-  let score = 0;
-  if (/(目标|步骤|涉及文件|风险|实施计划|执行步骤|plan|steps?|risks?)/i.test(t)) score += 2;
-  const nums = t.match(/(^|\n)\s*(\d+[\.\)、]|[一二三四五六七八九十]+[、\.\)])\s+\S+/g);
-  if (nums && nums.length >= 2) score += 3;
-  else if (nums && nums.length === 1) score += 1;
-  const bullets = t.match(/(^|\n)\s*[-*•]\s+\S+/g);
-  if (bullets && bullets.length >= 3) score += 2;
-  if (/(接下来|然后|首先|最后|TODO|实施|改动)/i.test(t)) score += 1;
-  if (/`[^`]+\.(js|ts|tsx|py|go|rs|java|css|html|md)`/i.test(t) || /[\w./\\-]+\.(js|ts|tsx|py)\b/.test(t)) {
-    score += 1;
-  }
-  const codeBlocks = (t.match(/```/g) || []).length;
-  if (codeBlocks >= 4 && score < 4) return false;
-  return score >= 4;
+  // plan execute phrase + craft promotion prefix
+  assert.ok(m.isPlanExecutePhrase('执行'));
+  assert.ok(m.isPlanExecutePhrase('implement the plan'));
+  assert.ok(!m.isPlanExecutePhrase('帮我分析一下架构'));
+  const execPrefix = m.modePromptPrefix('plan', '执行');
+  assert.ok(execPrefix.includes('执行') || execPrefix.includes('Craft') || execPrefix.includes('动手'));
+  const planBody = [
+    '目标：修好登录',
+    '步骤：',
+    '1. 检查 auth.js',
+    '2. 修 token 刷新',
+    '3. 跑测试',
+    '涉及文件：src/auth.js',
+    '风险：会话失效',
+  ].join('\n');
+  assert.ok(m.looksLikePlan(planBody), 'structured plan detected');
+  const execPrompt = m.buildPlanExecutePrompt(planBody, { locale: 'zh' });
+  assert.ok(execPrompt.includes('auth') || execPrompt.includes('方案'), 'execute embeds plan');
+  assert.ok(execPrompt.includes('Craft') || execPrompt.includes('执行'), 'execute is craft-ish');
+  console.log('ok  modes / styles / plan→craft');
 }
 
 function testLooksLikePlan() {
+  const m = require(path.join(root, 'electron', 'modes.js'));
   const planZh = [
     '目标：修好登录',
     '步骤：',
@@ -197,9 +195,9 @@ function testLooksLikePlan() {
     '涉及文件：src/auth.js',
     '风险：会话失效',
   ].join('\n');
-  assert.ok(looksLikePlan(planZh), 'structured zh plan');
-  assert.ok(!looksLikePlan('ok'), 'too short');
-  assert.ok(!looksLikePlan('这里只是一句闲聊，没有方案结构'), 'chatty non-plan');
+  assert.ok(m.looksLikePlan(planZh), 'structured zh plan');
+  assert.ok(!m.looksLikePlan('ok'), 'too short');
+  assert.ok(!m.looksLikePlan('这里只是一句闲聊，没有方案结构'), 'chatty non-plan');
   console.log('ok  looksLikePlan heuristic');
 }
 
