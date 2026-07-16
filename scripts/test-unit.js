@@ -10,22 +10,59 @@ const root = path.join(__dirname, '..');
 const { compressContext, buildContextPrompt } = require(path.join(root, 'electron', 'context-compress.js'));
 
 function testCompress() {
+  const { extractPaths } = require(path.join(root, 'electron', 'context-compress.js'));
   const msgs = [
     { role: 'user', content: '请修复 electron/main.js 里的 bug，必须用中文回复', ts: 1 },
     { role: 'assistant', content: '- 完成了 main.js 修复\n- 添加了 openProject', ts: 2 },
     { role: 'user', content: '再优化一下 Diff 面板', ts: 3 },
-    { role: 'assistant', content: '已更新 renderer/app.js 中的 Diff 逻辑', ts: 4 },
+    {
+      role: 'assistant',
+      content: '已更新 renderer/app.js 中的 Diff 逻辑\nTODO: 还要测 side-by-side',
+      ts: 4,
+    },
+    {
+      role: 'user',
+      content: '从刚才中断处继续',
+      ts: 5,
+    },
+    {
+      role: 'assistant',
+      content: '正在续跑 Diff 测试…',
+      ts: 6,
+      stopped: true,
+    },
   ];
-  const ctx = compressContext(msgs, { projectName: 'grok-code' });
+  const ctx = compressContext(msgs, {
+    projectName: 'grok-code',
+    taskTitle: 'diff-work',
+    workMode: 'craft',
+    turns: [
+      { mode: 'craft', endedAt: 1, tools: 2 },
+      { mode: 'craft', stopped: true, tools: 1 },
+    ],
+    changedFiles: ['renderer/app.js', 'electron/main.js'],
+    lastStopped: true,
+  });
   assert.ok(ctx.l0.length >= 2, 'L0 should keep recent messages');
   assert.ok(String(ctx.l2).includes('grok-code'), 'L2 has project name');
+  assert.ok(String(ctx.l2).includes('Diff') || String(ctx.l2).includes('变更'), 'L2 has diff files');
+  assert.ok(String(ctx.l2).includes('中断') || String(ctx.l2).includes('停止'), 'L2 notes stop');
+  assert.ok(String(ctx.l2).includes('开放') || String(ctx.l2).includes('TODO'), 'L2 open items');
   assert.ok(String(ctx.l3).includes('偏好') || String(ctx.l3).includes('中文'), 'L3 captures constraints');
   assert.ok(Array.isArray(ctx.tiers) && ctx.tiers.length === 4, '4 tiers');
+  assert.ok(extractPaths('see renderer/app.js and electron/main.js').includes('renderer/app.js'));
 
-  const prompt = buildContextPrompt(ctx, '继续', { projectName: 'grok-code', taskTitle: 't1' });
+  const prompt = buildContextPrompt(ctx, '继续', {
+    projectName: 'grok-code',
+    taskTitle: 't1',
+    workMode: 'craft',
+    lastStopped: true,
+    continueFrom: true,
+  });
   assert.ok(prompt.includes('L0') || prompt.includes('近期'), 'prompt has context');
   assert.ok(prompt.includes('继续'), 'prompt has user message');
-  console.log('ok  compressContext / buildContextPrompt');
+  assert.ok(prompt.includes('断点') || prompt.includes('中断'), 'prompt continues from stop');
+  console.log('ok  compressContext / buildContextPrompt quality');
 }
 
 function testExtractJson() {

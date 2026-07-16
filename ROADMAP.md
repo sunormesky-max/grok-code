@@ -63,6 +63,7 @@ Living plan for the GrokCode open-source ecosystem. Order may change based on co
 - [x] Task phase machine + stream paint (v1.9.0)
 - [x] Turn markers + interrupt/resume continue bar (v1.9.1)
 - [x] Multi-task stream fairness under heavy tool load (v1.9.2)
+- [x] Context L0–L3 inheritance quality for long tasks (v1.9.3)
 
 ## Now (UI / experience)
 

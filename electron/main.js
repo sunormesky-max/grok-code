@@ -131,6 +131,11 @@ async function compressWithMode(messages, opts = {}) {
   let context = compressContext(messages, {
     prev: opts.prevContext || {},
     projectName: opts.projectName || '',
+    taskTitle: opts.taskTitle || '',
+    workMode: opts.workMode || '',
+    turns: opts.turns || [],
+    changedFiles: opts.changedFiles || [],
+    lastStopped: Boolean(opts.lastStopped),
   });
   const mode = opts.contextMode || store.get('contextMode') || 'heuristic';
   if (mode === 'llm') {
@@ -858,6 +863,22 @@ ipcMain.handle('agent:run', async (_e, payload) => {
   const skipResume = Boolean(payload?.skipResume);
   const effectiveSession = skipResume ? null : sessionId;
 
+  const workMode = ['craft', 'plan', 'ask'].includes(payload?.workMode)
+    ? payload.workMode
+    : getConfig().workMode;
+  const stylePack = modes.STYLES[payload?.stylePack]
+    ? payload.stylePack
+    : getConfig().stylePack;
+
+  const changedFiles = Array.isArray(payload?.changedFiles)
+    ? payload.changedFiles
+    : p.changes
+      ? [...(p.changes.keys?.() || [])]
+      : [];
+  // Renderer passes changes; main project map may not hold Diff — prefer payload
+  const turns = Array.isArray(payload?.turns) ? payload.turns : [];
+  const lastStopped = Boolean(payload?.lastStopped || payload?.isContinue);
+
   let context;
   try {
     context = await compressWithMode(history, {
@@ -865,18 +886,23 @@ ipcMain.handle('agent:run', async (_e, payload) => {
       projectName: p.name,
       taskTitle: taskTitle || tid,
       contextMode: payload?.contextMode || store.get('contextMode'),
+      workMode,
+      turns,
+      changedFiles,
+      lastStopped,
     });
   } catch (err) {
-    context = compressContext(history, { prev: prevContext || {}, projectName: p.name });
+    context = compressContext(history, {
+      prev: prevContext || {},
+      projectName: p.name,
+      taskTitle: taskTitle || tid,
+      workMode,
+      turns,
+      changedFiles,
+      lastStopped,
+    });
     context.llm = { used: false, reason: err.message || String(err) };
   }
-
-  const workMode = ['craft', 'plan', 'ask'].includes(payload?.workMode)
-    ? payload.workMode
-    : getConfig().workMode;
-  const stylePack = modes.STYLES[payload?.stylePack]
-    ? payload.stylePack
-    : getConfig().stylePack;
 
   const modePrefix = modes.modePromptPrefix(workMode, message);
   let skillsIndex = '';
@@ -891,6 +917,9 @@ ipcMain.handle('agent:run', async (_e, payload) => {
   const basePrompt = buildContextPrompt(context, message, {
     projectName: p.name,
     taskTitle: taskTitle || tid,
+    workMode,
+    continueFrom: Boolean(payload?.isContinue),
+    lastStopped,
   });
   const fullPrompt = modePrefix + skillsIndex + basePrompt;
 
@@ -1066,6 +1095,10 @@ ipcMain.handle('context:compress', async (_e, payload = {}) => {
     projectName: payload.projectName || '',
     taskTitle: payload.taskTitle || '',
     contextMode: payload.contextMode || store.get('contextMode'),
+    workMode: payload.workMode || '',
+    turns: payload.turns || [],
+    changedFiles: payload.changedFiles || [],
+    lastStopped: Boolean(payload.lastStopped),
   });
 });
 

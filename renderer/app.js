@@ -460,10 +460,19 @@ function rebuildTaskMessages(task) {
 async function refreshTaskContext(task) {
   if (!task || !P()) return null;
   try {
+    const changedFiles = [...changesMap().keys()];
+    const lastTurn = Array.isArray(task.turns) && task.turns.length
+      ? task.turns[task.turns.length - 1]
+      : null;
     const ctx = await window.grok.compressContext({
       messages: task.messages || [],
       prevContext: task.context || {},
       projectName: P().name,
+      taskTitle: task.title || '',
+      workMode: task.turnMode || state.workMode || '',
+      turns: task.turns || [],
+      changedFiles,
+      lastStopped: Boolean(lastTurn?.stopped),
     });
     task.context = ctx;
     task.contextTiers = ctx.tiers;
@@ -8564,6 +8573,10 @@ async function runTaskPrompt(task, text, opts = {}) {
       contextMode: cfg.contextMode,
       workMode: modeUsed,
       stylePack: cfg.stylePack || 'default',
+      turns: task.turns || [],
+      changedFiles: [...changesMap().keys()],
+      isContinue: Boolean(opts.isContinue),
+      lastStopped: Boolean(opts.isContinue || opts.isStopCleanup),
     });
     flushStreamPaint(task);
 

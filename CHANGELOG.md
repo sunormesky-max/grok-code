@@ -11,6 +11,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 - See [ROADMAP.md](ROADMAP.md)
 
+## [1.9.3] — 2026-07-16
+
+### Core — context inheritance quality (L0–L3)
+
+- **L0**: prefer complete user→assistant pairs; mark interrupted replies
+- **L1**: denser prior merge + bullet extraction from older assistant turns
+- **L2**: open/TODO items, Diff changed files, turn trajectory (mode/停/完), stop hints
+- **L3**: weighted hot files from Diff; stronger constraint mining
+- **Prompt**: continue-from-stop guidance + changed-file list
+- Wire `turns` / `changedFiles` / `isContinue` from renderer → compress pipeline
+- Unit tests for stop-aware compression
+
 ## [1.9.2] — 2026-07-16
 
 ### Core — multi-task stream fairness
