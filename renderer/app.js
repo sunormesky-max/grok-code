@@ -2240,7 +2240,17 @@ function bindUi() {
   $('#btnCloseSettings').onclick = closeSettings;
   $('#btnSaveSettings').onclick = saveSettings;
   $('#btnProbeCli').onclick = () => refreshCliStatus();
-  $('#btnSend').onclick = sendPrompt;
+  $('#btnSend').onclick = () => {
+    const btn = $('#btnSend');
+    if (btn && !btn.disabled) {
+      btn.classList.remove('send-pulse');
+      // reflow to retrigger animation
+      void btn.offsetWidth;
+      btn.classList.add('send-pulse');
+      setTimeout(() => btn.classList.remove('send-pulse'), 500);
+    }
+    sendPrompt();
+  };
   $('#btnStop').onclick = stopAgent;
   $('#btnNewChat').onclick = () => addTask();
   $('#btnShareSession')?.addEventListener('click', () => openSessionShareCard());

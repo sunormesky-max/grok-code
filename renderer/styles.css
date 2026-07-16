@@ -3560,14 +3560,17 @@ button.pill:hover {
   outline: 1px dashed rgba(167, 139, 250, 0.55);
   box-shadow: 0 0 24px rgba(167, 139, 250, 0.15);
 }
-  animation: liveBlink 1s ease infinite;
-}
 .task-tab .task-dot {
   width: 6px;
   height: 6px;
   border-radius: 50%;
   background: var(--faint);
   flex-shrink: 0;
+}
+.task-tab.running .task-dot {
+  background: var(--mars);
+  box-shadow: 0 0 8px var(--mars-glow);
+  animation: liveBlink 1s ease infinite;
 }
 .task-tab .task-name {
   overflow: hidden;
@@ -5077,46 +5080,74 @@ body.booted #app {
   font-size: 13px;
 }
 
-/* ── Theme packs ── */
+/* ── Theme packs (base tokens; intensity in visual-impact-2.css) ── */
 body.theme-void {
   --bg: #000000;
   --bg-elev: #0a0a0a;
+  --bg-panel: rgba(12, 12, 12, 0.92);
   --panel: rgba(12,12,12,0.92);
   --ice: #e4e4e7;
+  --ice-dim: #a1a1aa;
   --accent: #a1a1aa;
-  --accent-glow: rgba(255,255,255,0.12);
-  --mars: #71717a;
+  --accent-2: #71717a;
+  --accent-glow: rgba(255,255,255,0.14);
+  --mars: #a1a1aa;
+  --mars-hot: #d4d4d8;
+  --mars-glow: rgba(161, 161, 170, 0.2);
   --ok: #a3e635;
+  --user-bg: linear-gradient(145deg, rgba(255,255,255,0.08), rgba(255,255,255,0.03));
+  --assistant-bg: linear-gradient(165deg, rgba(18,18,18,0.96), rgba(6,6,6,0.94));
 }
 body.theme-mars {
   --bg: #0c0604;
   --bg-elev: #1a0c08;
+  --bg-panel: rgba(28,12,8,0.9);
   --panel: rgba(28,12,8,0.9);
   --ice: #fdba74;
+  --ice-dim: #fb923c;
   --accent: #f97316;
-  --accent-glow: rgba(249,115,22,0.35);
+  --accent-2: #ea580c;
+  --accent-glow: rgba(249,115,22,0.4);
   --mars: #ea580c;
+  --mars-hot: #fb923c;
+  --mars-glow: rgba(249, 115, 22, 0.4);
   --ok: #fbbf24;
+  --user-bg: linear-gradient(145deg, rgba(249,115,22,0.12), rgba(255,255,255,0.04));
+  --assistant-bg: linear-gradient(165deg, rgba(32,14,8,0.96), rgba(12,6,4,0.94));
 }
 body.theme-ice {
   --bg: #020617;
   --bg-elev: #0c1a2e;
+  --bg-panel: rgba(8,20,40,0.92);
   --panel: rgba(8,20,40,0.92);
   --ice: #7dd3fc;
+  --ice-dim: #38bdf8;
   --accent: #38bdf8;
-  --accent-glow: rgba(56,189,248,0.4);
-  --mars: #67e8f9;
+  --accent-2: #22d3ee;
+  --accent-glow: rgba(56,189,248,0.45);
+  --mars: #22d3ee;
+  --mars-hot: #67e8f9;
+  --mars-glow: rgba(34, 211, 238, 0.35);
   --ok: #34d399;
+  --user-bg: linear-gradient(145deg, rgba(56,189,248,0.12), rgba(34,211,238,0.05));
+  --assistant-bg: linear-gradient(165deg, rgba(8,24,48,0.96), rgba(2,8,20,0.94));
 }
 body.theme-ember {
   --bg: #0a0404;
   --bg-elev: #1c0a0a;
+  --bg-panel: rgba(32,10,10,0.92);
   --panel: rgba(32,10,10,0.92);
   --ice: #fecaca;
+  --ice-dim: #fca5a5;
   --accent: #f87171;
-  --accent-glow: rgba(248,113,113,0.35);
+  --accent-2: #ef4444;
+  --accent-glow: rgba(248,113,113,0.4);
   --mars: #ef4444;
+  --mars-hot: #f87171;
+  --mars-glow: rgba(239, 68, 68, 0.35);
   --ok: #fbbf24;
+  --user-bg: linear-gradient(145deg, rgba(248,113,113,0.12), rgba(255,255,255,0.03));
+  --assistant-bg: linear-gradient(165deg, rgba(36,10,10,0.96), rgba(12,4,4,0.94));
 }
 
 .mgmt-section-title {

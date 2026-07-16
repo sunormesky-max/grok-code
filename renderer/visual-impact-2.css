@@ -1,0 +1,405 @@
+/* ═══════════════════════════════════════════════════════
+   GrokCode Visual Impact 2 — stream · live · micro · themes
+   ═══════════════════════════════════════════════════════ */
+
+/* ── Chat message stream drama ───────────────────────── */
+body.layout-v15 .messages {
+  gap: 14px;
+  padding: 16px 14px 18px;
+}
+body.layout-v15 .msg {
+  animation: msgInImpact 0.38s var(--ease) both;
+  backdrop-filter: blur(8px);
+}
+@keyframes msgInImpact {
+  from {
+    opacity: 0;
+    transform: translateY(14px) scale(0.96);
+    filter: blur(2px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+    filter: none;
+  }
+}
+body.layout-v15 .msg.user {
+  background: linear-gradient(
+    145deg,
+    rgba(255, 255, 255, 0.1),
+    rgba(125, 211, 252, 0.08) 50%,
+    rgba(249, 115, 22, 0.05)
+  ) !important;
+  border-color: rgba(125, 211, 252, 0.22) !important;
+  box-shadow:
+    0 8px 28px rgba(0, 0, 0, 0.35),
+    0 0 24px rgba(125, 211, 252, 0.06),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08) !important;
+}
+body.layout-v15 .msg.assistant {
+  border-color: rgba(125, 211, 252, 0.2) !important;
+  box-shadow:
+    0 8px 32px rgba(0, 0, 0, 0.4),
+    inset 0 1px 0 rgba(125, 211, 252, 0.08),
+    0 0 28px rgba(125, 211, 252, 0.05) !important;
+}
+body.layout-v15 .msg.assistant::before {
+  width: 3px;
+  opacity: 0.9;
+  background: linear-gradient(180deg, #7dd3fc, #bae6fd 40%, #fb923c) !important;
+  box-shadow: 0 0 10px rgba(125, 211, 252, 0.45);
+}
+body.layout-v15 .msg.assistant[data-live="1"] {
+  border-color: rgba(56, 189, 248, 0.35) !important;
+  box-shadow:
+    0 8px 32px rgba(0, 0, 0, 0.4),
+    0 0 0 1px rgba(56, 189, 248, 0.12),
+    0 0 36px rgba(56, 189, 248, 0.12) !important;
+}
+body.layout-v15 .msg.tool {
+  border-color: rgba(125, 211, 252, 0.22) !important;
+  background: linear-gradient(135deg, rgba(8, 20, 32, 0.95), rgba(0, 0, 0, 0.55)) !important;
+  box-shadow: inset 0 0 0 1px rgba(125, 211, 252, 0.06);
+}
+body.layout-v15 .msg.thought {
+  background: linear-gradient(135deg, rgba(249, 115, 22, 0.08), rgba(0, 0, 0, 0.35)) !important;
+  border-color: rgba(249, 115, 22, 0.28) !important;
+  box-shadow: 0 0 20px rgba(249, 115, 22, 0.06);
+}
+body.layout-v15 .msg.role,
+body.layout-v15 .msg .role {
+  letter-spacing: 0.1em;
+  font-size: 10px;
+  text-transform: uppercase;
+  opacity: 0.75;
+}
+
+/* Streaming cursor polish if present */
+body.layout-v15 .stream-body::after,
+body.layout-v15 .msg.assistant[data-live="1"] .body::after {
+  content: "";
+  display: inline-block;
+  width: 6px;
+  height: 1em;
+  margin-left: 2px;
+  vertical-align: text-bottom;
+  background: linear-gradient(180deg, #7dd3fc, #fb923c);
+  box-shadow: 0 0 8px rgba(125, 211, 252, 0.5);
+  animation: streamCaret 0.9s steps(1) infinite;
+  opacity: 0;
+}
+body.layout-v15 .msg.assistant[data-live="1"] .body::after {
+  opacity: 0.85;
+}
+@keyframes streamCaret {
+  50% {
+    opacity: 0.15;
+  }
+}
+
+/* ── Live timeline drama ─────────────────────────────── */
+body.layout-v15 .live-timeline {
+  gap: 8px;
+  padding: 12px 14px 18px;
+}
+body.layout-v15 .live-event {
+  animation: liveEventIn 0.32s var(--ease) both;
+}
+@keyframes liveEventIn {
+  from {
+    opacity: 0;
+    transform: translateX(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+body.layout-v15 .live-event .dot {
+  width: 9px;
+  height: 9px;
+  position: relative;
+}
+body.layout-v15 .live-event .dot::after {
+  content: "";
+  position: absolute;
+  inset: -4px;
+  border-radius: 50%;
+  border: 1px solid currentColor;
+  opacity: 0.25;
+}
+body.layout-v15 .live-event.tool .dot {
+  box-shadow: 0 0 12px rgba(125, 211, 252, 0.65);
+}
+body.layout-v15 .live-event.write .dot {
+  box-shadow: 0 0 12px rgba(249, 115, 22, 0.65);
+}
+body.layout-v15 .live-event.error .dot {
+  box-shadow: 0 0 12px rgba(251, 113, 133, 0.65);
+}
+body.layout-v15 .live-event.done .dot {
+  box-shadow: 0 0 12px rgba(74, 222, 128, 0.55);
+}
+body.layout-v15 .live-event .card {
+  background: linear-gradient(145deg, rgba(12, 16, 26, 0.85), rgba(0, 0, 0, 0.4));
+  border-color: rgba(125, 211, 252, 0.1);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+  transition: border-color 0.15s, box-shadow 0.15s, transform 0.12s;
+}
+body.layout-v15 .live-event:hover .card {
+  border-color: rgba(125, 211, 252, 0.28);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35), 0 0 16px rgba(125, 211, 252, 0.08);
+  transform: translateX(2px);
+}
+body.layout-v15 .live-event.write .card {
+  border-color: rgba(249, 115, 22, 0.22);
+}
+body.layout-v15 .live-event.write:hover .card {
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35), 0 0 18px rgba(249, 115, 22, 0.12);
+}
+body.layout-v15 .live-event.running .card {
+  border-color: rgba(249, 115, 22, 0.4);
+  animation: toolCardPulse 1.5s ease infinite;
+}
+@keyframes toolCardPulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(249, 115, 22, 0.15);
+  }
+  50% {
+    box-shadow: 0 0 0 4px rgba(249, 115, 22, 0.06), 0 0 20px rgba(249, 115, 22, 0.12);
+  }
+}
+/* Timeline vertical energy rail */
+body.layout-v15 .live-event {
+  position: relative;
+}
+body.layout-v15 .live-event:not(:last-child) .dot::before {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 12px;
+  width: 1px;
+  height: calc(100% + 8px);
+  transform: translateX(-50%);
+  background: linear-gradient(180deg, rgba(125, 211, 252, 0.35), rgba(249, 115, 22, 0.15), transparent);
+  opacity: 0.7;
+}
+
+/* ── Micro-interactions ──────────────────────────────── */
+/* Send pulse on click */
+body.layout-v15 .btn.primary.send-pulse {
+  animation: sendPulse 0.45s var(--ease);
+}
+@keyframes sendPulse {
+  0% {
+    transform: scale(1);
+    filter: brightness(1);
+  }
+  35% {
+    transform: scale(0.94);
+    filter: brightness(1.15);
+  }
+  70% {
+    transform: scale(1.04);
+    box-shadow:
+      0 0 0 1px rgba(255, 255, 255, 0.2),
+      0 0 40px rgba(56, 189, 248, 0.55),
+      0 0 60px rgba(249, 115, 22, 0.25) !important;
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+/* Task switch flash */
+body.layout-v15 .task-tab {
+  transition: border-color 0.15s, background 0.15s, box-shadow 0.15s, transform 0.12s;
+}
+body.layout-v15 .task-tab:active {
+  transform: scale(0.97);
+}
+body.layout-v15 .task-tab.active {
+  animation: taskSelect 0.35s var(--ease);
+}
+@keyframes taskSelect {
+  0% {
+    box-shadow: 0 0 0 0 rgba(56, 189, 248, 0.4);
+  }
+  100% {
+    box-shadow: 0 0 14px rgba(56, 189, 248, 0.12);
+  }
+}
+body.layout-v15 .task-tab.running {
+  border-color: rgba(249, 115, 22, 0.4) !important;
+}
+body.layout-v15 .task-tab.running .task-dot {
+  background: #f97316;
+  box-shadow: 0 0 10px rgba(249, 115, 22, 0.7);
+}
+
+/* Diff scrub tick / film card interactions */
+body.layout-v15 .diff-scrub-tick {
+  transition: border-color 0.12s, background 0.12s, transform 0.1s, box-shadow 0.15s;
+}
+body.layout-v15 .diff-scrub-tick:hover {
+  transform: translateY(-1px);
+}
+body.layout-v15 .diff-scrub-tick.active {
+  box-shadow: 0 0 14px rgba(56, 189, 248, 0.25);
+  animation: scrubTickIn 0.3s var(--ease);
+}
+@keyframes scrubTickIn {
+  from {
+    box-shadow: 0 0 0 0 rgba(56, 189, 248, 0.5);
+  }
+}
+body.layout-v15 .diff-film-card {
+  transition: border-color 0.15s, box-shadow 0.15s, transform 0.12s;
+}
+body.layout-v15 .diff-film-card:hover {
+  transform: translateY(-2px);
+}
+body.layout-v15 .diff-film-card.active {
+  box-shadow:
+    0 0 0 1px rgba(56, 189, 248, 0.35),
+    0 0 22px rgba(56, 189, 248, 0.2);
+}
+body.layout-v15 .diff-scrub-play:active,
+body.layout-v15 .diff-scrub-nav:active {
+  transform: scale(0.92);
+}
+
+/* Layout preset micro-press */
+body.layout-v15 .layout-preset:active {
+  transform: scale(0.94);
+}
+
+/* ── Theme intensity packs (void / ice / mars / ember) ── */
+/* Void: monochrome stellar */
+body.theme-void.layout-v15 {
+  --impact-ice: #e4e4e7;
+  --impact-mars: #a1a1aa;
+  --accent-glow: rgba(255, 255, 255, 0.18);
+  --mars-glow: rgba(161, 161, 170, 0.2);
+}
+body.theme-void.layout-v15 .chat.glass,
+body.theme-void.layout-v15 .agent-primary.glass {
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    0 20px 60px rgba(0, 0, 0, 0.7),
+    0 0 40px rgba(255, 255, 255, 0.04) !important;
+}
+body.theme-void.layout-v15 .btn.primary {
+  background: linear-gradient(105deg, #e4e4e7, #a1a1aa 60%, #71717a) !important;
+  color: #0a0a0a !important;
+  box-shadow: 0 0 24px rgba(255, 255, 255, 0.15) !important;
+}
+body.theme-void.layout-v15 .topbar::after {
+  background: linear-gradient(90deg, transparent, #e4e4e7, #71717a, transparent);
+}
+body.theme-void.layout-v15 .nebula-a {
+  background: radial-gradient(circle, rgba(255, 255, 255, 0.12), transparent 68%);
+}
+body.theme-void.layout-v15 .nebula-b {
+  background: radial-gradient(circle, rgba(161, 161, 170, 0.1), transparent 70%);
+}
+
+/* Ice: deep cyan command */
+body.theme-ice.layout-v15 {
+  --impact-ice: #38bdf8;
+  --impact-mars: #22d3ee;
+  --mars: #22d3ee;
+  --mars-hot: #67e8f9;
+  --mars-glow: rgba(34, 211, 238, 0.3);
+}
+body.theme-ice.layout-v15 .btn.primary {
+  background: linear-gradient(105deg, #0ea5e9, #38bdf8 45%, #22d3ee 100%) !important;
+  color: #020617 !important;
+  box-shadow: 0 0 32px rgba(56, 189, 248, 0.45) !important;
+}
+body.theme-ice.layout-v15 .chat.glass {
+  box-shadow:
+    0 0 0 1px rgba(56, 189, 248, 0.15),
+    0 20px 60px rgba(0, 0, 0, 0.6),
+    0 0 60px rgba(56, 189, 248, 0.15) !important;
+}
+body.theme-ice.layout-v15 .topbar::after {
+  background: linear-gradient(90deg, transparent, #38bdf8, #22d3ee, transparent);
+  box-shadow: 0 0 20px rgba(56, 189, 248, 0.5);
+}
+body.theme-ice.layout-v15 .msg.assistant::before {
+  background: linear-gradient(180deg, #7dd3fc, #22d3ee) !important;
+}
+
+/* Mars: heat / aggression */
+body.theme-mars.layout-v15 {
+  --impact-ice: #fdba74;
+  --impact-mars: #f97316;
+  --accent-glow: rgba(249, 115, 22, 0.4);
+}
+body.theme-mars.layout-v15 .btn.primary {
+  background: linear-gradient(105deg, #ea580c, #f97316 40%, #fbbf24 100%) !important;
+  color: #1c0a04 !important;
+  box-shadow: 0 0 32px rgba(249, 115, 22, 0.45) !important;
+}
+body.theme-mars.layout-v15 .chat.glass {
+  box-shadow:
+    0 0 0 1px rgba(249, 115, 22, 0.2),
+    0 20px 60px rgba(0, 0, 0, 0.65),
+    0 0 55px rgba(249, 115, 22, 0.12) !important;
+}
+body.theme-mars.layout-v15 .chat .panel-label {
+  color: #fdba74 !important;
+  text-shadow: 0 0 14px rgba(249, 115, 22, 0.45) !important;
+}
+body.theme-mars.layout-v15 .topbar::after {
+  background: linear-gradient(90deg, transparent, #fb923c, #f97316, #ea580c, transparent);
+}
+body.theme-mars.layout-v15 .msg.assistant::before {
+  background: linear-gradient(180deg, #fdba74, #f97316) !important;
+}
+body.theme-mars.layout-v15 .nebula-a {
+  background: radial-gradient(circle, rgba(249, 115, 22, 0.22), transparent 68%);
+}
+
+/* Ember: red-hot residual */
+body.theme-ember.layout-v15 {
+  --impact-ice: #fecaca;
+  --impact-mars: #ef4444;
+}
+body.theme-ember.layout-v15 .btn.primary {
+  background: linear-gradient(105deg, #dc2626, #f87171 50%, #fbbf24) !important;
+  color: #1c0505 !important;
+  box-shadow: 0 0 28px rgba(248, 113, 113, 0.4) !important;
+}
+body.theme-ember.layout-v15 .topbar::after {
+  background: linear-gradient(90deg, transparent, #f87171, #ef4444, transparent);
+}
+
+/* Intensity boost helper class (optional from settings later) */
+body.layout-v15.fx-high .holo-beam {
+  opacity: 0.55;
+}
+body.layout-v15.fx-high .nebula {
+  opacity: 0.55;
+}
+body.layout-v15.fx-high .chat.glass {
+  box-shadow:
+    0 0 0 1px rgba(125, 211, 252, 0.15),
+    0 24px 70px rgba(0, 0, 0, 0.7),
+    0 0 70px rgba(125, 211, 252, 0.14),
+    0 0 100px rgba(249, 115, 22, 0.06) !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body.layout-v15 .msg,
+  body.layout-v15 .live-event,
+  body.layout-v15 .btn.primary.send-pulse,
+  body.layout-v15 .task-tab.active,
+  body.layout-v15 .diff-scrub-tick.active,
+  body.layout-v15 .live-event.running .card,
+  body.layout-v15 .msg.assistant[data-live="1"] .body::after {
+    animation: none !important;
+  }
+}

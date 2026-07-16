@@ -11,6 +11,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 - See [ROADMAP.md](ROADMAP.md)
 
+## [1.5.5] — 2026-07-16
+
+### Visual impact 2 — stream · themes · micro
+
+- **Chat stream**: stronger user/assistant/tool/thought cards, live stream edge + caret pulse
+- **Live timeline**: entrance motion, energy rail, kind-colored glows, hover lift
+- **Themes**: Void / Ice / Mars / Ember intensity layered on flight-deck (settings → 主题)
+- **Micro**: Send button pulse, task select flash, Diff scrub/film card press feedback
+- Fix orphan CSS around task-tab running dot
+
 ## [1.5.4] — 2026-07-16
 
 ### Visual impact — flight deck

@@ -44,12 +44,13 @@ Living plan for the GrokCode open-source ecosystem. Order may change based on co
 - [x] Auto-Pilot ultra-wide · storyboard filmstrip import (v1.5.2)
 - [x] Storyboard disk rehydrate when paths exist (v1.5.3)
 - [x] Visual impact flight-deck polish (v1.5.4)
+- [x] Chat/Live drama · theme intensity · micro-interactions (v1.5.5)
 
 ## Now (UI / experience)
 
-- [ ] Visual polish pass 2: chat message stream + Live timeline drama
-- [ ] Theme packs: void / ice / mars intensity variants
-- [ ] Micro-interactions: send, task switch, Diff scrub
+- [ ] Optional fx-high intensity toggle in settings
+- [ ] Boot sequence visual refresh
+- [ ] Diff filmstrip / storyboard visual parity with Agent HUD
 
 ## Deferred (services — not now)
 
