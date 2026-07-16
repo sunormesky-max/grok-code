@@ -32,12 +32,13 @@ Living plan for the GrokCode open-source ecosystem. Order may change based on co
 - [x] Diff play scrub · welcome ★ · `.grok/templates.json` (v1.4.2)
 - [x] Scrub speed · open templates in Code · welcome apply&send (v1.4.3)
 - [x] Loop scrub · welcome context menu · Diff filmstrip (v1.4.4)
+- [x] Filmstrip hover paths · L loop · storyboard export (v1.4.5)
 
 ## Next
 
-- [ ] Filmstrip hover preview of top changed file paths
-- [ ] Keyboard shortcut for loop toggle
-- [ ] Export filmstrip storyboard as PNG/markdown
+- [ ] Storyboard PNG/HTML render (beyond Markdown)
+- [ ] Click path in filmstrip tip → open file in Code
+- [ ] Shared review link for storyboard (local HTML pack)
 - [ ] Optional true cloud template vault (accounted service)
 
 ## Later

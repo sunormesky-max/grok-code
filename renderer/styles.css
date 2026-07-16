@@ -2657,6 +2657,79 @@ button.pill:hover {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.diff-scrub-export {
+  appearance: none;
+  border: 1px solid rgba(125, 211, 252, 0.3);
+  background: rgba(0, 0, 0, 0.3);
+  color: #7dd3fc;
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 12px;
+}
+.diff-scrub-export:hover {
+  border-color: rgba(52, 211, 153, 0.55);
+  color: #6ee7b7;
+  background: rgba(52, 211, 153, 0.1);
+}
+
+/* Filmstrip path hover panel */
+.diff-film-tip {
+  position: fixed;
+  z-index: 14000;
+  width: min(300px, 90vw);
+  max-height: min(360px, 50vh);
+  overflow: auto;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(125, 211, 252, 0.35);
+  background: rgba(8, 10, 18, 0.97);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.55);
+  pointer-events: none;
+  font-size: 11.5px;
+  color: #e4e4e7;
+}
+.diff-film-tip.hidden {
+  display: none;
+}
+.diff-film-tip .dft-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+  font-family: var(--mono);
+  font-size: 11px;
+}
+.diff-film-tip .dft-head strong {
+  color: #7dd3fc;
+}
+.diff-film-tip .dft-prompt {
+  font-size: 11px;
+  color: var(--muted);
+  margin-bottom: 8px;
+  line-height: 1.35;
+  word-break: break-word;
+}
+.diff-film-tip .dft-label {
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #fbbf24;
+  margin-bottom: 4px;
+  font-family: var(--mono);
+}
+.diff-film-tip .dft-paths {
+  margin: 0;
+  padding: 0 0 0 14px;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  line-height: 1.45;
+  word-break: break-all;
+}
+.diff-film-tip .dft-paths li {
+  margin-bottom: 2px;
+}
 
 /* Welcome context menu */
 .welcome-ctx-menu {

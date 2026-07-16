@@ -458,6 +458,26 @@
         }),
       },
       {
+        id: 'diff.loop',
+        title: t('cmd.diff.loop', 'Diff 循环播放开关'),
+        keywords: 'diff loop scrub 循环',
+        group: 'actions',
+        run: run(() => {
+          global.switchTab?.('diff');
+          global.toggleScrubLoop?.();
+        }),
+      },
+      {
+        id: 'diff.storyboard',
+        title: t('cmd.diff.storyboard', '导出 Diff storyboard'),
+        keywords: 'diff export storyboard filmstrip markdown',
+        group: 'actions',
+        run: run(() => {
+          global.switchTab?.('diff');
+          global.exportFilmstripStoryboard?.();
+        }),
+      },
+      {
         id: 'diff.restoreTurn',
         title: t('cmd.diff.restoreTurn', 'Diff 整轮还原'),
         keywords: 'diff restore turn 整轮 还原 checkpoint',

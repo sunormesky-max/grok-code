@@ -2124,6 +2124,12 @@ function bindShortcuts() {
         toggleScrubPlay();
         return;
       }
+      // L = loop toggle
+      if (e.key === 'l' || e.key === 'L') {
+        e.preventDefault();
+        toggleScrubLoop();
+        return;
+      }
     }
     if (e.key === 'Escape') {
       hideSlashMenu();
@@ -4482,24 +4488,160 @@ function filmstripHtml(turns) {
     ${turns
       .map((t) => {
         const heat = heatFn(t.ts);
-        const n = t.files?.size || 0;
-        const names = [...(t.files || [])]
+        const paths = [...(t.files || [])];
+        const n = paths.length;
+        const names = paths
           .slice(0, 4)
           .map((p) => String(p).split(/[/\\]/).pop())
           .join(', ');
         const time = t.ts ? new Date(t.ts).toLocaleTimeString() : '—';
         const title = t.taskTitle || 'turn';
-        return `<button type="button" class="diff-film-card heat-${heat}${cur === t.key ? ' active' : ''}" data-scrub="${esc(t.key)}" title="${esc(title)} · ${n} files · ${esc(String(t.prompt || '').slice(0, 100))}">
+        // encode full paths for hover panel (base64 to avoid quote issues)
+        const pathsB64 = btoa(unescape(encodeURIComponent(JSON.stringify(paths))));
+        return `<button type="button" class="diff-film-card heat-${heat}${cur === t.key ? ' active' : ''}" data-scrub="${esc(t.key)}" data-paths-b64="${pathsB64}" data-task="${esc(title)}" data-prompt="${esc(String(t.prompt || '').slice(0, 200))}" data-time="${esc(time)}" data-heat="${heat}">
           <span class="dfc-heat heat-${heat}"></span>
           <span class="dfc-time">${esc(time)}</span>
           <span class="dfc-title">${esc(String(title).slice(0, 18))}</span>
-          <span class="dfc-meta">${n} files</span>
+          <span class="dfc-meta">${n} files · H${heat}</span>
           <span class="dfc-files">${esc(names)}${n > 4 ? '…' : ''}</span>
         </button>`;
       })
       .join('')}
   </div>`;
 }
+
+/** Hover panel listing full paths for a filmstrip card */
+function bindFilmstripHover(root) {
+  if (!root) return;
+  let tip = document.getElementById('diffFilmTip');
+  if (!tip) {
+    tip = document.createElement('div');
+    tip.id = 'diffFilmTip';
+    tip.className = 'diff-film-tip hidden';
+    document.body.appendChild(tip);
+  }
+  const hide = () => tip.classList.add('hidden');
+  root.querySelectorAll('.diff-film-card').forEach((card) => {
+    card.addEventListener('mouseenter', (e) => {
+      let paths = [];
+      try {
+        paths = JSON.parse(decodeURIComponent(escape(atob(card.dataset.pathsB64 || ''))));
+      } catch {
+        paths = [];
+      }
+      const task = card.dataset.task || 'turn';
+      const prompt = card.dataset.prompt || '';
+      const time = card.dataset.time || '';
+      const heat = card.dataset.heat || '0';
+      const en = localeIsEn();
+      tip.innerHTML = `
+        <div class="dft-head">
+          <strong>${esc(task)}</strong>
+          <span>${esc(time)} · heat ${esc(heat)}</span>
+        </div>
+        ${prompt ? `<div class="dft-prompt">${esc(prompt)}</div>` : ''}
+        <div class="dft-label">${en ? 'Changed files' : '变更文件'} (${paths.length})</div>
+        <ul class="dft-paths">
+          ${
+            paths.length
+              ? paths.map((p) => `<li title="${esc(p)}">${esc(p)}</li>`).join('')
+              : `<li class="muted">${en ? '(none)' : '（无）'}</li>`
+          }
+        </ul>`;
+      tip.classList.remove('hidden');
+      const x = Math.min(e.clientX + 14, window.innerWidth - 320);
+      const y = Math.min(e.clientY + 12, window.innerHeight - 200);
+      tip.style.left = `${x}px`;
+      tip.style.top = `${y}px`;
+    });
+    card.addEventListener('mousemove', (e) => {
+      if (tip.classList.contains('hidden')) return;
+      tip.style.left = `${Math.min(e.clientX + 14, window.innerWidth - 320)}px`;
+      tip.style.top = `${Math.min(e.clientY + 12, window.innerHeight - 200)}px`;
+    });
+    card.addEventListener('mouseleave', hide);
+  });
+}
+
+/** Export turn filmstrip as Markdown storyboard */
+async function exportFilmstripStoryboard() {
+  const turns = collectGlobalTurns();
+  if (!turns.length) {
+    toast(localeIsEn() ? 'No turns to export' : '暂无 turn 可导出', 'err');
+    return;
+  }
+  const en = localeIsEn();
+  const proj = P();
+  const heatFn =
+    typeof window.DiffUtil?.heatFromTs === 'function' ? window.DiffUtil.heatFromTs : () => 0;
+  const lines = [
+    `# GrokCode Diff Storyboard`,
+    '',
+    `- **Project**: ${proj?.name || '—'}`,
+    `- **Path**: ${proj?.path || '—'}`,
+    `- **Turns**: ${turns.length}`,
+    `- **Exported**: ${new Date().toISOString()}`,
+    '',
+    '---',
+    '',
+  ];
+  turns.forEach((t, i) => {
+    const heat = heatFn(t.ts);
+    const paths = [...(t.files || [])];
+    const time = t.ts ? new Date(t.ts).toISOString() : '—';
+    lines.push(`## Turn ${i + 1} · ${t.taskTitle || 'task'} · heat ${heat}`);
+    lines.push('');
+    lines.push(`- **Time**: ${time}`);
+    lines.push(`- **Key**: \`${t.key}\``);
+    if (t.prompt) lines.push(`- **Prompt**: ${String(t.prompt).replace(/\n/g, ' ').slice(0, 300)}`);
+    lines.push(`- **Files** (${paths.length}):`);
+    paths.forEach((p) => lines.push(`  - \`${p}\``));
+    lines.push('');
+  });
+  lines.push('---');
+  lines.push('');
+  lines.push('_Generated by GrokCode Diff filmstrip_');
+  const markdown = lines.join('\n');
+  try {
+    const safe = String(proj?.name || 'session')
+      .replace(/[^\w\u4e00-\u9fff.-]+/g, '-')
+      .slice(0, 40);
+    const r = await window.grok.sessionExportShare({
+      markdown,
+      json: JSON.stringify(
+        {
+          format: 'grokcode-storyboard-v1',
+          project: { name: proj?.name, path: proj?.path },
+          exportedAt: new Date().toISOString(),
+          turns: turns.map((t) => ({
+            key: t.key,
+            turnId: t.turnId,
+            ts: t.ts,
+            taskTitle: t.taskTitle,
+            prompt: t.prompt,
+            heat: heatFn(t.ts),
+            files: [...(t.files || [])],
+          })),
+        },
+        null,
+        2
+      ),
+      defaultName: `grok-storyboard-${safe}.md`,
+    });
+    if (r?.canceled) return;
+    if (r?.ok) toast((en ? 'Storyboard saved: ' : '已导出 storyboard：') + (r.file || ''), 'ok');
+    else toast(r?.error || 'export failed', 'err');
+  } catch (e) {
+    // fallback: clipboard
+    try {
+      await navigator.clipboard.writeText(markdown);
+      toast(en ? 'Storyboard copied (save dialog failed)' : '已复制 storyboard（保存失败）', 'ok');
+    } catch {
+      toast(e.message || 'export failed', 'err');
+    }
+  }
+}
+window.exportFilmstripStoryboard = exportFilmstripStoryboard;
 
 function scrubberHtml(turns) {
   if (!turns.length) return '';
@@ -4513,7 +4655,8 @@ function scrubberHtml(turns) {
     <span class="diff-scrub-label">Turn timeline</span>
     <button type="button" class="diff-cp-chip${!cur ? ' active' : ''}" data-scrub="">${en ? 'All / Live' : '全部 / Live'}</button>
     <button type="button" class="diff-scrub-play${playing ? ' on' : ''}" data-scrub-play="1" title="${en ? 'Play / pause auto-scrub' : '播放 / 暂停自动 scrub'}">${playing ? '❚❚' : '▶'}</button>
-    <button type="button" class="diff-scrub-loop${loop ? ' on' : ''}" data-scrub-loop="1" title="${en ? 'Loop playback' : '循环播放'}">↻</button>
+    <button type="button" class="diff-scrub-loop${loop ? ' on' : ''}" data-scrub-loop="1" title="${en ? 'Loop playback (L)' : '循环播放 (L)'}">↻</button>
+    <button type="button" class="diff-scrub-export" data-scrub-export="1" title="${en ? 'Export storyboard Markdown' : '导出 storyboard Markdown'}">⬇</button>
     <span class="diff-scrub-speeds" title="${en ? 'Playback speed' : '播放倍速'}">
       ${SCRUB_SPEEDS.map(
         (s) =>
@@ -4532,7 +4675,7 @@ function scrubberHtml(turns) {
         })
         .join('')}
     </div>
-    <span class="muted" style="font-size:10px"><kbd>[</kbd><kbd>]</kbd> · ▶ · ${speed}x${loop ? ' · ↻' : ''}</span>
+    <span class="muted" style="font-size:10px"><kbd>[</kbd><kbd>]</kbd> · ▶ · <kbd>L</kbd> · ${speed}x${loop ? ' · ↻' : ''}</span>
   </div>${filmstripHtml(turns)}`;
 }
 
@@ -5005,6 +5148,9 @@ function renderDiffPane() {
   });
   content.querySelector('[data-scrub-play]')?.addEventListener('click', () => toggleScrubPlay());
   content.querySelector('[data-scrub-loop]')?.addEventListener('click', () => toggleScrubLoop());
+  content.querySelector('[data-scrub-export]')?.addEventListener('click', () => {
+    exportFilmstripStoryboard();
+  });
   content.querySelectorAll('[data-speed]').forEach((btn) => {
     btn.onclick = (e) => {
       e.stopPropagation();
@@ -5012,6 +5158,7 @@ function renderDiffPane() {
       toast(`${btn.dataset.speed}x`, 'ok');
     };
   });
+  bindFilmstripHover(content);
   // filmstrip cards share data-scrub
   const range = content.querySelector('#diffScrubRange');
   if (range && globalTurns.length) {

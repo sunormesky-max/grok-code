@@ -11,6 +11,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 - See [ROADMAP.md](ROADMAP.md)
 
+## [1.4.5] — 2026-07-16
+
+### Filmstrip polish
+
+- **Hover paths**: filmstrip cards show floating full file path list + prompt snippet
+- **Loop shortcut**: Diff tab **L** toggles loop (same as ↻)
+- **Export storyboard**: ⬇ exports Markdown (+ JSON) of all turns / files
+
 ## [1.4.4] — 2026-07-16
 
 ### Loop · context menu · filmstrip
