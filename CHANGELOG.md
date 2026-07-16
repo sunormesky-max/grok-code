@@ -11,6 +11,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 - See [ROADMAP.md](ROADMAP.md)
 
+## [1.8.1] — 2026-07-16
+
+### Code / Diff chrome collapse — keep body visible
+
+- **Diff**: turn tools (filmstrip · export · ticks · notes) behind **▸ 工具** (default collapsed); checkpoints collapse to one summary row
+- **Diff layout**: chrome stack + scrollable body so line diffs always fill remaining height
+- **Code**: Outline **default collapsed** (▸ rail); expand when needed
+- Center tabs **nowrap** (no second row stealing height); Diff toolbar single-row scroll
+- Heat legend default **off**
+
 ## [1.8.0] — 2026-07-16
 
 ### Layout simplify — default shell converge

@@ -89,8 +89,12 @@ const state = {
   attachments: [],
   /** play chime when background task finishes */
   notifySound: loadJson('grokcode-notify-sound', true) !== false,
-  /** show blame heat legend in Diff */
-  diffHeatLegend: loadJson('grokcode-diff-heat-legend', true) !== false,
+  /** show blame heat legend in Diff — default off (saves chrome height) */
+  diffHeatLegend: loadJson('grokcode-diff-heat-legend', false) === true,
+  /** Diff advanced chrome: filmstrip / exports / notes (default collapsed) */
+  diffChromeOpen: loadJson('grokcode-diff-chrome-open', false) === true,
+  /** Checkpoint bar expanded (default collapsed to one row) */
+  diffCpOpen: loadJson('grokcode-diff-cp-open', false) === true,
   /** global turn scrubber key (turnId or ts-*) or null */
   diffScrubTurn: null,
   /** auto-play scrub through turns */
@@ -6503,39 +6507,57 @@ function scrubberHtml(turns) {
   const playing = state.diffScrubPlaying;
   const speed = Number(state.diffScrubPlaySpeed) || 1;
   const loop = state.diffScrubLoop;
+  const chromeOpen = Boolean(state.diffChromeOpen);
   const budgetMode = getStoryboardBudgetMode();
   const budgetLabels = en
     ? { full: 'Full', balanced: 'Bal', compact: 'Sml' }
     : { full: '全量', balanced: '均衡', compact: '精简' };
-  return `<div class="diff-scrub-bar" id="diffScrubBar">
-    <span class="diff-scrub-label">Turn timeline</span>
-    <button type="button" class="diff-cp-chip${!cur ? ' active' : ''}" data-scrub="">${en ? 'All / Live' : '全部 / Live'}</button>
-    <button type="button" class="diff-scrub-play${playing ? ' on' : ''}" data-scrub-play="1" title="${en ? 'Play / pause auto-scrub' : '播放 / 暂停自动 scrub'}">${playing ? '❚❚' : '▶'}</button>
-    <button type="button" class="diff-scrub-loop${loop ? ' on' : ''}" data-scrub-loop="1" title="${en ? 'Loop playback (L)' : '循环播放 (L)'}">↻</button>
-    <button type="button" class="diff-scrub-export" data-scrub-export="1" title="${en ? 'Export Markdown' : '导出 Markdown'}">⬇</button>
-    <button type="button" class="diff-scrub-export html" data-scrub-export-html="1" title="${en ? 'Export HTML review pack' : '导出 HTML 审阅包'}">HTML</button>
-    <button type="button" class="diff-scrub-export html" data-scrub-export-png="1" title="${en ? 'Export PNG overview' : '导出 PNG 总览'}">PNG</button>
-    <button type="button" class="diff-scrub-export html" data-scrub-export-folder="1" title="${en ? 'Export review folder (HTML+MD+JSON+PNG)' : '导出审阅文件夹'}">📁</button>
-    <button type="button" class="diff-scrub-export html" data-scrub-compare="1" title="${en ? 'Compare two packs (JSON/HTML/encrypted)' : '对比两个包（JSON/HTML/加密）'}">A|B</button>
-    <button type="button" class="diff-scrub-export html" data-scrub-import="1" title="${en ? 'Import storyboard into filmstrip' : '导入 storyboard 到胶片条'}">⬆</button>
-    <button type="button" class="diff-scrub-export html" data-scrub-export-enc="1" title="${en ? 'Export encrypted storyboard JSON' : '导出加密 storyboard JSON'}">🔒</button>
-    <span class="diff-scrub-budget" title="${en ? 'Export pack size budget' : '导出包体积预算'}">
-      ${['full', 'balanced', 'compact']
-        .map(
-          (m) =>
-            `<button type="button" class="diff-budget-chip${budgetMode === m ? ' active' : ''}" data-budget-mode="${m}" title="${m} · ${Math.round(STORYBOARD_BUDGET_MODES[m] / 1000)}k">${budgetLabels[m]}</button>`
-        )
-        .join('')}
-    </span>
-    <span class="diff-scrub-speeds" title="${en ? 'Playback speed' : '播放倍速'}">
-      ${SCRUB_SPEEDS.map(
-        (s) =>
-          `<button type="button" class="diff-scrub-speed${speed === s ? ' active' : ''}" data-speed="${s}">${s}x</button>`
-      ).join('')}
-    </span>
+  const turnLabel =
+    idx >= 0 && turns[idx]
+      ? turns[idx].ts
+        ? new Date(turns[idx].ts).toLocaleTimeString()
+        : turns[idx].taskTitle || turns[idx].key.slice(0, 8)
+      : en
+        ? 'All'
+        : '全部';
+  // Compact primary row — always visible
+  const primary = `<div class="diff-scrub-bar diff-scrub-primary" id="diffScrubBar">
+    <span class="diff-scrub-label">${en ? 'Turns' : '轮次'}</span>
+    <button type="button" class="diff-cp-chip${!cur ? ' active' : ''}" data-scrub="">${en ? 'Live' : 'Live'}</button>
+    <button type="button" class="diff-scrub-play${playing ? ' on' : ''}" data-scrub-play="1" title="${en ? 'Play / pause' : '播放 / 暂停'}">${playing ? '❚❚' : '▶'}</button>
     <button type="button" class="diff-scrub-nav" data-scrub-nav="-1" title="[">‹</button>
     <input type="range" id="diffScrubRange" min="0" max="${Math.max(0, turns.length - 1)}" value="${idx >= 0 ? idx : turns.length - 1}" ${turns.length < 2 ? 'disabled' : ''} />
     <button type="button" class="diff-scrub-nav" data-scrub-nav="1" title="]">›</button>
+    <span class="diff-scrub-pos muted">${esc(turnLabel)} · ${turns.length}</span>
+    <button type="button" class="diff-chrome-toggle${chromeOpen ? ' open' : ''}" data-diff-chrome-toggle="1" aria-expanded="${chromeOpen ? 'true' : 'false'}" title="${en ? 'Filmstrip · export · notes' : '胶片 · 导出 · 批注'}">${chromeOpen ? (en ? '▾ Hide tools' : '▾ 收起工具') : en ? '▸ Tools' : '▸ 工具'}</button>
+  </div>`;
+  // Advanced: filmstrip, exports, ticks, speeds — collapsed by default
+  const advanced = `<div class="diff-chrome-advanced${chromeOpen ? '' : ' collapsed'}" id="diffChromeAdvanced">
+    <div class="diff-scrub-bar diff-scrub-extra">
+      <button type="button" class="diff-scrub-loop${loop ? ' on' : ''}" data-scrub-loop="1" title="${en ? 'Loop (L)' : '循环 (L)'}">↻</button>
+      <button type="button" class="diff-scrub-export" data-scrub-export="1" title="${en ? 'Export Markdown' : '导出 Markdown'}">⬇</button>
+      <button type="button" class="diff-scrub-export html" data-scrub-export-html="1" title="HTML">HTML</button>
+      <button type="button" class="diff-scrub-export html" data-scrub-export-png="1" title="PNG">PNG</button>
+      <button type="button" class="diff-scrub-export html" data-scrub-export-folder="1" title="${en ? 'Folder pack' : '文件夹'}">📁</button>
+      <button type="button" class="diff-scrub-export html" data-scrub-compare="1" title="A|B">A|B</button>
+      <button type="button" class="diff-scrub-export html" data-scrub-import="1" title="${en ? 'Import' : '导入'}">⬆</button>
+      <button type="button" class="diff-scrub-export html" data-scrub-export-enc="1" title="${en ? 'Encrypted' : '加密'}">🔒</button>
+      <span class="diff-scrub-budget" title="${en ? 'Pack budget' : '体积预算'}">
+        ${['full', 'balanced', 'compact']
+          .map(
+            (m) =>
+              `<button type="button" class="diff-budget-chip${budgetMode === m ? ' active' : ''}" data-budget-mode="${m}" title="${m}">${budgetLabels[m]}</button>`
+          )
+          .join('')}
+      </span>
+      <span class="diff-scrub-speeds" title="${en ? 'Speed' : '倍速'}">
+        ${SCRUB_SPEEDS.map(
+          (s) =>
+            `<button type="button" class="diff-scrub-speed${speed === s ? ' active' : ''}" data-speed="${s}">${s}x</button>`
+        ).join('')}
+      </span>
+      <span class="muted" style="font-size:10px"><kbd>[</kbd><kbd>]</kbd> · <kbd>L</kbd></span>
+    </div>
     <div class="diff-scrub-ticks">
       ${turns
         .map((t) => {
@@ -6546,8 +6568,10 @@ function scrubberHtml(turns) {
         })
         .join('')}
     </div>
-    <span class="muted" style="font-size:10px"><kbd>[</kbd><kbd>]</kbd> · ▶ · <kbd>L</kbd> · ${speed}x${loop ? ' · ↻' : ''}</span>
-  </div>${filmstripHtml(turns)}${storyboardNotesBarHtml()}`;
+    ${filmstripHtml(turns)}
+    ${storyboardNotesBarHtml()}
+  </div>`;
+  return primary + advanced;
 }
 
 function heatLegendHtml() {
@@ -6990,10 +7014,24 @@ function renderDiffPane() {
     ...cps.map((_, i) => `<option value="${i}">cp#${i + 1}</option>`),
     `<option value="-2">live</option>`,
   ].join('');
+  const cpOpen = Boolean(state.diffCpOpen);
+  const cpSummary =
+    cps.length > 0
+      ? cmpOn
+        ? `A→B · ${optLabel(cur.compareA)}→${optLabel(cur.compareB)}`
+        : snap?.index >= 0
+          ? `cp#${snap.index + 1}/${cps.length}`
+          : `Live · ${cps.length} cp`
+      : '';
   const cpBar =
     cps.length > 0
-      ? `<div class="diff-cp-bar">
-          <span class="diff-cp-label">Checkpoints</span>
+      ? `<div class="diff-cp-bar${cpOpen ? ' is-open' : ' is-collapsed'}">
+          <button type="button" class="diff-cp-toggle" data-diff-cp-toggle="1" aria-expanded="${cpOpen ? 'true' : 'false'}">
+            <span class="diff-cp-label">Checkpoints</span>
+            <span class="diff-cp-summary muted">${esc(cpSummary)}</span>
+            <span class="diff-cp-chev">${cpOpen ? '▾' : '▸'}</span>
+          </button>
+          <div class="diff-cp-body${cpOpen ? '' : ' collapsed'}">
           <button type="button" class="diff-cp-chip${!cmpOn && snap?.index < 0 ? ' active' : ''}" data-cp="-1">Live</button>
           ${cps
             .map((c, i) => {
@@ -7021,6 +7059,7 @@ function renderDiffPane() {
                  <span class="muted" style="font-size:11px">${esc(snap?.label || '')}</span>`
               : ''
           }
+          </div>
         </div>`
       : '';
 
@@ -7098,8 +7137,12 @@ function renderDiffPane() {
       </span>
     </div>`;
   }
+  // Chrome (scrub/film) stays in flex head; line diff scrolls in .diff-body-scroll
   content.innerHTML =
+    `<div class="diff-chrome-stack">` +
     scrubberHtml(globalTurns) +
+    `</div>` +
+    `<div class="diff-body-scroll">` +
     overlayBanner +
     banner +
     cpBar +
@@ -7112,13 +7155,25 @@ function renderDiffPane() {
       <button type="button" class="link-btn" data-diff-act="collapse">全部折叠</button>`
           : ''
       }
-      <button type="button" class="link-btn${state.diffHeatLegend ? ' active-view' : ''}" data-diff-act="heat-legend">${localeIsEn() ? 'Heat legend' : '热力图例'}</button>
-      <span class="muted" style="font-size:11px"><kbd>j</kbd>/<kbd>k</kbd> 文件 · <kbd>a</kbd> 审阅 · <kbd>s</kbd> 切换视图</span>
+      <button type="button" class="link-btn${state.diffHeatLegend ? ' active-view' : ''}" data-diff-act="heat-legend">${localeIsEn() ? 'Heat' : '热力'}</button>
+      <span class="muted diff-hunk-hint" style="font-size:11px"><kbd>j</kbd>/<kbd>k</kbd> · <kbd>a</kbd> · <kbd>s</kbd></span>
     </div>` +
     heatLegendHtml() +
-    bodyHtml;
+    bodyHtml +
+    `</div>`;
 
   bindDiffBlameTooltips(content, blame);
+
+  content.querySelector('[data-diff-chrome-toggle]')?.addEventListener('click', () => {
+    state.diffChromeOpen = !state.diffChromeOpen;
+    saveJson('grokcode-diff-chrome-open', state.diffChromeOpen);
+    renderDiffPane();
+  });
+  content.querySelector('[data-diff-cp-toggle]')?.addEventListener('click', () => {
+    state.diffCpOpen = !state.diffCpOpen;
+    saveJson('grokcode-diff-cp-open', state.diffCpOpen);
+    renderDiffPane();
+  });
 
   // turn scrubber
   content.querySelectorAll('[data-scrub]').forEach((btn) => {

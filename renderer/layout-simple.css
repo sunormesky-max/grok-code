@@ -102,11 +102,16 @@ body.layout-v15 .layout-presets.simplified > .layout-preset.active {
 }
 
 /* ── Center tabs: Live primary, tools contextual ─────── */
+/* nowrap — never steal a second row of vertical space from Code/Diff */
 body.layout-v15 #editorTabs.tabs {
   display: flex;
   align-items: center;
   gap: 8px;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
+  min-height: 36px;
+  max-height: 40px;
+  overflow: hidden;
+  flex-shrink: 0;
 }
 body.layout-v15 .center-tabs-primary {
   display: inline-flex;
@@ -141,6 +146,255 @@ body.layout-v15 .center-tabs-tools {
   flex: 1;
   min-width: 0;
   margin-left: 4px;
+  overflow: hidden;
+}
+body.layout-v15 .center-tabs-tools .file-path {
+  max-width: min(36vw, 280px);
+}
+
+/* ── Code / Diff: keep body visible (flex chain + collapsible chrome) ── */
+body.layout-v15 .editor-wrap {
+  min-height: 0;
+  overflow: hidden;
+}
+body.layout-v15 #codePane,
+body.layout-v15 #diffPane {
+  min-height: 0;
+  overflow: hidden;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+body.layout-v15 #codePane .editor-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+}
+body.layout-v15 #editor {
+  min-height: 0;
+}
+body.layout-v15 #codePane .editor-foot {
+  flex-shrink: 0;
+}
+
+/* Outline default rail when collapsed */
+body.layout-v15 #codePane .editor-body.has-outline.outline-collapsed {
+  grid-template-columns: 1fr 32px;
+}
+body.layout-v15 .outline-panel.is-collapsed .outline-list,
+body.layout-v15 .outline-panel.is-collapsed .outline-title,
+body.layout-v15 .outline-panel.is-collapsed #btnOutlineRefresh {
+  display: none !important;
+}
+body.layout-v15 .outline-panel.is-collapsed {
+  min-width: 32px;
+  width: 32px;
+}
+body.layout-v15 .outline-panel.is-collapsed .outline-head {
+  flex-direction: column;
+  padding: 6px 2px;
+  justify-content: flex-start;
+  gap: 4px;
+  border-bottom: none;
+}
+body.layout-v15 .outline-panel .outline-head {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+body.layout-v15 .outline-panel .outline-title {
+  flex: 1;
+  min-width: 0;
+}
+
+/* Diff toolbar: single row, actions scroll horizontally */
+body.layout-v15 .diff-toolbar {
+  flex-wrap: nowrap;
+  flex-shrink: 0;
+  min-height: 36px;
+  max-height: 40px;
+  overflow: hidden;
+  padding: 4px 10px;
+  gap: 8px;
+}
+body.layout-v15 .diff-toolbar #diffTitle {
+  max-width: 28%;
+  flex-shrink: 1;
+}
+body.layout-v15 .diff-actions {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 4px;
+  margin-left: auto;
+  overflow-x: auto;
+  max-width: 62%;
+  scrollbar-width: thin;
+}
+body.layout-v15 .diff-actions .btn {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+/* Diff content = chrome head + scrolling body */
+body.layout-v15 .diff-content {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden !important;
+}
+body.layout-v15 .diff-chrome-stack {
+  flex-shrink: 0;
+  max-height: min(42vh, 320px);
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  border-bottom: 1px solid rgba(125, 211, 252, 0.1);
+  background: rgba(0, 0, 0, 0.2);
+}
+body.layout-v15 .diff-body-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  scrollbar-width: thin;
+}
+
+/* Compact primary scrub row */
+body.layout-v15 .diff-scrub-primary {
+  flex-wrap: nowrap;
+  padding: 5px 8px;
+  gap: 6px;
+  min-height: 34px;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+body.layout-v15 .diff-scrub-primary .diff-scrub-label {
+  flex-shrink: 0;
+}
+body.layout-v15 .diff-scrub-primary #diffScrubRange {
+  flex: 1;
+  min-width: 80px;
+  max-width: 220px;
+}
+body.layout-v15 .diff-scrub-pos {
+  font-family: var(--mono, monospace);
+  font-size: 10.5px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+body.layout-v15 .diff-chrome-toggle {
+  appearance: none;
+  border: 1px solid rgba(125, 211, 252, 0.28);
+  background: rgba(125, 211, 252, 0.08);
+  color: #7dd3fc;
+  font-family: var(--mono, monospace);
+  font-size: 10.5px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+  margin-left: auto;
+}
+body.layout-v15 .diff-chrome-toggle:hover,
+body.layout-v15 .diff-chrome-toggle.open {
+  border-color: rgba(125, 211, 252, 0.5);
+  background: rgba(125, 211, 252, 0.14);
+  color: #e0f2fe;
+}
+body.layout-v15 .diff-chrome-advanced.collapsed {
+  display: none !important;
+}
+body.layout-v15 .diff-scrub-extra {
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  padding: 4px 8px 6px;
+  gap: 4px;
+  min-height: 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+}
+body.layout-v15 .diff-scrub-ticks {
+  max-height: 52px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  flex-wrap: nowrap;
+  padding: 4px 8px 6px;
+}
+
+/* Checkpoint bar collapsed by default */
+body.layout-v15 .diff-cp-bar {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0;
+  padding: 0;
+}
+body.layout-v15 .diff-cp-toggle {
+  appearance: none;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: 0;
+  background: rgba(0, 0, 0, 0.2);
+  color: inherit;
+  padding: 6px 10px;
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+}
+body.layout-v15 .diff-cp-toggle:hover {
+  background: rgba(251, 191, 36, 0.06);
+}
+body.layout-v15 .diff-cp-summary {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+  font-family: var(--mono, monospace);
+}
+body.layout-v15 .diff-cp-chev {
+  color: #fbbf24;
+  font-size: 11px;
+}
+body.layout-v15 .diff-cp-body {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px 8px;
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+}
+body.layout-v15 .diff-cp-body.collapsed {
+  display: none !important;
+}
+
+body.layout-v15 .diff-hunk-toolbar {
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  padding: 4px 8px;
+  min-height: 28px;
+}
+body.layout-v15 .diff-banner {
+  padding: 5px 10px;
+  font-size: 11.5px;
+}
+
+/* Filmstrip shorter when open */
+body.layout-v15 .diff-filmstrip {
+  max-height: 88px;
+  padding: 6px 8px;
+}
+body.layout-v15 .diff-film-card {
+  width: 100px;
+  padding: 6px;
+}
+body.layout-v15 .diff-note-bar {
+  padding: 6px 8px;
+}
+body.layout-v15 .diff-note-bar textarea {
+  max-height: 48px;
 }
 
 /* Live: hide Code/Diff tooling noise */

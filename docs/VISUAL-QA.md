@@ -82,6 +82,9 @@ Use after UI/visual changes. Prefer a **wide window (≥1600px)** and **Normal F
 - [ ] Layout Auto (if enabled) does not fight Review/Full
 - [ ] Import storyboard with mini-diffs: Diff shows unified/SBS ops (recon badge), not only raw text
 - [ ] With project open + paths exist: rehydrate may show **recon full** / disk before
+- [ ] **Code**: editor fills pane; Outline is collapsed rail (▸) until expanded
+- [ ] **Diff**: primary row is Turns scrub only; **▸ 工具** reveals filmstrip/export; line diff scrolls below
+- [ ] Diff Checkpoints collapsed summary until expanded
 
 ## Notes
 

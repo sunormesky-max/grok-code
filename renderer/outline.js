@@ -197,17 +197,41 @@
     body.classList.add('has-outline');
     panel = document.createElement('aside');
     panel.id = 'outlinePanel';
-    panel.className = 'outline-panel';
+    // Default collapsed so Code body keeps full width/height for reading
+    let collapsed = true;
+    try {
+      collapsed = localStorage.getItem('grokcode-outline-collapsed') !== '0';
+    } catch {
+      /* default collapsed */
+    }
+    panel.className = 'outline-panel' + (collapsed ? ' is-collapsed' : '');
     panel.innerHTML = `
       <div class="outline-head">
-        <span>Outline</span>
+        <button type="button" class="outline-toggle link-btn" id="btnOutlineToggle" title="展开 / 折叠大纲" aria-expanded="${collapsed ? 'false' : 'true'}">${collapsed ? '▸' : '▾'}</button>
+        <span class="outline-title">Outline</span>
         <button type="button" class="link-btn" id="btnOutlineRefresh" title="刷新大纲">↻</button>
       </div>
       <div class="outline-list" id="outlineList">
         <div class="muted pad">打开文件后显示大纲</div>
       </div>`;
     body.appendChild(panel);
+    body.classList.toggle('outline-collapsed', collapsed);
     panel.querySelector('#btnOutlineRefresh')?.addEventListener('click', () => refresh());
+    panel.querySelector('#btnOutlineToggle')?.addEventListener('click', () => {
+      const next = !panel.classList.contains('is-collapsed');
+      panel.classList.toggle('is-collapsed', next);
+      body.classList.toggle('outline-collapsed', next);
+      const btn = panel.querySelector('#btnOutlineToggle');
+      if (btn) {
+        btn.textContent = next ? '▸' : '▾';
+        btn.setAttribute('aria-expanded', next ? 'false' : 'true');
+      }
+      try {
+        localStorage.setItem('grokcode-outline-collapsed', next ? '1' : '0');
+      } catch {
+        /* ignore */
+      }
+    });
     return panel;
   }
 
