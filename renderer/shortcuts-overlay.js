@@ -48,7 +48,10 @@
       <div class="help-backdrop" data-close="1"></div>
       <div class="help-card glass">
         <div class="help-head">
-          <h2 data-i18n="help.title">${t('help.title', '键盘快捷键')}</h2>
+          <div>
+            <div class="help-kicker">xAI · FLIGHT CONTROLS</div>
+            <h2 data-i18n="help.title">${t('help.title', '键盘快捷键')}</h2>
+          </div>
           <button type="button" class="icon-btn" id="helpClose" aria-label="close">✕</button>
         </div>
         <div class="help-grid" id="helpGrid"></div>

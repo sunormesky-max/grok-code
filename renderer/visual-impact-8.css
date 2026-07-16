@@ -1,0 +1,362 @@
+/* ═══════════════════════════════════════════════════════
+   GrokCode Visual Impact 8 — help · compact · themed boot
+   ═══════════════════════════════════════════════════════ */
+
+/* ── Shortcuts / help overlay flight deck ────────────── */
+body.layout-v15 .help-overlay {
+  padding: 20px;
+}
+body.layout-v15 .help-backdrop {
+  background: rgba(0, 0, 0, 0.64) !important;
+  backdrop-filter: blur(10px) saturate(120%) !important;
+  -webkit-backdrop-filter: blur(10px) saturate(120%);
+}
+body.layout-v15 .help-card {
+  width: min(560px, 94vw) !important;
+  max-height: min(82vh, 680px) !important;
+  border: 1px solid transparent !important;
+  background:
+    linear-gradient(165deg, rgba(10, 16, 28, 0.98), rgba(4, 6, 12, 0.99)) padding-box,
+    linear-gradient(
+      135deg,
+      rgba(125, 211, 252, 0.5) 0%,
+      rgba(255, 255, 255, 0.1) 40%,
+      rgba(249, 115, 22, 0.4) 100%
+    )
+      border-box !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    0 28px 90px rgba(0, 0, 0, 0.7),
+    0 0 48px rgba(125, 211, 252, 0.1) !important;
+  border-radius: 16px !important;
+}
+body.layout-v15 .help-head {
+  padding: 14px 18px 10px !important;
+  background: linear-gradient(
+    90deg,
+    rgba(125, 211, 252, 0.08),
+    rgba(249, 115, 22, 0.04) 55%,
+    transparent
+  );
+  border-bottom: 1px solid rgba(125, 211, 252, 0.14) !important;
+}
+body.layout-v15 .help-kicker {
+  font-family: var(--mono, ui-monospace, monospace);
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  color: #7dd3fc;
+  text-shadow: 0 0 12px rgba(125, 211, 252, 0.4);
+  margin-bottom: 4px;
+}
+body.layout-v15 .help-head h2 {
+  font-size: 17px !important;
+  letter-spacing: 0.04em !important;
+  background: linear-gradient(105deg, #fff 15%, #bae6fd 50%, #fb923c) !important;
+  -webkit-background-clip: text !important;
+  background-clip: text !important;
+  color: transparent !important;
+}
+body.layout-v15 .help-grid {
+  padding: 10px 12px 8px !important;
+  gap: 3px !important;
+}
+body.layout-v15 .help-row {
+  padding: 9px 12px !important;
+  border: 1px solid transparent;
+  border-radius: 11px !important;
+  transition: background 0.12s, border-color 0.12s, box-shadow 0.15s;
+}
+body.layout-v15 .help-row:hover {
+  background: linear-gradient(
+    90deg,
+    rgba(125, 211, 252, 0.1),
+    rgba(249, 115, 22, 0.04) 70%,
+    transparent
+  ) !important;
+  border-color: rgba(125, 211, 252, 0.12);
+  box-shadow: inset 2px 0 0 rgba(125, 211, 252, 0.45);
+}
+body.layout-v15 .help-keys kbd {
+  border-color: rgba(125, 211, 252, 0.32) !important;
+  background: rgba(0, 0, 0, 0.5) !important;
+  color: #e0f2fe !important;
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.06),
+    0 0 8px rgba(56, 189, 248, 0.08) !important;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+body.layout-v15 .help-plus {
+  color: #52525b !important;
+}
+body.layout-v15 .help-desc {
+  color: #a1a1aa !important;
+  font-size: 12.5px !important;
+  line-height: 1.35;
+}
+body.layout-v15 .help-foot {
+  padding: 10px 16px 14px !important;
+  border-top: 1px solid rgba(125, 211, 252, 0.1) !important;
+  background: linear-gradient(180deg, transparent, rgba(0, 0, 0, 0.35));
+  font-family: var(--mono, ui-monospace, monospace);
+  font-size: 10.5px !important;
+  letter-spacing: 0.04em;
+  color: #71717a !important;
+}
+
+/* Theme-tinted help accents */
+body.theme-mars.layout-v15 .help-kicker {
+  color: #fdba74;
+  text-shadow: 0 0 12px rgba(249, 115, 22, 0.4);
+}
+body.theme-mars.layout-v15 .help-row:hover {
+  box-shadow: inset 2px 0 0 rgba(249, 115, 22, 0.55);
+}
+body.theme-ice.layout-v15 .help-keys kbd {
+  border-color: rgba(56, 189, 248, 0.4) !important;
+  color: #bae6fd !important;
+}
+body.theme-void.layout-v15 .help-head h2 {
+  background: linear-gradient(105deg, #fff, #a1a1aa) !important;
+  -webkit-background-clip: text !important;
+  background-clip: text !important;
+}
+
+/* ── Density-compact audit of visual layers ──────────── */
+body.density-compact.layout-v15 {
+  --workspace-h: 32px;
+}
+body.density-compact.layout-v15 .layout-presets {
+  gap: 1px;
+  padding: 2px;
+}
+body.density-compact.layout-v15 .layout-preset {
+  padding: 3px 6px;
+  font-size: 9px;
+  letter-spacing: 0.04em;
+}
+body.density-compact.layout-v15 .topbar {
+  gap: 6px;
+}
+body.density-compact.layout-v15 .chat.glass,
+body.density-compact.layout-v15 .agent-primary.glass {
+  /* slightly less outer glow so compact stays readable */
+  box-shadow:
+    inset 0 1px 0 rgba(125, 211, 252, 0.1),
+    0 0 0 1px rgba(125, 211, 252, 0.06),
+    0 12px 36px rgba(0, 0, 0, 0.55),
+    0 0 32px rgba(125, 211, 252, 0.06) !important;
+}
+body.density-compact.layout-v15 .welcome-hero,
+body.density-compact.layout-v15 .live-empty,
+body.density-compact.layout-v15 .empty-card,
+body.density-compact.layout-v15 .diff-placeholder {
+  padding: 16px 14px;
+  border-radius: 12px;
+}
+body.density-compact.layout-v15 .welcome-hero h3 {
+  font-size: 15px;
+}
+body.density-compact.layout-v15 .msg {
+  padding: 8px 10px !important;
+  border-radius: 10px !important;
+}
+body.density-compact.layout-v15 .msg.assistant::before {
+  width: 2px;
+  top: 8px;
+  bottom: 8px;
+}
+body.density-compact.layout-v15 .diff-film-card {
+  width: 110px;
+  border-radius: 10px;
+}
+body.density-compact.layout-v15 .diff-filmstrip {
+  padding: 8px 8px 10px;
+  gap: 6px;
+}
+body.density-compact.layout-v15 .diff-scrub-bar {
+  padding: 6px 8px;
+  gap: 4px;
+}
+body.density-compact.layout-v15 .settings-section-title {
+  font-size: 9.5px;
+  margin-bottom: 6px;
+}
+body.density-compact.layout-v15 .mgmt-toolbar {
+  padding: 8px 10px;
+  margin-bottom: 8px;
+}
+body.density-compact.layout-v15 .mgmt-item {
+  padding: 8px 10px;
+}
+body.density-compact.layout-v15 .cmd-card,
+body.density-compact.layout-v15 .gsearch-card,
+body.density-compact.layout-v15 .help-card {
+  border-radius: 12px !important;
+}
+body.density-compact.layout-v15 .cmd-input,
+body.density-compact.layout-v15 .gsearch-input {
+  font-size: 14px !important;
+  padding: 12px 14px !important;
+}
+body.density-compact.layout-v15 .cmd-item,
+body.density-compact.layout-v15 .gsearch-item,
+body.density-compact.layout-v15 .help-row {
+  padding: 8px 10px !important;
+  border-radius: 8px !important;
+}
+body.density-compact.layout-v15 .onb-hero {
+  padding: 12px 14px 10px;
+  margin: 6px 12px 0;
+}
+body.density-compact.layout-v15 .review-bridge-chip {
+  font-size: 10px;
+  padding: 2px 7px;
+}
+body.density-compact.layout-v15 .mode-chip {
+  font-size: 11px;
+  padding: 3px 8px;
+}
+body.density-compact.layout-v15 .composer-box {
+  margin: 4px 8px 8px;
+}
+body.density-compact.fx-high.layout-v15 .chat.glass {
+  /* high FX still restrained in compact */
+  box-shadow:
+    inset 0 1px 0 rgba(125, 211, 252, 0.12),
+    0 16px 48px rgba(0, 0, 0, 0.6),
+    0 0 40px rgba(125, 211, 252, 0.1) !important;
+}
+
+/* ── Per-theme boot color variants ───────────────────── */
+/* Apply after theme class is on body (themes.js init before boot finishes) */
+body.theme-ice .boot-screen {
+  background:
+    radial-gradient(ellipse 90% 55% at 50% 38%, rgba(14, 80, 140, 0.55), transparent 58%),
+    radial-gradient(ellipse 50% 40% at 85% 15%, rgba(34, 211, 238, 0.14), transparent 50%),
+    #020617 !important;
+}
+body.theme-ice .boot-grid {
+  background:
+    linear-gradient(rgba(56, 189, 248, 0.12) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(56, 189, 248, 0.12) 1px, transparent 1px) !important;
+  background-size: 36px 36px !important;
+}
+body.theme-ice .boot-log {
+  border-color: rgba(56, 189, 248, 0.35) !important;
+  color: #38bdf8 !important;
+  box-shadow:
+    inset 0 0 50px rgba(56, 189, 248, 0.08),
+    0 0 40px rgba(56, 189, 248, 0.12) !important;
+}
+body.theme-ice .boot-bar-fill {
+  background: linear-gradient(90deg, #0ea5e9, #38bdf8 40%, #fff 60%, #22d3ee) !important;
+  box-shadow: 0 0 18px rgba(56, 189, 248, 0.7) !important;
+}
+body.theme-ice .bt-g {
+  background: linear-gradient(105deg, #fff, #7dd3fc 50%, #22d3ee) !important;
+  -webkit-background-clip: text !important;
+  background-clip: text !important;
+}
+
+body.theme-mars .boot-screen {
+  background:
+    radial-gradient(ellipse 90% 55% at 50% 38%, rgba(80, 30, 10, 0.55), transparent 58%),
+    radial-gradient(ellipse 50% 40% at 80% 20%, rgba(249, 115, 22, 0.18), transparent 50%),
+    #0c0604 !important;
+}
+body.theme-mars .boot-grid {
+  background:
+    linear-gradient(rgba(249, 115, 22, 0.1) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(249, 115, 22, 0.1) 1px, transparent 1px) !important;
+  background-size: 36px 36px !important;
+}
+body.theme-mars .boot-scan {
+  background: linear-gradient(
+    180deg,
+    transparent,
+    rgba(249, 115, 22, 0.14),
+    transparent
+  ) !important;
+}
+body.theme-mars .boot-log {
+  border-color: rgba(249, 115, 22, 0.35) !important;
+  color: #fdba74 !important;
+  box-shadow:
+    inset 0 0 50px rgba(249, 115, 22, 0.08),
+    0 0 40px rgba(249, 115, 22, 0.12) !important;
+}
+body.theme-mars .boot-line {
+  text-shadow: 0 0 12px rgba(249, 115, 22, 0.4) !important;
+}
+body.theme-mars .boot-bar-fill {
+  background: linear-gradient(90deg, #ea580c, #f97316 40%, #fbbf24 70%, #fdba74) !important;
+  box-shadow: 0 0 18px rgba(249, 115, 22, 0.65) !important;
+}
+body.theme-mars .bt-g {
+  background: linear-gradient(105deg, #fff, #fdba74 45%, #f97316) !important;
+  -webkit-background-clip: text !important;
+  background-clip: text !important;
+}
+body.theme-mars .boot-logo {
+  filter: drop-shadow(0 0 28px rgba(249, 115, 22, 0.55))
+    drop-shadow(0 0 8px rgba(251, 191, 36, 0.25)) !important;
+}
+
+body.theme-void .boot-screen {
+  background:
+    radial-gradient(ellipse 80% 50% at 50% 40%, rgba(40, 40, 48, 0.45), transparent 55%),
+    #000 !important;
+}
+body.theme-void .boot-grid {
+  background:
+    linear-gradient(rgba(255, 255, 255, 0.06) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.06) 1px, transparent 1px) !important;
+  background-size: 36px 36px !important;
+}
+body.theme-void .boot-log {
+  border-color: rgba(255, 255, 255, 0.18) !important;
+  color: #d4d4d8 !important;
+  box-shadow: inset 0 0 40px rgba(255, 255, 255, 0.03), 0 0 30px rgba(255, 255, 255, 0.04) !important;
+}
+body.theme-void .boot-bar-fill {
+  background: linear-gradient(90deg, #71717a, #e4e4e7 50%, #a1a1aa) !important;
+  box-shadow: 0 0 14px rgba(255, 255, 255, 0.25) !important;
+}
+body.theme-void .bt-g {
+  background: linear-gradient(105deg, #fff, #a1a1aa) !important;
+  -webkit-background-clip: text !important;
+  background-clip: text !important;
+}
+body.theme-void .boot-logo {
+  filter: drop-shadow(0 0 24px rgba(255, 255, 255, 0.35)) !important;
+}
+
+body.theme-ember .boot-screen {
+  background:
+    radial-gradient(ellipse 90% 55% at 50% 38%, rgba(70, 15, 15, 0.5), transparent 58%),
+    radial-gradient(ellipse 45% 35% at 15% 75%, rgba(239, 68, 68, 0.12), transparent 50%),
+    #0a0404 !important;
+}
+body.theme-ember .boot-log {
+  border-color: rgba(248, 113, 113, 0.35) !important;
+  color: #fecaca !important;
+}
+body.theme-ember .boot-bar-fill {
+  background: linear-gradient(90deg, #dc2626, #f87171 50%, #fbbf24) !important;
+  box-shadow: 0 0 18px rgba(248, 113, 113, 0.55) !important;
+}
+body.theme-ember .bt-g {
+  background: linear-gradient(105deg, #fff, #fecaca 40%, #f87171) !important;
+  -webkit-background-clip: text !important;
+  background-clip: text !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body.layout-v15 .help-card {
+    animation: none !important;
+  }
+}
+body.force-reduced-motion .help-card {
+  animation: none !important;
+}

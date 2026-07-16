@@ -37,9 +37,18 @@ Use after UI/visual changes. Prefer a **wide window (≥1600px)** and **Normal F
 
 - [ ] **Ctrl+K**: glass card, group labels, active row ice rail + hint kbd chip
 - [ ] **Ctrl+P** / **Ctrl+Shift+F**: mode pills, active result row matches palette
+- [ ] **Ctrl+/** or **?**: shortcuts overlay kicker + kbd chips + hover rail
 - [ ] Settings: section titles (CLI / Theme / Telemetry / MCP / Skills)
 - [ ] Onboarding (Ctrl+K → 首启向导): kickers, dots, hero cards
 - [ ] Toasts: glass + ok/err left accent
+
+## Density & themed boot
+
+- [ ] Density **紧凑**: layout presets, filmstrip, palette still readable (no glow washout)
+- [ ] Theme **Ice** then restart / re-open boot (or reload): boot grid/log cyan-tinted
+- [ ] Theme **Mars** boot: orange scan + log
+- [ ] Theme **Void** boot: mono stellar
+- [ ] Theme **Ember** boot: red residual
 
 ## Motion / a11y
 

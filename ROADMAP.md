@@ -50,12 +50,13 @@ Living plan for the GrokCode open-source ecosystem. Order may change based on co
 - [x] Onboarding · settings sections · a11y motion docs (v1.5.8)
 - [x] MCP/Skills/Plugins panes · doctor cards · force reduce motion (v1.5.9)
 - [x] Command palette · global search HUD · visual QA checklist (v1.6.0)
+- [x] Help overlay · compact audit · themed boot (v1.6.1)
 
 ## Now (UI / experience)
 
-- [ ] Help / shortcuts overlay flight-deck pass
-- [ ] Density-compact audit of new visual layers
-- [ ] Optional per-theme boot color variants
+- [ ] Outline panel / split layout visual pass
+- [ ] Tree polish vs flight-deck chrome consistency
+- [ ] Optional “cinematic idle” ambient (off by default)
 
 ## Deferred (services — not now)
 

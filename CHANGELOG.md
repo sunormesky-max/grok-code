@@ -11,6 +11,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 - See [ROADMAP.md](ROADMAP.md)
 
+## [1.6.1] — 2026-07-16
+
+### Visual impact 8 — help · compact · themed boot
+
+- **Shortcuts overlay** (Ctrl+/ / ?): FLIGHT CONTROLS kicker, glass card, hover ice rail, kbd chips
+- **Density compact**: tighter layout presets, filmstrip, palette/search/help, restrained high-FX glow
+- **Themed boot**: Ice / Mars / Void / Ember tint grid, log, progress, logo glow
+- `visual-impact-8.css` + VISUAL-QA density/boot checks
+
 ## [1.6.0] — 2026-07-16
 
 ### Visual polish milestone — palette · search · QA
