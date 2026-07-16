@@ -43,7 +43,10 @@ const MODEL_PRESETS = [
 ];
 
 const state = {
-  workMode: loadJson(MODE_KEY, 'craft') || 'craft',
+  workMode: (() => {
+    const m = String(loadJson(MODE_KEY, 'craft') || 'craft').toLowerCase();
+    return ['craft', 'plan', 'goal', 'ask'].includes(m) ? m : 'craft';
+  })(),
   workspace: null,
   treeData: [],
   currentFile: null,
@@ -310,6 +313,15 @@ function buildProjectSnapshot(proj) {
     toolCount: t.toolCount || 0,
     createdAt: t.createdAt,
     pinned: Boolean(t.pinned),
+    goal: t.goal
+      ? {
+          title: String(t.goal.title || '').slice(0, 200),
+          status: t.goal.status || 'active',
+          progress: typeof t.goal.progress === 'number' ? t.goal.progress : 0,
+          next: t.goal.next ? String(t.goal.next).slice(0, 160) : '',
+          updatedAt: t.goal.updatedAt || Date.now(),
+        }
+      : null,
   }));
   return {
     path: proj.path,
@@ -420,6 +432,15 @@ async function restoreProjectFromDisk(proj) {
     t.toolCount = td.toolCount || 0;
     t.createdAt = td.createdAt || t.createdAt;
     t.pinned = Boolean(td.pinned);
+    if (td.goal?.title) {
+      t.goal = {
+        title: String(td.goal.title).slice(0, 200),
+        status: td.goal.status || 'active',
+        progress: typeof td.goal.progress === 'number' ? td.goal.progress : 0,
+        next: td.goal.next ? String(td.goal.next).slice(0, 160) : '',
+        updatedAt: td.goal.updatedAt || Date.now(),
+      };
+    }
     // 重绘消息
     rebuildTaskMessages(t);
   }
@@ -430,6 +451,7 @@ async function restoreProjectFromDisk(proj) {
   if (snap.currentFile) proj.currentFile = snap.currentFile;
   renderTaskTabs();
   renderContextTiers(T());
+  renderGoalTrack(T());
 }
 
 function rebuildTaskMessages(task) {
@@ -1077,6 +1099,7 @@ function switchTask(id) {
   syncComposerToTask(t);
   loadPromptDraft(t);
   renderContextTiers(t);
+  renderGoalTrack(t);
   // Fairness: immediately catch up stream paint for focused task
   if (t.running) StreamFair.flushTask(t);
   // 状态条反映当前任务
@@ -3076,39 +3099,53 @@ window.openFile = openFile;
 window.switchTab = switchTab;
 window.renderDiffPane = renderDiffPane;
 
-// ── Work mode Craft / Plan / Ask ────────────────────────
+// ── Work mode Craft / Plan / Goal / Ask ─────────────────
+const WORK_MODES = ['craft', 'plan', 'goal', 'ask'];
+
 const MODE_HINTS = {
-  craft: { zh: '飞行模式 · 直接动手', en: 'Flight mode · act now' },
-  plan: { zh: '先方案 · 说「执行」再改代码', en: 'Plan first · say “execute” to act' },
-  ask: { zh: '只读问答 · 不改磁盘', en: 'Read-only · no disk writes' },
+  craft: { zh: '飞行 · 动手', en: 'Flight · act' },
+  plan: { zh: '先方案 · 「执行」再改', en: 'Plan · then execute' },
+  goal: { zh: '锚定目标 · 里程碑推进', en: 'Goal · ship milestones' },
+  ask: { zh: '只读 · 不改盘', en: 'Read-only' },
 };
 
 const MODE_SEND = {
   craft: { zh: 'Grok it', en: 'Grok it' },
   plan: { zh: '规划', en: 'Plan' },
+  goal: { zh: '推进', en: 'Advance' },
   ask: { zh: '提问', en: 'Ask' },
 };
 
 const MODE_PLACEHOLDER = {
   craft: {
-    zh: 'Craft · 告诉 Grok 要改什么… Enter 发送 · Shift+Enter 换行',
-    en: 'Craft · what should we ship? Enter send · Shift+Enter newline',
+    zh: 'Craft · 要改什么…',
+    en: 'Craft · what to ship…',
   },
   plan: {
     zh: 'Plan · 描述目标，先拿方案…',
-    en: 'Plan · describe the goal, get a plan first…',
+    en: 'Plan · goal first, then plan…',
+  },
+  goal: {
+    zh: 'Goal · 一句话目标，多轮推进到完成…',
+    en: 'Goal · one-line outcome, multi-turn to done…',
   },
   ask: {
-    zh: 'Ask · 只读提问，不会改磁盘…',
-    en: 'Ask · read-only questions, no disk writes…',
+    zh: 'Ask · 只读提问…',
+    en: 'Ask · read-only…',
   },
 };
 
 const MODE_RUN_STATUS = {
   craft: { zh: 'Craft · 飞行中', en: 'Craft · in flight' },
   plan: { zh: 'Plan · 规划中', en: 'Plan · planning' },
+  goal: { zh: 'Goal · 推进中', en: 'Goal · advancing' },
   ask: { zh: 'Ask · 分析中', en: 'Ask · analyzing' },
 };
+
+function normalizeWorkMode(mode) {
+  const m = String(mode || '').toLowerCase();
+  return WORK_MODES.includes(m) ? m : 'craft';
+}
 
 function localeIsEn() {
   return (window.GrokI18n?.getLocale?.() || 'zh') === 'en';
@@ -3136,10 +3173,11 @@ function applyModePlaceholder() {
 }
 
 function setWorkMode(mode, opts = {}) {
-  const m = ['craft', 'plan', 'ask'].includes(mode) ? mode : 'craft';
+  const m = normalizeWorkMode(mode);
   state.workMode = m;
   saveJson(MODE_KEY, m);
   document.body.dataset.workMode = m;
+  document.body.classList.toggle('mode-goal', m === 'goal');
   // Scope to mode bar — avoid clobbering unrelated .mode-chip classes
   document.querySelectorAll('#modeBar .mode-chip, .mode-bar .mode-chip').forEach((btn) => {
     const on = btn.dataset.mode === m;
@@ -3152,6 +3190,7 @@ function setWorkMode(mode, opts = {}) {
   if (el && hint) el.textContent = loc === 'en' ? hint.en : hint.zh;
   applySendLabel();
   applyModePlaceholder();
+  renderGoalTrack(T());
   // status bar mode chip
   let sb = document.getElementById('sbMode');
   if (!sb) {
@@ -3182,9 +3221,141 @@ function setWorkMode(mode, opts = {}) {
 }
 
 function cycleWorkMode() {
-  const order = ['craft', 'plan', 'ask'];
+  const order = WORK_MODES;
   const i = order.indexOf(state.workMode || 'craft');
   setWorkMode(order[(i + 1) % order.length], { toast: true });
+}
+
+/** Parse lightweight 【目标进度】 from assistant text (mirrors modes.js) */
+function parseGoalProgressLocal(text) {
+  const t = String(text || '');
+  if (!t) return null;
+  const out = {};
+  const block = t.match(/【目标进度】([\s\S]{0,800}?)(?=\n【|\n##\s|$)/);
+  const body = block ? block[1] : t.slice(-1200);
+  const titleM = body.match(/(?:目标|Goal)\s*[:：]\s*(.+)/i);
+  if (titleM) out.title = titleM[1].trim().slice(0, 120);
+  const progM = body.match(/(?:进度|Progress)\s*[:：]\s*(\d{1,3})\s*%/i);
+  if (progM) out.progress = Math.max(0, Math.min(100, parseInt(progM[1], 10)));
+  else {
+    const loose = body.match(/\b(\d{1,3})\s*%/);
+    if (loose && /进度|progress|完成/i.test(body)) {
+      out.progress = Math.max(0, Math.min(100, parseInt(loose[1], 10)));
+    }
+  }
+  if (
+    /进度\s*[:：]\s*(已完成|完成|done|complete)/i.test(body) ||
+    /目标完成|goal\s*(done|complete|achieved)/i.test(t)
+  ) {
+    out.status = 'done';
+    out.progress = 100;
+  } else if (/进度\s*[:：]\s*(受阻|blocked|卡住)/i.test(body)) {
+    out.status = 'blocked';
+  } else if (out.progress === 100) {
+    out.status = 'done';
+  } else if (out.progress != null || out.title) {
+    out.status = 'active';
+  }
+  const nextM = body.match(/(?:下一步|Next)\s*[:：]\s*(.+)/i);
+  if (nextM) out.next = nextM[1].trim().slice(0, 160);
+  if (out.progress == null && !out.status && !out.title) return null;
+  return out;
+}
+
+function extractGoalTitleLocal(text) {
+  let t = String(text || '')
+    .trim()
+    .replace(/\s+/g, ' ');
+  if (!t) return '';
+  t = t.replace(
+    /^(目标[:：\s]*|goal\s*[:：-]?\s*|我希望|我想要|请帮我|帮我|实现|完成|做到)\s*/i,
+    ''
+  );
+  const firstLine = t.split(/[\n。！？.!?]/)[0] || t;
+  const s = firstLine.trim() || t;
+  return s.length > 72 ? s.slice(0, 71) + '…' : s;
+}
+
+function ensureTaskGoal(task, userText) {
+  if (!task) return null;
+  const donePhrase = /^(目标完成|完成目标|goal\s*done|goal\s*complete|算了|放弃目标|取消目标)[\s!！。.~]*$/i.test(
+    String(userText || '').trim()
+  );
+  if (donePhrase && task.goal) {
+    task.goal.status = 'done';
+    task.goal.progress = 100;
+    task.goal.updatedAt = Date.now();
+    renderGoalTrack(task);
+    return task.goal;
+  }
+  if (!task.goal?.title || task.goal.status === 'done') {
+    const title = extractGoalTitleLocal(userText);
+    if (title) {
+      task.goal = {
+        title,
+        status: 'active',
+        progress: 0,
+        next: '',
+        updatedAt: Date.now(),
+      };
+    }
+  }
+  renderGoalTrack(task);
+  return task.goal || null;
+}
+
+function updateTaskGoalFromReply(task, text) {
+  if (!task) return;
+  const parsed = parseGoalProgressLocal(text);
+  if (!parsed) return;
+  if (!task.goal) {
+    task.goal = {
+      title: parsed.title || '目标',
+      status: parsed.status || 'active',
+      progress: parsed.progress ?? 0,
+      next: parsed.next || '',
+      updatedAt: Date.now(),
+    };
+  } else {
+    if (parsed.title) task.goal.title = parsed.title;
+    if (parsed.progress != null) task.goal.progress = parsed.progress;
+    if (parsed.status) task.goal.status = parsed.status;
+    if (parsed.next) task.goal.next = parsed.next;
+    task.goal.updatedAt = Date.now();
+  }
+  renderGoalTrack(task);
+}
+
+function renderGoalTrack(task) {
+  const bar = document.getElementById('goalTrack');
+  if (!bar) return;
+  const t = task || T();
+  const show = (state.workMode === 'goal' || t?.goal?.title) && t?.goal?.title;
+  bar.classList.toggle('hidden', !show);
+  if (!show) return;
+  const g = t.goal;
+  const titleEl = document.getElementById('goalTrackTitle');
+  const pctEl = document.getElementById('goalTrackPct');
+  const fill = document.getElementById('goalTrackFill');
+  if (titleEl) {
+    titleEl.textContent = g.title || '—';
+    titleEl.title = g.next ? `${g.title}\n→ ${g.next}` : g.title;
+  }
+  const pct = g.status === 'done' ? 100 : Math.max(0, Math.min(100, Number(g.progress) || 0));
+  if (pctEl) {
+    pctEl.textContent =
+      g.status === 'done' ? (localeIsEn() ? 'done' : '完成') : g.status === 'blocked' ? '!' : `${pct}%`;
+  }
+  if (fill) fill.style.width = `${pct}%`;
+  bar.dataset.status = g.status || 'active';
+}
+
+function clearTaskGoal(task) {
+  task = task || T();
+  if (!task) return;
+  task.goal = null;
+  renderGoalTrack(task);
+  schedulePersist?.(true);
 }
 
 let _workModeUiBound = false;
@@ -3206,7 +3377,7 @@ function bindWorkModeUi() {
   };
   document.addEventListener('click', onModeClick, true);
 
-  // Ctrl/Cmd+1/2/3 → Craft / Plan / Ask (also Digit* codes)
+  // Ctrl/Cmd+1/2/3/4 → Craft / Plan / Ask / Goal
   window.addEventListener('keydown', (e) => {
     if (!(e.ctrlKey || e.metaKey) || e.altKey || e.shiftKey) return;
     const code = e.code || '';
@@ -3220,12 +3391,20 @@ function bindWorkModeUi() {
     } else if (key === '3' || code === 'Digit3' || code === 'Numpad3') {
       e.preventDefault();
       setWorkMode('ask', { toast: true });
+    } else if (key === '4' || code === 'Digit4' || code === 'Numpad4') {
+      e.preventDefault();
+      setWorkMode('goal', { toast: true });
     }
   });
   // status badge click cycles mode
   document.addEventListener('click', (e) => {
     if (e.target?.id === 'sbMode' || e.target?.closest?.('#sbMode')) {
       cycleWorkMode();
+    }
+    if (e.target?.id === 'btnClearGoal' || e.target?.closest?.('#btnClearGoal')) {
+      e.preventDefault();
+      clearTaskGoal(T());
+      toast(localeIsEn() ? 'Goal cleared' : '已清除目标', 'ok');
     }
   });
   document.addEventListener('keydown', (e) => {
@@ -3239,6 +3418,8 @@ function bindWorkModeUi() {
 window.setWorkMode = setWorkMode;
 window.cycleWorkMode = cycleWorkMode;
 window.applySendLabel = applySendLabel;
+window.renderGoalTrack = renderGoalTrack;
+window.clearTaskGoal = clearTaskGoal;
 window.setLiveFilter = setLiveFilter;
 window.beginTaskRename = beginTaskRename;
 
@@ -3345,6 +3526,7 @@ window.markDiffReviewed = markDiffReviewed;
 const SLASH_COMMANDS = () => [
   { id: 'craft', label: '/craft', desc: localeIsEn() ? 'Switch to Craft' : '切换 Craft 飞行', run: () => setWorkMode('craft', { toast: true }) },
   { id: 'plan', label: '/plan', desc: localeIsEn() ? 'Switch to Plan' : '切换 Plan', run: () => setWorkMode('plan', { toast: true }) },
+  { id: 'goal', label: '/goal', desc: localeIsEn() ? 'Switch to Goal' : '切换 Goal 目标', run: () => setWorkMode('goal', { toast: true }) },
   { id: 'ask', label: '/ask', desc: localeIsEn() ? 'Switch to Ask' : '切换 Ask', run: () => setWorkMode('ask', { toast: true }) },
   {
     id: 'model',
@@ -4426,11 +4608,41 @@ function clearPromptDraft(task) {
 
 
 // ── Live / Diff mission control ─────────────────────────
-function pushLiveEvent({ kind, title, sub, running = false, projectId = null }) {
+/** Coalesce timeline rebuilds under tool storms (perf) */
+const LiveBatcher = {
+  MS: 56,
+  timer: 0,
+  dirty: false,
+  projId: null,
+
+  schedule(proj) {
+    this.dirty = true;
+    this.projId = proj?.id || this.projId;
+    if (this.timer) return;
+    this.timer = setTimeout(() => this.flush(), this.MS);
+  },
+
+  flush() {
+    clearTimeout(this.timer);
+    this.timer = 0;
+    if (!this.dirty) return;
+    this.dirty = false;
+    const proj =
+      (this.projId && window.ProjectStore?.get?.(this.projId)) || P();
+    this.projId = null;
+    if (proj && P() && proj.id === P().id) {
+      rebuildLiveTimeline(proj);
+    }
+    updateLiveStats();
+  },
+};
+
+function pushLiveEvent({ kind, title, sub, running = false, projectId = null, immediate = false }) {
   const proj = projectId ? window.ProjectStore.get(projectId) : P();
+  const ev = { kind, title, sub, ts: Date.now(), running: Boolean(running) };
   if (proj) {
     if (!Array.isArray(proj.activity)) proj.activity = [];
-    proj.activity.push({ kind, title, sub, ts: Date.now() });
+    proj.activity.push(ev);
     const maxKeep = window.GrokLiveVirtual?.MAX_KEEP || 500;
     if (proj.activity.length > maxKeep) proj.activity = proj.activity.slice(-maxKeep);
   }
@@ -4441,9 +4653,31 @@ function pushLiveEvent({ kind, title, sub, running = false, projectId = null }) 
     return;
   }
 
-  // Always rebuild through filter so chips stay consistent
-  rebuildLiveTimeline(proj);
-  updateLiveStats();
+  // Fast path: unfiltered append without full rebuild
+  if (
+    !immediate &&
+    (state.liveFilter || 'all') === 'all' &&
+    window.GrokLiveVirtual?.appendEvent
+  ) {
+    const box = document.getElementById('liveTimeline');
+    if (box && !box.querySelector('#liveEmpty') && (box._virt || box.children.length > 0)) {
+      window.GrokLiveVirtual.appendEvent(box, ev, { esc });
+      const task = T();
+      if (task?.running && (task.streamBuf || task.thoughtBuf)) {
+        paintLiveStreamMirrors(task);
+      }
+      updateLiveStats();
+      return;
+    }
+  }
+
+  if (immediate) {
+    LiveBatcher.flush();
+    rebuildLiveTimeline(proj);
+    updateLiveStats();
+    return;
+  }
+  LiveBatcher.schedule(proj);
 }
 
 function setLivePhase(phase, detail) {
@@ -8637,10 +8871,11 @@ async function runTaskPrompt(task, text, opts = {}) {
   }
 
   // Plan confirm phrases ("执行" / "implement the plan") promote this turn to Craft
-  let modeUsed =
+  let modeUsed = normalizeWorkMode(
     opts.forceCraft || opts.workMode === 'craft'
       ? 'craft'
-      : opts.workMode || state.workMode || cfg.workMode || 'craft';
+      : opts.workMode || state.workMode || cfg.workMode || 'craft'
+  );
   const typedPlanExec =
     modeUsed === 'plan' && isPlanExecutePhrase(text) && !opts.forceCraft;
   if (typedPlanExec) {
@@ -8655,6 +8890,11 @@ async function runTaskPrompt(task, text, opts = {}) {
     toast(localeIsEn() ? 'Plan → Craft · executing' : 'Plan → Craft · 开始执行', 'ok');
   } else if (opts.forceCraft && state.workMode !== 'craft') {
     toast(localeIsEn() ? 'One-shot Craft' : '单次 Craft 起飞', 'ok');
+  }
+
+  // Goal mode: anchor / refresh task.goal before run
+  if (modeUsed === 'goal') {
+    ensureTaskGoal(task, text);
   }
 
   // 重试时不重复追加相同 user 消息
@@ -8744,8 +8984,10 @@ async function runTaskPrompt(task, text, opts = {}) {
       lastStopped: Boolean(opts.isContinue || opts.isStopCleanup),
       forceCraft: Boolean(opts.forceCraft),
       fromPlanExecute: Boolean(opts.fromPlanExecute),
+      goal: modeUsed === 'goal' || task.goal ? task.goal : null,
     });
     flushStreamPaint(task);
+    LiveBatcher.flush();
 
     const finalText = result?.text || task.streamBuf || '';
     if (result?.sessionId) task.sessionId = result.sessionId;
@@ -8756,6 +8998,10 @@ async function runTaskPrompt(task, text, opts = {}) {
     }
     if (result?.resumedFallback) {
       toast(t('chat.resumeFallback'), 'ok');
+    }
+    // Goal track: parse progress from reply
+    if ((modeUsed === 'goal' || task.goal) && finalText) {
+      updateTaskGoalFromReply(task, finalText);
     }
     // User stop: keep partial stream, offer continue / retry
     if (result?.stopped || task.stopRequested) {
@@ -9575,7 +9821,13 @@ function setRunningUi(on) {
   $('#btnSend').disabled = Boolean(task?.running);
   $('#btnStop').classList.toggle('hidden', !task?.running);
   applySendLabel();
-  document.body.classList.toggle('craft-inflight', Boolean(task?.running && (task.turnMode || state.workMode) === 'craft'));
+  {
+    const m = task?.turnMode || state.workMode;
+    document.body.classList.toggle(
+      'craft-inflight',
+      Boolean(task?.running && (m === 'craft' || m === 'goal'))
+    );
+  }
   if (!running && anyRunning()) {
     // 其他任务还在跑
     $('#liveBadge')?.classList.remove('hidden');

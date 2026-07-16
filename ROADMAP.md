@@ -65,6 +65,8 @@ Living plan for the GrokCode open-source ecosystem. Order may change based on co
 - [x] Multi-task stream fairness under heavy tool load (v1.9.2)
 - [x] Context L0–L3 inheritance quality for long tasks (v1.9.3)
 - [x] Plan → Craft execute chain (v1.9.4)
+- [x] Real-time stream (no black box) (v1.9.6)
+- [x] **Goal mode** + LiveBatcher perf + arch doc (v1.10.0)
 
 ## Now (UI / experience)
 
@@ -72,6 +74,7 @@ Living plan for the GrokCode open-source ecosystem. Order may change based on co
 - [x] Tree polish vs flight-deck chrome consistency
 - [x] Optional “cinematic idle” ambient (off by default)
 - [x] Layout simplify — hide advanced presets by default
+- [x] Mode strip converge + goal track (v1.10.0)
 
 ## Deferred (services — not now)
 

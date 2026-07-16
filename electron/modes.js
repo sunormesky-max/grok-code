@@ -3,6 +3,14 @@
  * content is GrokCode / Grok-native (not third-party prompts).
  */
 
+/** Canonical work-mode ids (UI + config + IPC) */
+const WORK_MODE_IDS = ['craft', 'plan', 'ask', 'goal'];
+
+function normalizeWorkMode(mode) {
+  const m = String(mode || '').toLowerCase();
+  return WORK_MODE_IDS.includes(m) ? m : 'craft';
+}
+
 const MODES = {
   craft: {
     id: 'craft',
@@ -40,8 +48,28 @@ const MODES = {
       '【工作模式：Ask · 只读】',
       '可以读文件、解释代码、分析问题。',
       '禁止：写文件、删文件、改配置、跑会修改系统状态的命令（安装包、git push、rm 等）。',
-      '若用户要求动手，提示切换到 Craft 或 Plan 模式。',
+      '若用户要求动手，提示切换到 Craft、Plan 或 Goal 模式。',
       '回复给方案与示例代码块即可，不要声称已写入磁盘。',
+    ].join('\n'),
+  },
+  goal: {
+    id: 'goal',
+    labelZh: 'Goal',
+    labelEn: 'Goal',
+    descZh: '锚定目标 · 分里程碑推进到完成',
+    descEn: 'Anchor a goal · ship by milestones',
+    rules: [
+      '【工作模式：Goal · 目标模式】',
+      '用户给出的是「要达成的目标」，不是一次性闲聊。',
+      '先用 1–2 行确认目标与成功标准，再拆成 3–7 个可验证里程碑，然后立即动手推进（可读可写可跑命令）。',
+      '每一轮结束用固定小节汇报进度（便于 UI 解析）：',
+      '【目标进度】',
+      '- 目标：…',
+      '- 进度：N%（或 已完成/受阻）',
+      '- 本轮完成：…',
+      '- 下一步：…',
+      '未完成目标时优先继续推进，不要半途只停在方案；信息不足再问。',
+      '用户说「目标完成 / goal done / 算了」时收尾并总结验收。',
     ].join('\n'),
   },
 };
@@ -154,7 +182,7 @@ function buildRules({
   workMode = 'craft',
   stylePack = 'default',
 } = {}) {
-  const mode = MODES[workMode] || MODES.craft;
+  const mode = MODES[normalizeWorkMode(workMode)] || MODES.craft;
   const style = STYLES[stylePack] || STYLES.default;
   const parts = [
     String(baseRules || '').trim(),
@@ -289,11 +317,91 @@ function buildPlanExecutePrompt(planText, { locale = 'zh' } = {}) {
   );
 }
 
+/** Short title from a free-form goal statement */
+function extractGoalTitle(text, { maxLen = 72 } = {}) {
+  let t = String(text || '')
+    .trim()
+    .replace(/\s+/g, ' ');
+  if (!t) return '';
+  // Strip common prefixes
+  t = t.replace(
+    /^(目标[:：\s]*|goal\s*[:：-]?\s*|我希望|我想要|请帮我|帮我|实现|完成|做到)\s*/i,
+    ''
+  );
+  const firstLine = t.split(/[\n。！？.!?]/)[0] || t;
+  const s = firstLine.trim() || t;
+  return s.length > maxLen ? s.slice(0, maxLen - 1) + '…' : s;
+}
+
+/** User ends / abandons the goal */
+function isGoalDonePhrase(text) {
+  const t = String(text || '').trim();
+  if (!t) return false;
+  return /^(目标完成|完成目标|goal\s*done|goal\s*complete|mark\s*done|算了|放弃目标|取消目标)[\s!！。.~]*$/i.test(
+    t
+  );
+}
+
+/**
+ * Parse 【目标进度】 block (or loose %) from assistant text
+ * @returns {{ progress?: number, status?: string, title?: string, next?: string } | null}
+ */
+function parseGoalProgress(text) {
+  const t = String(text || '');
+  if (!t) return null;
+  const out = {};
+  const block = t.match(/【目标进度】([\s\S]{0,800}?)(?=\n【|\n##\s|$)/);
+  const body = block ? block[1] : t.slice(-1200);
+  const titleM = body.match(/(?:目标|Goal)\s*[:：]\s*(.+)/i);
+  if (titleM) out.title = titleM[1].trim().slice(0, 120);
+  const progM = body.match(/(?:进度|Progress)\s*[:：]\s*(\d{1,3})\s*%/i);
+  if (progM) out.progress = Math.max(0, Math.min(100, parseInt(progM[1], 10)));
+  else {
+    const loose = body.match(/\b(\d{1,3})\s*%/);
+    if (loose && /进度|progress|完成/i.test(body)) {
+      out.progress = Math.max(0, Math.min(100, parseInt(loose[1], 10)));
+    }
+  }
+  if (
+    /进度\s*[:：]\s*(已完成|完成|done|complete)/i.test(body) ||
+    /目标完成|goal\s*(done|complete|achieved)/i.test(t)
+  ) {
+    out.status = 'done';
+    out.progress = 100;
+  } else if (/进度\s*[:：]\s*(受阻|blocked|卡住)/i.test(body)) {
+    out.status = 'blocked';
+  } else if (out.progress === 100) {
+    out.status = 'done';
+  } else if (out.progress != null || out.title) {
+    out.status = 'active';
+  }
+  const nextM = body.match(/(?:下一步|Next)\s*[:：]\s*(.+)/i);
+  if (nextM) out.next = nextM[1].trim().slice(0, 160);
+  if (out.progress == null && !out.status && !out.title) return null;
+  return out;
+}
+
+/** Inject sticky goal into prompt (renderer passes task.goal) */
+function buildGoalPromptBlock(goal) {
+  if (!goal || !goal.title) return '';
+  const status = goal.status || 'active';
+  const prog = goal.progress != null ? `${goal.progress}%` : '—';
+  const next = goal.next ? `\n- 下一步提示：${String(goal.next).slice(0, 160)}` : '';
+  return (
+    `【锚定目标 · Goal track】\n` +
+    `- 目标：${String(goal.title).slice(0, 200)}\n` +
+    `- 状态：${status}\n` +
+    `- 进度：${prog}${next}\n` +
+    `请继续向该目标推进；回合末输出【目标进度】小节。\n\n`
+  );
+}
+
 /**
  * Extra prompt prefix for modes
  */
-function modePromptPrefix(workMode, userMessage) {
-  if (workMode === 'plan') {
+function modePromptPrefix(workMode, userMessage, opts = {}) {
+  const mode = normalizeWorkMode(workMode);
+  if (mode === 'plan') {
     if (isPlanExecutePhrase(userMessage)) {
       return (
         '【Plan → Craft 执行确认】用户已确认执行方案。' +
@@ -308,8 +416,22 @@ function modePromptPrefix(workMode, userMessage) {
       '方案要短而可执行，避免空话。\n\n'
     );
   }
-  if (workMode === 'ask') {
+  if (mode === 'ask') {
     return '【Ask 模式 · 只读】只分析与回答；不要写文件、不要删文件、不要跑修改性命令。\n\n';
+  }
+  if (mode === 'goal') {
+    const goalBlock = buildGoalPromptBlock(opts.goal);
+    if (isGoalDonePhrase(userMessage)) {
+      return (
+        goalBlock +
+        '【Goal 收尾】用户要求结束目标。汇总已完成项、未完成项与如何验收；不要再大范围改代码，除非用户又提新目标。\n\n'
+      );
+    }
+    return (
+      goalBlock +
+      '【Goal 模式 · 目标驱动】确认/继承锚定目标 → 拆里程碑 → 立即动手推进。' +
+      '每轮末必须有【目标进度】（目标 / 进度% / 本轮完成 / 下一步）。少空话，多可验证进展。\n\n'
+    );
   }
   // Craft — default flight mode
   return (
@@ -339,13 +461,19 @@ function listStyles() {
 
 module.exports = {
   MODES,
+  WORK_MODE_IDS,
   STYLES,
   PERSONAL_PROTECT,
+  normalizeWorkMode,
   buildRules,
   readProjectRulesFile,
   writeProjectRulesFile,
   modePromptPrefix,
   isPlanExecutePhrase,
+  isGoalDonePhrase,
+  extractGoalTitle,
+  parseGoalProgress,
+  buildGoalPromptBlock,
   looksLikePlan,
   buildPlanExecutePrompt,
   listModes,

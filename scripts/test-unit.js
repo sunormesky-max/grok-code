@@ -160,8 +160,10 @@ function testModes() {
   fs.writeFileSync(path.join(tmp, '.grok', 'rules.md'), 'no force push\n', 'utf8');
   const pr = m.readProjectRulesFile(tmp);
   assert.ok(pr.text.includes('no force push'));
-  assert.equal(m.listModes().length, 3);
+  assert.equal(m.listModes().length, 4, 'craft plan ask goal');
   assert.ok(m.listStyles().length >= 3);
+  assert.equal(m.normalizeWorkMode('goal'), 'goal');
+  assert.equal(m.normalizeWorkMode('nope'), 'craft');
   // plan execute phrase + craft promotion prefix
   assert.ok(m.isPlanExecutePhrase('执行'));
   assert.ok(m.isPlanExecutePhrase('implement the plan'));
@@ -181,7 +183,22 @@ function testModes() {
   const execPrompt = m.buildPlanExecutePrompt(planBody, { locale: 'zh' });
   assert.ok(execPrompt.includes('auth') || execPrompt.includes('方案'), 'execute embeds plan');
   assert.ok(execPrompt.includes('Craft') || execPrompt.includes('执行'), 'execute is craft-ish');
-  console.log('ok  modes / styles / plan→craft');
+  // Goal mode
+  const goalPrefix = m.modePromptPrefix('goal', '让登录可恢复', {
+    goal: { title: '登录可恢复', status: 'active', progress: 20 },
+  });
+  assert.ok(goalPrefix.includes('Goal') || goalPrefix.includes('目标'), 'goal prefix');
+  assert.ok(goalPrefix.includes('登录可恢复'), 'goal title injected');
+  assert.ok(m.extractGoalTitle('目标：修好 Diff 面板').includes('Diff'));
+  assert.ok(m.isGoalDonePhrase('目标完成'));
+  assert.ok(!m.isGoalDonePhrase('继续推进目标'));
+  const parsed = m.parseGoalProgress(
+    '做完了半截\n【目标进度】\n- 目标：修好登录\n- 进度：45%\n- 本轮完成：auth 刷新\n- 下一步：补测试\n'
+  );
+  assert.ok(parsed && parsed.progress === 45, 'parse progress %');
+  assert.ok(parsed.title.includes('登录'), 'parse goal title');
+  assert.ok(String(parsed.next || '').includes('测试'), 'parse next');
+  console.log('ok  modes / styles / plan→craft / goal');
 }
 
 function testLooksLikePlan() {

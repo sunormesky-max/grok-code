@@ -11,6 +11,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 - See [ROADMAP.md](ROADMAP.md)
 
+## [1.10.0] — 2026-07-16
+
+### Goal mode + architecture / perf / UI converge
+
+#### Goal 目标模式
+- Fourth work mode **Goal**: anchor an outcome, milestone through it, report `【目标进度】`
+- Task-level `goal` state (title / progress% / status / next) — persisted & re-injected each turn
+- UI **goal track** bar under mode chips; clear button; Ctrl+4 · `/goal` · command palette
+- Full tool throttle (like Craft) with extra max-turns headroom for multi-milestone flights
+
+#### Performance
+- **LiveBatcher**: coalesce timeline rebuilds (~56ms) under tool storms
+- Fast-path **append** into Live virtual timeline when filter is `all`
+- Flush Live batch on run complete; architecture doc spells out stream path
+
+#### UI converge
+- Mode strip: Craft · Plan · **Goal** · Ask — denser chips, shorter hints
+- Composer hints trimmed to ↵ / / / @ / count
+- Status bar shortcut line: Ctrl+1–4 modes
+- Work shell keeps Live primary; less chrome noise
+
+#### Architecture
+- `docs/ARCHITECTURE.md`: modes table, stream/perf path, preload allowlist note
+- Shared `normalizeWorkMode` / `WORK_MODE_IDS` in `modes.js`
+
 ## [1.9.6] — 2026-07-16
 
 ### Core — real-time streaming (no black box)

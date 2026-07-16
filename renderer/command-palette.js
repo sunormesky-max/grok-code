@@ -433,6 +433,13 @@
         run: run(() => global.setWorkMode?.('plan', { toast: true })),
       },
       {
+        id: 'mode.goal',
+        title: t('cmd.mode.goal', '模式 · Goal 目标'),
+        keywords: 'mode goal 目标 milestone 里程碑',
+        group: 'actions',
+        run: run(() => global.setWorkMode?.('goal', { toast: true })),
+      },
+      {
         id: 'mode.ask',
         title: t('cmd.mode.ask', '模式 · Ask'),
         keywords: 'mode ask 只读',
@@ -442,7 +449,7 @@
       {
         id: 'mode.cycle',
         title: t('cmd.mode.cycle', '切换工作模式'),
-        keywords: 'mode cycle 切换 模式 craft plan ask',
+        keywords: 'mode cycle 切换 模式 craft plan goal ask',
         group: 'actions',
         run: run(() => global.cycleWorkMode?.()),
       },

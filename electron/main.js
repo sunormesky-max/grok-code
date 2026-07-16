@@ -51,7 +51,7 @@ const store = new Store({
     /** opt-in crash telemetry */
     telemetryEnabled: false,
     telemetryEndpoint: '',
-    /** craft | plan | ask */
+    /** craft | plan | ask | goal */
     workMode: 'craft',
     /** default | pragmatic | teaching | warm | blunt */
     stylePack: 'default',
@@ -87,9 +87,7 @@ function emit(event, payload) {
 }
 
 function getConfig() {
-  const workMode = ['craft', 'plan', 'ask'].includes(store.get('workMode'))
-    ? store.get('workMode')
-    : 'craft';
+  const workMode = modes.normalizeWorkMode(store.get('workMode'));
   const stylePack = modes.STYLES[store.get('stylePack')]
     ? store.get('stylePack')
     : 'default';
@@ -458,8 +456,7 @@ ipcMain.handle('config:set', (_e, partial) => {
     store.set('telemetryEndpoint', String(partial.telemetryEndpoint || '').trim());
   }
   if (partial.workMode !== undefined) {
-    const m = String(partial.workMode);
-    store.set('workMode', ['craft', 'plan', 'ask'].includes(m) ? m : 'craft');
+    store.set('workMode', modes.normalizeWorkMode(partial.workMode));
   }
   if (partial.stylePack !== undefined) {
     const s = String(partial.stylePack);
@@ -863,12 +860,24 @@ ipcMain.handle('agent:run', async (_e, payload) => {
   const skipResume = Boolean(payload?.skipResume);
   const effectiveSession = skipResume ? null : sessionId;
 
-  const workMode = ['craft', 'plan', 'ask'].includes(payload?.workMode)
-    ? payload.workMode
-    : getConfig().workMode;
+  const workMode = modes.normalizeWorkMode(
+    payload?.workMode != null ? payload.workMode : getConfig().workMode
+  );
   const stylePack = modes.STYLES[payload?.stylePack]
     ? payload.stylePack
     : getConfig().stylePack;
+  const goalState =
+    payload?.goal && typeof payload.goal === 'object' && payload.goal.title
+      ? {
+          title: String(payload.goal.title).slice(0, 200),
+          status: String(payload.goal.status || 'active').slice(0, 32),
+          progress:
+            typeof payload.goal.progress === 'number'
+              ? Math.max(0, Math.min(100, payload.goal.progress))
+              : undefined,
+          next: payload.goal.next ? String(payload.goal.next).slice(0, 160) : undefined,
+        }
+      : null;
 
   const changedFiles = Array.isArray(payload?.changedFiles)
     ? payload.changedFiles
@@ -904,7 +913,7 @@ ipcMain.handle('agent:run', async (_e, payload) => {
     context.llm = { used: false, reason: err.message || String(err) };
   }
 
-  const modePrefix = modes.modePromptPrefix(workMode, message);
+  const modePrefix = modes.modePromptPrefix(workMode, message, { goal: goalState });
   let skillsIndex = '';
   try {
     if (store.get('injectSkillsIndex') !== false) {
@@ -938,8 +947,7 @@ ipcMain.handle('agent:run', async (_e, payload) => {
   });
 
   // Ask: never auto-approve tools; Plan: fewer turns while planning;
-  // Plan+execute phrase or explicit craft: full throttle
-  // Craft: flight mode — full throttle (user always-approve + maxTurns as configured)
+  // Plan+execute / Craft / Goal: full throttle (user always-approve + maxTurns)
   let alwaysOverride;
   let maxTurnsOverride;
   const planExec =
@@ -951,7 +959,12 @@ ipcMain.handle('agent:run', async (_e, payload) => {
   } else if (workMode === 'plan' && !planExec) {
     // pure planning turn: fewer tool turns preferred
     maxTurnsOverride = Math.min(Number(store.get('maxTurns') || 30), 16);
-  } else if (workMode === 'craft' || planExec || payload?.forceCraft) {
+  } else if (
+    workMode === 'craft' ||
+    workMode === 'goal' ||
+    planExec ||
+    payload?.forceCraft
+  ) {
     alwaysOverride = undefined; // keep user always-approve
     const base = Number(store.get('maxTurns') || 30);
     if (store.get('alwaysApprove') !== false && base < 24) {
@@ -961,8 +974,12 @@ ipcMain.handle('agent:run', async (_e, payload) => {
     if ((planExec || payload?.fromPlanExecute) && base < 28) {
       maxTurnsOverride = Math.max(maxTurnsOverride || 0, 28);
     }
+    // Goal: multi-milestone flights need headroom
+    if (workMode === 'goal' && base < 28) {
+      maxTurnsOverride = Math.max(maxTurnsOverride || 0, 28);
+    }
   }
-  // note: modePrefix still uses original workMode so plan-exec phrase gets execute banner
+  // note: modePrefix still uses original workMode so plan-exec / goal banners apply
 
   if (p.aborts.has(tid)) {
     try {

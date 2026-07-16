@@ -11,6 +11,7 @@
     { keys: ['Ctrl', '1'], desc: t('help.mode.craft', '模式 · Craft 飞行') },
     { keys: ['Ctrl', '2'], desc: t('help.mode.plan', '模式 · Plan') },
     { keys: ['Ctrl', '3'], desc: t('help.mode.ask', '模式 · Ask') },
+    { keys: ['Ctrl', '4'], desc: t('help.mode.goal', '模式 · Goal 目标') },
     { keys: ['Ctrl', 'Shift', 'Enter'], desc: t('help.send.craft', '单次 Craft 发送（不改模式）') },
     { keys: ['/'], desc: t('help.slash', 'Composer 斜杠命令') },
     { keys: ['@'], desc: t('help.at', 'Composer 提及文件路径') },

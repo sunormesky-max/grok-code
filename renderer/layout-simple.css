@@ -435,14 +435,24 @@ body.layout-v15 .chat-head-actions .status-chip {
   opacity: 1;
 }
 
-/* Mode bar: slightly denser, less “dashboard” */
+/* Mode bar: denser 4-mode strip */
 body.layout-v15 .mode-bar {
   gap: 3px;
-  padding: 2px;
+  padding: 2px 0 4px;
 }
 body.layout-v15 .mode-chip {
-  padding: 4px 10px;
-  font-size: 11.5px;
+  padding: 3px 8px;
+  font-size: 10.5px;
+}
+body.layout-v15 .composer-hints .hint-secondary {
+  opacity: 0.55;
+}
+body.layout-v15 .composer-hints .hint-primary {
+  font-weight: 700;
+}
+/* Hide low-value path/dirty noise until Code tab */
+body.layout-v15.center-tab-live .center-tabs-tools {
+  justify-content: flex-end;
 }
 
 /* Softer secondary panel edges (less flight-deck chrome in default work) */

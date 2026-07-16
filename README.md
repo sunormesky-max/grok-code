@@ -16,11 +16,12 @@
 
 | Area | What you get |
 |------|----------------|
-| **Agent** | Headless `grok` + multi-turn `--resume` sessions |
+| **Agent** | Headless `grok` + multi-turn `--resume` sessions · **real-time stream** |
+| **Modes** | **Craft** · **Plan** · **Goal** · **Ask** (Ctrl+1–4) |
 | **Multi-project** | Mount several repos; agents run in parallel per project |
 | **Multi-task** | Per-project task tabs; parallel CLI processes |
 | **Live / Code / Diff** | Mission control (virtualized), file review, unified diffs + restore |
-| **Context inheritance** | Persist chats under `~/.grok-code/sessions`; L0–L3 (+ optional LLM) |
+| **Context inheritance** | Persist chats under `~/.grok-code/sessions`; L0–L3 (+ optional LLM) · Goal track |
 | **Settings** | CLI, model, YOLO, **MCP**, **Skills**, **Plugins**, **Catalog** |
 | **Appearance** | **i18n** en/zh · theme packs (+ JSON import) · profiles |
 | **UI** | Sci-fi HUD · **Ctrl+K** · **Ctrl+P** files · **Ctrl+Shift+F** content · Code\|Diff split · [Visual QA](docs/VISUAL-QA.md) |
@@ -59,18 +60,21 @@ export XAI_API_KEY=xai-...   # or set in Settings
 
 ## Architecture
 
+See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the full stream path, modes table, and performance notes.
+
 ```text
 ┌─────────────────────────────────────────┐
 │  Electron renderer (UI)                 │
-│  projects · tasks · Live/Code/Diff      │
+│  projects · tasks · modes · Live/Code   │
+│  StreamFair · LiveBatcher · goal track  │
 └─────────────────┬───────────────────────┘
-                  │ IPC
+                  │ IPC (preload allowlist)
 ┌─────────────────▼───────────────────────┐
 │  Electron main                          │
-│  multi-project agents · fs · persist    │
+│  multi-project agents · modes · persist │
 │  MCP/Skills (via grok + ~/.grok)        │
 └─────────────────┬───────────────────────┘
-                  │ spawn headless
+                  │ spawn headless streaming-json
 ┌─────────────────▼───────────────────────┐
 │  grok CLI  (-p / streaming-json / YOLO) │
 │  tools · MCP · skills · same as TUI     │

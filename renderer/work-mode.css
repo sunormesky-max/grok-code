@@ -1,27 +1,28 @@
-/* Craft / Plan / Ask mode chips */
+/* Craft / Plan / Goal / Ask mode chips — compact converge */
 
 .mode-bar,
 #modeBar {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 0 4px 8px;
-  flex-wrap: wrap;
+  gap: 4px;
+  padding: 0 2px 6px;
+  flex-wrap: nowrap;
   position: relative;
   z-index: 6;
   pointer-events: auto;
   -webkit-app-region: no-drag;
   app-region: no-drag;
+  min-height: 0;
 }
 .mode-chip {
   appearance: none;
   border: 1px solid rgba(125, 211, 252, 0.18);
   background: rgba(0, 0, 0, 0.35);
   color: var(--muted, #a1a1aa);
-  font-size: 11px;
+  font-size: 10.5px;
   font-weight: 700;
-  letter-spacing: 0.04em;
-  padding: 4px 10px;
+  letter-spacing: 0.03em;
+  padding: 3px 8px;
   border-radius: 999px;
   cursor: pointer;
   transition: all 0.15s;
@@ -32,6 +33,7 @@
   -webkit-app-region: no-drag !important;
   app-region: no-drag !important;
   user-select: none;
+  flex-shrink: 0;
 }
 .mode-chip:hover {
   border-color: rgba(125, 211, 252, 0.35);
@@ -52,6 +54,13 @@ body.layout-v15 .mode-chip.active[data-mode="plan"],
   background: linear-gradient(120deg, #fbbf24, #f97316) !important;
   box-shadow: 0 0 14px rgba(249, 115, 22, 0.35) !important;
 }
+body.layout-v15 .mode-chip.active[data-mode="goal"],
+.mode-chip.active[data-mode="goal"] {
+  color: #0a0a0c !important;
+  border-color: transparent !important;
+  background: linear-gradient(120deg, #34d399, #22d3ee) !important;
+  box-shadow: 0 0 14px rgba(52, 211, 153, 0.4) !important;
+}
 body.layout-v15 .mode-chip.active[data-mode="ask"],
 .mode-chip.active[data-mode="ask"] {
   color: #f4f4f5 !important;
@@ -60,10 +69,100 @@ body.layout-v15 .mode-chip.active[data-mode="ask"],
   box-shadow: 0 0 14px rgba(167, 139, 250, 0.35) !important;
 }
 .mode-hint {
-  font-size: 11px;
+  font-size: 10.5px;
   color: var(--faint, #71717a);
-  margin-left: 4px;
+  margin-left: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+  flex: 1;
 }
+@media (max-width: 1180px) {
+  .mode-hint { display: none; }
+}
+
+/* Goal track bar under mode chips */
+.goal-track {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 2px 6px;
+  padding: 5px 8px;
+  border-radius: 10px;
+  border: 1px solid rgba(52, 211, 153, 0.22);
+  background: linear-gradient(90deg, rgba(52, 211, 153, 0.08), rgba(34, 211, 238, 0.04));
+  min-height: 0;
+}
+.goal-track.hidden { display: none !important; }
+.goal-track-ico {
+  color: #34d399;
+  font-size: 12px;
+  flex-shrink: 0;
+}
+.goal-track-main {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  min-width: 0;
+  flex: 1;
+}
+.goal-track-label {
+  font-family: var(--mono, monospace);
+  font-size: 9px;
+  letter-spacing: 0.12em;
+  color: #6ee7b7;
+  font-weight: 700;
+}
+.goal-track-title {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: #e4e4e7;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.goal-track-meter {
+  width: 56px;
+  height: 4px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+  flex-shrink: 0;
+}
+.goal-track-meter i {
+  display: block;
+  height: 100%;
+  width: 0;
+  background: linear-gradient(90deg, #34d399, #22d3ee);
+  border-radius: inherit;
+  transition: width 0.25s ease;
+}
+.goal-track-pct {
+  font-family: var(--mono, monospace);
+  font-size: 10px;
+  color: #6ee7b7;
+  min-width: 2.4em;
+  text-align: right;
+  flex-shrink: 0;
+}
+.goal-track[data-status="done"] {
+  border-color: rgba(52, 211, 153, 0.4);
+}
+.goal-track[data-status="done"] .goal-track-pct { color: #86efac; }
+.goal-track[data-status="blocked"] {
+  border-color: rgba(248, 113, 113, 0.35);
+  background: linear-gradient(90deg, rgba(248, 113, 113, 0.08), transparent);
+}
+.goal-track[data-status="blocked"] .goal-track-pct { color: #fca5a5; }
+.goal-track-clear {
+  flex-shrink: 0;
+  opacity: 0.55;
+  font-size: 14px;
+  line-height: 1;
+  padding: 0 2px;
+}
+.goal-track-clear:hover { opacity: 1; }
 
 /* body accent by mode */
 body[data-work-mode="craft"] .composer-box:focus-within {
@@ -73,6 +172,10 @@ body[data-work-mode="craft"] .composer-box:focus-within {
 body[data-work-mode="plan"] .composer-box:focus-within {
   border-color: rgba(249, 115, 22, 0.55) !important;
   box-shadow: 0 0 0 1px rgba(249, 115, 22, 0.2), 0 0 36px rgba(249, 115, 22, 0.14) !important;
+}
+body[data-work-mode="goal"] .composer-box:focus-within {
+  border-color: rgba(52, 211, 153, 0.55) !important;
+  box-shadow: 0 0 0 1px rgba(52, 211, 153, 0.2), 0 0 36px rgba(52, 211, 153, 0.14) !important;
 }
 body[data-work-mode="ask"] .composer-box:focus-within {
   border-color: rgba(167, 139, 250, 0.55) !important;
@@ -89,6 +192,7 @@ body[data-work-mode="ask"] .composer-box:focus-within {
   margin: 0 6px;
   border: 1px solid rgba(125, 211, 252, 0.25);
   color: var(--ice, #7dd3fc);
+  cursor: pointer;
 }
 .sb-mode[data-mode="craft"] {
   border-color: rgba(56, 189, 248, 0.45);
@@ -100,22 +204,36 @@ body[data-work-mode="ask"] .composer-box:focus-within {
   color: #fdba74;
   background: rgba(249, 115, 22, 0.1);
 }
+.sb-mode[data-mode="goal"] {
+  border-color: rgba(52, 211, 153, 0.45);
+  color: #6ee7b7;
+  background: rgba(52, 211, 153, 0.1);
+}
 .sb-mode[data-mode="ask"] {
   border-color: rgba(167, 139, 250, 0.45);
   color: #c4b5fd;
   background: rgba(167, 139, 250, 0.12);
 }
 
-/* Craft: pulse the active chip slightly */
-.mode-chip.active[data-mode="craft"] {
+/* Craft / Goal: pulse the active chip slightly */
+.mode-chip.active[data-mode="craft"],
+.mode-chip.active[data-mode="goal"] {
   animation: craftPulse 2.4s ease-in-out infinite;
 }
 @keyframes craftPulse {
   0%, 100% { box-shadow: 0 0 14px rgba(56, 189, 248, 0.35); }
   50% { box-shadow: 0 0 22px rgba(56, 189, 248, 0.55); }
 }
+.mode-chip.active[data-mode="goal"] {
+  animation-name: goalPulse;
+}
+@keyframes goalPulse {
+  0%, 100% { box-shadow: 0 0 14px rgba(52, 211, 153, 0.35); }
+  50% { box-shadow: 0 0 22px rgba(52, 211, 153, 0.55); }
+}
 @media (prefers-reduced-motion: reduce) {
-  .mode-chip.active[data-mode="craft"] { animation: none; }
+  .mode-chip.active[data-mode="craft"],
+  .mode-chip.active[data-mode="goal"] { animation: none; }
 }
 
 /* Craft flight-deck chrome */
