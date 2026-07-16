@@ -88,20 +88,36 @@
    * Build foldable unified hunks from line ops.
    * @returns {{ html: string, hunkCount: number }}
    */
+  /** heat 0–4 from age (minutes) — hotter = more recent */
+  function heatFromTs(ts) {
+    if (!ts) return 0;
+    const ageMin = Math.max(0, (Date.now() - Number(ts)) / 60000);
+    if (ageMin < 2) return 4;
+    if (ageMin < 15) return 3;
+    if (ageMin < 60) return 2;
+    if (ageMin < 24 * 60) return 1;
+    return 0;
+  }
+
   function blameAttrs(blame, kind) {
     if (!blame || kind === 'same') return { cls: '', attrs: '' };
+    const heat =
+      blame.heat != null
+        ? Math.max(0, Math.min(4, Number(blame.heat) || 0))
+        : heatFromTs(blame.ts);
     const title = [
       blame.taskTitle ? `Task: ${blame.taskTitle}` : '',
       blame.turnId ? `Turn: ${blame.turnId}` : '',
       blame.ts ? `At: ${new Date(blame.ts).toLocaleString()}` : '',
       blame.prompt ? `Prompt: ${String(blame.prompt).slice(0, 120)}` : '',
       blame.reason ? `Via: ${blame.reason}` : '',
+      `Heat: ${heat}/4`,
     ]
       .filter(Boolean)
       .join(' · ');
     return {
-      cls: ' has-blame',
-      attrs: ` data-kind="${kind}" data-turn="${escapeHtml(blame.turnId || '')}"${
+      cls: ` has-blame heat-${heat}`,
+      attrs: ` data-kind="${kind}" data-heat="${heat}" data-turn="${escapeHtml(blame.turnId || '')}"${
         title ? ` title="${escapeHtml(title)}"` : ''
       }`,
     };
@@ -333,5 +349,6 @@
     isWriteTool,
     isReadTool,
     splitLines,
+    heatFromTs,
   };
 })(window);

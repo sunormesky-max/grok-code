@@ -1138,6 +1138,97 @@ ipcMain.handle('profile:import', async (e) => {
 ipcMain.handle('profile:list', () => profiles.listProfiles());
 ipcMain.handle('profile:dir', () => profiles.profilesDir());
 
+// ── Template pack import / export / local sync ──────────
+ipcMain.handle('template:exportPack', async (e, payload = {}) => {
+  const win = BrowserWindow.fromWebContents(e.sender);
+  const json = String(payload.json || '[]');
+  const save = await dialog.showSaveDialog(win, {
+    title: '导出 GrokCode 模板包',
+    defaultPath: path.join(osHomedir(), 'grok-templates.json'),
+    filters: [{ name: 'JSON', extensions: ['json'] }],
+  });
+  if (save.canceled || !save.filePath) return { ok: false, canceled: true };
+  try {
+    fs.writeFileSync(save.filePath, json, 'utf8');
+    return { ok: true, file: save.filePath };
+  } catch (err) {
+    return { ok: false, error: err.message || String(err) };
+  }
+});
+
+ipcMain.handle('template:importPack', async (e) => {
+  const win = BrowserWindow.fromWebContents(e.sender);
+  const open = await dialog.showOpenDialog(win, {
+    title: '导入 GrokCode 模板包',
+    properties: ['openFile'],
+    filters: [{ name: 'JSON', extensions: ['json'] }],
+  });
+  if (open.canceled || !open.filePaths[0]) return { ok: false, canceled: true };
+  try {
+    const raw = fs.readFileSync(open.filePaths[0], 'utf8');
+    const data = JSON.parse(raw);
+    const list = Array.isArray(data) ? data : Array.isArray(data.templates) ? data.templates : null;
+    if (!list) return { ok: false, error: 'JSON 需为数组或 { templates: [] }' };
+    const normalized = list
+      .filter((t) => t && (t.prompt || t.promptZh || t.promptEn))
+      .map((t, i) => ({
+        id: String(t.id || `import-${Date.now()}-${i}`).slice(0, 64),
+        labelZh: t.labelZh || t.label || t.labelEn || t.id || `模板 ${i + 1}`,
+        labelEn: t.labelEn || t.label || t.labelZh || t.id || `Template ${i + 1}`,
+        promptZh: t.promptZh || t.prompt || t.promptEn || '',
+        promptEn: t.promptEn || t.prompt || t.promptZh || '',
+      }));
+    return { ok: true, templates: normalized, file: open.filePaths[0] };
+  } catch (err) {
+    return { ok: false, error: err.message || String(err) };
+  }
+});
+
+ipcMain.handle('template:pickSyncDir', async (e) => {
+  const win = BrowserWindow.fromWebContents(e.sender);
+  const open = await dialog.showOpenDialog(win, {
+    title: '选择模板同步目录（本地 / 网盘文件夹）',
+    properties: ['openDirectory', 'createDirectory'],
+  });
+  if (open.canceled || !open.filePaths[0]) return { ok: false, canceled: true };
+  store.set('templateSyncDir', open.filePaths[0]);
+  return { ok: true, dir: open.filePaths[0] };
+});
+
+ipcMain.handle('template:getSyncDir', () => store.get('templateSyncDir') || '');
+
+ipcMain.handle('template:syncPush', (_e, payload = {}) => {
+  const dir = payload.dir || store.get('templateSyncDir');
+  if (!dir) return { ok: false, error: '未设置同步目录' };
+  try {
+    fs.mkdirSync(dir, { recursive: true });
+    const file = path.join(dir, 'grok-templates-sync.json');
+    const pack = {
+      format: 'grokcode-templates-v1',
+      exportedAt: new Date().toISOString(),
+      templates: Array.isArray(payload.templates) ? payload.templates : [],
+    };
+    fs.writeFileSync(file, JSON.stringify(pack, null, 2), 'utf8');
+    return { ok: true, file };
+  } catch (err) {
+    return { ok: false, error: err.message || String(err) };
+  }
+});
+
+ipcMain.handle('template:syncPull', (_e, payload = {}) => {
+  const dir = payload.dir || store.get('templateSyncDir');
+  if (!dir) return { ok: false, error: '未设置同步目录' };
+  const file = path.join(dir, 'grok-templates-sync.json');
+  if (!fs.existsSync(file)) return { ok: false, error: '同步文件不存在' };
+  try {
+    const data = JSON.parse(fs.readFileSync(file, 'utf8'));
+    const list = Array.isArray(data) ? data : data.templates || [];
+    return { ok: true, templates: list, file, exportedAt: data.exportedAt || null };
+  } catch (err) {
+    return { ok: false, error: err.message || String(err) };
+  }
+});
+
 // ── Session share export ────────────────────────────────
 ipcMain.handle('session:exportShare', async (e, payload = {}) => {
   const win = BrowserWindow.fromWebContents(e.sender);

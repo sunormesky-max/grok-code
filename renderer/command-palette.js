@@ -425,6 +425,30 @@
         keywords: 'template starter 模板 会话',
         group: 'actions',
         run: run(() => global.openTemplatesMenu?.()),
+      },
+      {
+        id: 'templates.import',
+        title: t('cmd.templates.import', '导入模板 JSON 包'),
+        keywords: 'template import pack 导入',
+        group: 'actions',
+        run: run(() => global.importTemplatesPack?.()),
+      },
+      {
+        id: 'templates.export',
+        title: t('cmd.templates.export', '导出模板 JSON 包'),
+        keywords: 'template export pack 导出',
+        group: 'actions',
+        run: run(() => global.exportTemplatesPack?.()),
+      },
+      {
+        id: 'diff.restoreTurn',
+        title: t('cmd.diff.restoreTurn', 'Diff 整轮还原'),
+        keywords: 'diff restore turn 整轮 还原 checkpoint',
+        group: 'actions',
+        run: run(() => {
+          global.switchTab?.('diff');
+          global.restoreWholeTurn?.();
+        }),
       }
     );
   }

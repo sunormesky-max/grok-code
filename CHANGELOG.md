@@ -11,6 +11,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 - See [ROADMAP.md](ROADMAP.md)
 
+## [1.3.9] — 2026-07-16
+
+### Templates marketplace-lite · heat · whole-turn
+
+- **Template pack**: export / import JSON; opt-in **local sync folder** (OneDrive/Dropbox/local) push & pull
+- **Diff blame heat**: +/- lines tint by turn age (heat 0–4, hotter = more recent)
+- **Whole-turn restore**: restore all Diff files that share the selected checkpoint turnId
+
 ## [1.3.8] — 2026-07-16
 
 ### Templates · checkpoints compare · paste save

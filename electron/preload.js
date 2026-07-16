@@ -10,6 +10,13 @@ contextBridge.exposeInMainWorld('grok', {
   projectRulesSet: (payload) => ipcRenderer.invoke('projectRules:set', payload || {}),
   pasteSaveImage: (payload) => ipcRenderer.invoke('paste:saveImage', payload || {}),
 
+  templateExportPack: (payload) => ipcRenderer.invoke('template:exportPack', payload || {}),
+  templateImportPack: () => ipcRenderer.invoke('template:importPack'),
+  templatePickSyncDir: () => ipcRenderer.invoke('template:pickSyncDir'),
+  templateGetSyncDir: () => ipcRenderer.invoke('template:getSyncDir'),
+  templateSyncPush: (payload) => ipcRenderer.invoke('template:syncPush', payload || {}),
+  templateSyncPull: (payload) => ipcRenderer.invoke('template:syncPull', payload || {}),
+
   // 多项目
   projectList: () => ipcRenderer.invoke('project:list'),
   projectOpen: () => ipcRenderer.invoke('project:open'),

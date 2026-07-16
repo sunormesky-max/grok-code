@@ -26,13 +26,14 @@ Living plan for the GrokCode open-source ecosystem. Order may change based on co
 - [x] Diff blame hover · paste attach · rules chip · bg flight notify
 - [x] Diff checkpoints · drag-drop attach · .grok/rules.md · quiet hours
 - [x] Rules open in Code · A→B checkpoint compare · paste→.grok/paste · templates pack
+- [x] Template import/export + local sync · blame heat · whole-turn restore
 
 ## Next
 
-- [ ] Template marketplace / import JSON pack
-- [ ] Diff “blame heat” density by turn age
-- [ ] Multi-file checkpoint restore (whole turn)
-- [ ] Optional cloud sync for user templates (opt-in)
+- [ ] Timeline scrubber across all Diff files for one turn
+- [ ] Template tags / search in menu
+- [ ] Heat legend toggle in Diff toolbar
+- [ ] Optional encrypted remote template sync (true cloud)
 
 ## Later
 

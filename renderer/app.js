@@ -1134,9 +1134,112 @@ function applySessionTemplate(t) {
   schedulePromptDraftSave();
 }
 
+function getUserTemplates() {
+  return loadJson(USER_TEMPLATES_KEY, []) || [];
+}
+
+function setUserTemplates(list) {
+  saveJson(USER_TEMPLATES_KEY, (list || []).slice(-80));
+}
+
+function mergeImportedTemplates(incoming, { replace = false } = {}) {
+  const custom = replace ? [] : getUserTemplates();
+  const map = new Map(custom.map((t) => [t.id, t]));
+  let n = 0;
+  for (const t of incoming || []) {
+    if (!t?.id) continue;
+    map.set(t.id, {
+      id: t.id,
+      labelZh: t.labelZh || t.labelEn || t.id,
+      labelEn: t.labelEn || t.labelZh || t.id,
+      promptZh: t.promptZh || t.prompt || t.promptEn || '',
+      promptEn: t.promptEn || t.prompt || t.promptZh || '',
+    });
+    n += 1;
+  }
+  setUserTemplates([...map.values()]);
+  return n;
+}
+
+async function exportTemplatesPack() {
+  const user = getUserTemplates();
+  const bundled = (await loadSessionTemplates()).filter((t) => t.source === 'bundled');
+  const pack = {
+    format: 'grokcode-templates-v1',
+    exportedAt: new Date().toISOString(),
+    templates: [...user, ...bundled.map(({ source, ...rest }) => rest)],
+  };
+  try {
+    const r = await window.grok.templateExportPack({ json: JSON.stringify(pack, null, 2) });
+    if (r?.canceled) return;
+    if (r?.ok) toast((localeIsEn() ? 'Exported: ' : '已导出：') + (r.file || ''), 'ok');
+    else toast(r?.error || 'export failed', 'err');
+  } catch (e) {
+    toast(e.message || 'export failed', 'err');
+  }
+}
+
+async function importTemplatesPack() {
+  try {
+    const r = await window.grok.templateImportPack();
+    if (r?.canceled) return;
+    if (!r?.ok) {
+      toast(r?.error || 'import failed', 'err');
+      return;
+    }
+    const n = mergeImportedTemplates(r.templates, { replace: false });
+    toast(localeIsEn() ? `Imported ${n} templates` : `已导入 ${n} 个模板`, 'ok');
+  } catch (e) {
+    toast(e.message || 'import failed', 'err');
+  }
+}
+
+async function pushTemplatesSync() {
+  const templates = getUserTemplates();
+  try {
+    let dir = await window.grok.templateGetSyncDir();
+    if (!dir) {
+      const pick = await window.grok.templatePickSyncDir();
+      if (!pick?.ok) return;
+      dir = pick.dir;
+    }
+    const r = await window.grok.templateSyncPush({ templates, dir });
+    if (r?.ok) toast((localeIsEn() ? 'Synced → ' : '已推送到 ') + (r.file || dir), 'ok');
+    else toast(r?.error || 'sync failed', 'err');
+  } catch (e) {
+    toast(e.message || 'sync failed', 'err');
+  }
+}
+
+async function pullTemplatesSync() {
+  try {
+    let dir = await window.grok.templateGetSyncDir();
+    if (!dir) {
+      const pick = await window.grok.templatePickSyncDir();
+      if (!pick?.ok) return;
+      dir = pick.dir;
+    }
+    const r = await window.grok.templateSyncPull({ dir });
+    if (!r?.ok) {
+      toast(r?.error || 'pull failed', 'err');
+      return;
+    }
+    const n = mergeImportedTemplates(r.templates, { replace: false });
+    toast(localeIsEn() ? `Pulled ${n} templates` : `已拉取 ${n} 个模板`, 'ok');
+  } catch (e) {
+    toast(e.message || 'pull failed', 'err');
+  }
+}
+
 async function openTemplatesMenu() {
   const list = await loadSessionTemplates();
   const en = localeIsEn();
+  let syncDir = '';
+  try {
+    syncDir = (await window.grok.templateGetSyncDir()) || '';
+  } catch {
+    /* ignore */
+  }
   let menu = document.getElementById('templatesMenu');
   if (!menu) {
     menu = document.createElement('div');
@@ -1150,17 +1253,25 @@ async function openTemplatesMenu() {
       .map(
         (t) =>
           `<button type="button" class="slash-item" data-id="${esc(t.id)}">
-            <span class="slash-label">${esc(en ? t.labelEn || t.id : t.labelZh || t.id)}</span>
+            <span class="slash-label">${esc(en ? t.labelEn || t.id : t.labelZh || t.id)}${
+              t.source === 'user' ? ' · user' : ''
+            }</span>
             <span class="slash-desc">${esc(templatePrompt(t, en).slice(0, 90))}</span>
           </button>`
       )
       .join('') +
-    `<button type="button" class="slash-item" data-act="custom"><span class="slash-label">${en ? '+ Save current as template' : '+ 将当前输入存为模板'}</span></button>`;
+    `<div class="slash-head">${en ? 'Pack / sync' : '包 / 同步'}</div>` +
+    `<button type="button" class="slash-item" data-act="custom"><span class="slash-label">${en ? '+ Save current as template' : '+ 将当前输入存为模板'}</span></button>` +
+    `<button type="button" class="slash-item" data-act="export"><span class="slash-label">${en ? 'Export JSON pack' : '导出 JSON 包'}</span></button>` +
+    `<button type="button" class="slash-item" data-act="import"><span class="slash-label">${en ? 'Import JSON pack' : '导入 JSON 包'}</span></button>` +
+    `<button type="button" class="slash-item" data-act="sync-dir"><span class="slash-label">${en ? 'Set sync folder…' : '设置同步目录…'}</span><span class="slash-desc">${esc(syncDir || (en ? 'OneDrive / Dropbox / local' : '网盘或本地文件夹'))}</span></button>` +
+    `<button type="button" class="slash-item" data-act="sync-push"><span class="slash-label">${en ? 'Push to sync folder' : '推送到同步目录'}</span></button>` +
+    `<button type="button" class="slash-item" data-act="sync-pull"><span class="slash-label">${en ? 'Pull from sync folder' : '从同步目录拉取'}</span></button>`;
   const ta = document.getElementById('prompt');
   const rect = ta?.getBoundingClientRect() || { left: 40, top: window.innerHeight - 120, width: 360 };
   menu.style.left = `${Math.max(8, rect.left)}px`;
   menu.style.bottom = `${window.innerHeight - rect.top + 6}px`;
-  menu.style.width = `${Math.min(420, rect.width || 360)}px`;
+  menu.style.width = `${Math.min(440, Math.max(320, rect.width || 360))}px`;
   menu.classList.remove('hidden');
   menu.querySelectorAll('.slash-item[data-id]').forEach((btn) => {
     btn.onclick = () => {
@@ -1169,9 +1280,23 @@ async function openTemplatesMenu() {
       applySessionTemplate(t);
     };
   });
-  menu.querySelector('[data-act="custom"]')?.addEventListener('click', () => {
-    menu.classList.add('hidden');
-    saveCurrentAsTemplate();
+  const acts = {
+    custom: () => saveCurrentAsTemplate(),
+    export: () => exportTemplatesPack(),
+    import: () => importTemplatesPack(),
+    'sync-dir': async () => {
+      const r = await window.grok.templatePickSyncDir();
+      if (r?.ok) toast((en ? 'Sync dir: ' : '同步目录：') + r.dir, 'ok');
+    },
+    'sync-push': () => pushTemplatesSync(),
+    'sync-pull': () => pullTemplatesSync(),
+  };
+  menu.querySelectorAll('.slash-item[data-act]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      menu.classList.add('hidden');
+      const fn = acts[btn.dataset.act];
+      if (fn) Promise.resolve(fn()).catch((e) => toast(e.message || String(e), 'err'));
+    });
   });
   const onDoc = (e) => {
     if (!menu.contains(e.target)) {
@@ -1199,7 +1324,7 @@ function saveCurrentAsTemplate() {
       .slice(0, 32) +
     '-' +
     Date.now().toString(36).slice(-4);
-  const custom = loadJson(USER_TEMPLATES_KEY, []) || [];
+  const custom = getUserTemplates();
   custom.push({
     id,
     labelZh: label,
@@ -1207,11 +1332,13 @@ function saveCurrentAsTemplate() {
     promptZh: text,
     promptEn: text,
   });
-  saveJson(USER_TEMPLATES_KEY, custom.slice(-40));
+  setUserTemplates(custom);
   toast(en ? `Saved template: ${label}` : `已保存模板：${label}`, 'ok');
 }
 window.openTemplatesMenu = openTemplatesMenu;
 window.applySessionTemplate = applySessionTemplate;
+window.exportTemplatesPack = exportTemplatesPack;
+window.importTemplatesPack = importTemplatesPack;
 
 // ── Welcome ─────────────────────────────────────────────
 async function showWelcome(box) {
@@ -3852,13 +3979,18 @@ function renderDiffPane() {
   const viewMode = state.diffViewMode === 'split' ? 'split' : 'unified';
   const lastTurn = Array.isArray(cur.turns) && cur.turns.length ? cur.turns[cur.turns.length - 1] : null;
   const cp = snap?.checkpoint;
+  const blameTs = cp?.ts || cur.ts || lastTurn?.ts || null;
   const blame = {
     turnId: cp?.turnId || cur.turnId || lastTurn?.turnId || '',
     taskTitle: cp?.taskTitle || cur.taskTitle || lastTurn?.taskTitle || '',
     prompt: cp?.prompt || cur.prompt || lastTurn?.prompt || '',
-    ts: cp?.ts || cur.ts || lastTurn?.ts || null,
+    ts: blameTs,
     reason: cp?.reason || cur.reason || lastTurn?.reason || '',
     turns: cur.turns || [],
+    heat:
+      typeof window.DiffUtil?.heatFromTs === 'function'
+        ? window.DiffUtil.heatFromTs(blameTs)
+        : 0,
   };
   if (blame.taskTitle || blame.turnId) {
     const when = blame.ts ? new Date(blame.ts).toLocaleTimeString() : '';
@@ -3894,7 +4026,8 @@ function renderDiffPane() {
             .join('')}
           ${
             snap?.index >= 0 && !cur.restored && !cmpOn
-              ? `<button type="button" class="btn small ghost" data-cp-act="restore">${localeIsEn() ? 'Restore this turn' : '还原到此轮'}</button>`
+              ? `<button type="button" class="btn small ghost" data-cp-act="restore">${localeIsEn() ? 'Restore file' : '还原此文件'}</button>
+                 <button type="button" class="btn small ghost" data-cp-act="restore-turn">${localeIsEn() ? 'Restore whole turn' : '还原整轮'}</button>`
               : ''
           }
           <span class="diff-cp-sep">|</span>
@@ -3981,6 +4114,9 @@ function renderDiffPane() {
   content.querySelector('[data-cp-act="restore"]')?.addEventListener('click', () => {
     restoreToCheckpoint();
   });
+  content.querySelector('[data-cp-act="restore-turn"]')?.addEventListener('click', () => {
+    restoreWholeTurn();
+  });
   content.querySelector('[data-cp-act="compare"]')?.addEventListener('click', () => {
     const path = P() && P().selectedDiffPath;
     const entry = path && changesMap().get(path);
@@ -4037,7 +4173,34 @@ function renderDiffPane() {
   });
 }
 
-/** Write selected checkpoint content back to disk */
+/** Apply one file checkpoint to disk + entry maps */
+async function applyCheckpointToFile(path, entry, afterContent) {
+  const isEmpty = afterContent === '';
+  if (isEmpty && entry.created) {
+    await window.grok.deleteFile(pid(), path);
+    contentCacheMap().set(path, '');
+  } else {
+    await window.grok.writeFile(pid(), path, afterContent ?? '');
+    contentCacheMap().set(path, afterContent ?? '');
+  }
+  const recomputed = window.DiffUtil.computeLineDiff(entry.before ?? '', afterContent ?? '');
+  entry.after = afterContent ?? '';
+  entry.ops = recomputed.ops;
+  entry.stats = recomputed.stats;
+  entry.viewCheckpoint = -1;
+  entry.compareA = null;
+  entry.compareB = null;
+  entry.ts = Date.now();
+  changesMap().set(path, entry);
+  if (requireProject().currentFile === path) {
+    $('#editor').value = afterContent ?? '';
+    requireProject().dirty = false;
+    syncGutter();
+    updateEditorChrome();
+  }
+}
+
+/** Write selected checkpoint content back to disk (single file) */
 async function restoreToCheckpoint() {
   const path = P() && P().selectedDiffPath;
   if (!path || !changesMap().has(path)) return;
@@ -4055,28 +4218,7 @@ async function restoreToCheckpoint() {
   if (!ok) return;
   try {
     state._restoring = true;
-    const isEmpty = snap.after === '';
-    if (isEmpty && entry.created) {
-      await window.grok.deleteFile(pid(), path);
-      contentCacheMap().set(path, '');
-    } else {
-      await window.grok.writeFile(pid(), path, snap.after);
-      contentCacheMap().set(path, snap.after);
-    }
-    // recompute live entry from original before → new after
-    const recomputed = window.DiffUtil.computeLineDiff(entry.before ?? '', snap.after);
-    entry.after = snap.after;
-    entry.ops = recomputed.ops;
-    entry.stats = recomputed.stats;
-    entry.viewCheckpoint = -1;
-    entry.ts = Date.now();
-    changesMap().set(path, entry);
-    if (requireProject().currentFile === path) {
-      $('#editor').value = snap.after;
-      requireProject().dirty = false;
-      syncGutter();
-      updateEditorChrome();
-    }
+    await applyCheckpointToFile(path, entry, snap.after);
     pushLiveEvent({
       kind: 'status',
       title: localeIsEn() ? `Restored checkpoint ${path}` : `已还原 checkpoint ${path}`,
@@ -4094,6 +4236,74 @@ async function restoreToCheckpoint() {
     }, 500);
   }
 }
+
+/**
+ * Restore all Diff files that share the selected checkpoint's turnId
+ * (whole agent turn multi-file restore).
+ */
+async function restoreWholeTurn() {
+  const path = P() && P().selectedDiffPath;
+  if (!path || !changesMap().has(path)) return;
+  const entry = changesMap().get(path);
+  const snap = getDiffViewSnapshot(entry);
+  if (!snap || snap.index < 0) {
+    toast(localeIsEn() ? 'Select a checkpoint first' : '请先选择一个 checkpoint', 'err');
+    return;
+  }
+  const turnId = snap.checkpoint?.turnId || entry.turnId;
+  const targets = [];
+  for (const [p, e] of changesMap()) {
+    if (e.restored) continue;
+    let cp = null;
+    if (turnId && Array.isArray(e.checkpoints)) {
+      cp = e.checkpoints.find((c) => c.turnId && c.turnId === turnId) || null;
+    }
+    // fallback: same checkpoint index if no turnId
+    if (!cp && snap.index >= 0 && e.checkpoints?.[snap.index]) {
+      cp = e.checkpoints[snap.index];
+    }
+    if (!cp || cp.after == null) continue;
+    targets.push({ path: p, entry: e, after: cp.after, turnId: cp.turnId || turnId });
+  }
+  if (!targets.length) {
+    toast(localeIsEn() ? 'No files for this turn' : '该轮没有可还原的文件', 'err');
+    return;
+  }
+  const names = targets.map((t) => t.path.split('/').pop()).slice(0, 8).join(', ');
+  const ok = confirm(
+    localeIsEn()
+      ? `Restore whole turn across ${targets.length} file(s)?\n${names}${targets.length > 8 ? '…' : ''}`
+      : `整轮还原 ${targets.length} 个文件？\n${names}${targets.length > 8 ? '…' : ''}`
+  );
+  if (!ok) return;
+  let done = 0;
+  let failed = 0;
+  state._restoring = true;
+  for (const t of targets) {
+    try {
+      await applyCheckpointToFile(t.path, t.entry, t.after);
+      done += 1;
+    } catch {
+      failed += 1;
+    }
+  }
+  state._restoring = false;
+  pushLiveEvent({
+    kind: 'status',
+    title: localeIsEn() ? 'Whole-turn restore' : '整轮还原',
+    sub: `${done} files${failed ? ` · fail ${failed}` : ''}${turnId ? ` · ${turnId}` : ''}`,
+  });
+  renderLiveChanges();
+  renderDiffPane();
+  await loadTree();
+  toast(
+    localeIsEn()
+      ? `Restored ${done} file(s)${failed ? `, failed ${failed}` : ''}`
+      : `已还原 ${done} 个文件${failed ? `，失败 ${failed}` : ''}`,
+    failed ? 'err' : 'ok'
+  );
+}
+window.restoreWholeTurn = restoreWholeTurn;
 
 function toggleDiffViewMode() {
   state.diffViewMode = state.diffViewMode === 'split' ? 'unified' : 'split';
