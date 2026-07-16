@@ -41,13 +41,13 @@ Living plan for the GrokCode open-source ecosystem. Order may change based on co
 - [x] Native Windows titleBarOverlay · calmer collapsible chrome (v1.4.13–1.4.14)
 - [x] Agent-first layout shell · Agent/Review/Full presets (v1.5.0)
 - [x] Pilot chat-center layout · Diff↔Agent review bridge (v1.5.1)
+- [x] Auto-Pilot ultra-wide · storyboard filmstrip import (v1.5.2)
 
 ## Next
 
 - [ ] Optional true cloud template vault (accounted service)
-- [ ] Import encrypted storyboard into Diff filmstrip (offline re-view)
 - [ ] Share encrypted packs via optional link service
-- [ ] Auto-Pilot on ultra-wide (≥1600px) preference
+- [ ] Storyboard import: optional disk rehydrate when paths exist
 
 ## Later
 

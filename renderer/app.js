@@ -56,8 +56,13 @@ const state = {
   termCollapsed: true,
   /** Live 右侧详情（焦点/变更/上下文）默认折叠，界面更干净 */
   liveSideCollapsed: loadJson('grokcode-live-side-collapsed', true) !== false,
-  /** agent | review | full — Codex/ZCode 式布局预设 */
+  /** agent | pilot | review | full — Codex/ZCode 式布局预设 */
   layoutMode: loadJson('grokcode-layout-mode', 'agent') || 'agent',
+  /** 超宽自动 Pilot（≥1600） */
+  autoPilot: loadJson('grokcode-auto-pilot', true) !== false,
+  autoPilotApplied: false,
+  /** 离线 storyboard 胶片条回灌（JSON/HTML/AES） */
+  storyboardOverlay: null,
   filter: '',
   /** Live / Diff（工作区级共享） */
   activeTab: 'live',
@@ -196,6 +201,8 @@ async function init() {
   window.renderTaskTabs = renderTaskTabs;
 
   bindWorkModeUi();
+  syncAutoPilotUi();
+  maybeAutoPilot({ toast: false });
   // sync mode from config if present
   try {
     const cfg = await window.grok.getConfig();
@@ -1167,7 +1174,66 @@ function restoreLayout() {
   if (L.layoutMode) state.layoutMode = L.layoutMode;
   applyLayoutMode(state.layoutMode || 'agent', { persist: false, toast: false, skipCollapse: true });
   applyChromeCollapse();
+  maybeAutoPilot({ toast: false });
 }
+
+const AUTO_PILOT_KEY = 'grokcode-auto-pilot';
+const AUTO_PILOT_MIN_W = 1600;
+const AUTO_PILOT_HYST_W = 1500;
+
+function getAutoPilotEnabled() {
+  return state.autoPilot !== false;
+}
+
+function setAutoPilotEnabled(on) {
+  state.autoPilot = !!on;
+  saveJson(AUTO_PILOT_KEY, state.autoPilot);
+  syncAutoPilotUi();
+  if (state.autoPilot) maybeAutoPilot({ toast: true, force: true });
+}
+
+function syncAutoPilotUi() {
+  const btn = document.getElementById('btnAutoPilot');
+  if (!btn) return;
+  btn.classList.toggle('active', getAutoPilotEnabled());
+  btn.setAttribute('aria-pressed', getAutoPilotEnabled() ? 'true' : 'false');
+  btn.title = getAutoPilotEnabled()
+    ? (localeIsEn() ? 'Auto-Pilot on (≥1600px) — click to disable' : '超宽自动 Pilot 已开（≥1600）· 点击关闭')
+    : (localeIsEn() ? 'Auto-Pilot off — click to enable' : '超宽自动 Pilot 已关 · 点击开启');
+}
+
+/**
+ * Ultra-wide (≥1600) → Pilot; shrink below ~1500 → Agent
+ * Does not override Review / Full.
+ */
+function maybeAutoPilot(opts = {}) {
+  if (!getAutoPilotEnabled() && !opts.force) return;
+  if (!getAutoPilotEnabled()) return;
+  const w = window.innerWidth || 0;
+  const mode = state.layoutMode || 'agent';
+  if (mode === 'review' || mode === 'full') return;
+
+  if (w >= AUTO_PILOT_MIN_W && mode === 'agent') {
+    applyLayoutMode('pilot', {
+      toast: opts.toast,
+      persist: true,
+      skipCollapse: opts.skipCollapse !== false,
+      fromAuto: true,
+    });
+    state.autoPilotApplied = true;
+  } else if (w < AUTO_PILOT_HYST_W && mode === 'pilot' && (state.autoPilotApplied || opts.force)) {
+    applyLayoutMode('agent', {
+      toast: opts.toast,
+      persist: true,
+      skipCollapse: true,
+      fromAuto: true,
+    });
+    state.autoPilotApplied = false;
+  }
+}
+window.maybeAutoPilot = maybeAutoPilot;
+window.setAutoPilotEnabled = setAutoPilotEnabled;
+window.getAutoPilotEnabled = getAutoPilotEnabled;
 
 /**
  * Agent-first layout presets (Codex / ZCode command-center inspired)
@@ -1179,6 +1245,10 @@ function restoreLayout() {
 function applyLayoutMode(mode, opts = {}) {
   const m = ['agent', 'pilot', 'review', 'full'].includes(mode) ? mode : 'agent';
   state.layoutMode = m;
+  if (!opts.fromAuto) {
+    // manual pick: remember if pilot was intentional
+    state.autoPilotApplied = m === 'pilot';
+  }
   document.body.classList.add('layout-v15');
   document.body.classList.remove(
     'layout-mode-agent',
@@ -1191,6 +1261,7 @@ function applyLayoutMode(mode, opts = {}) {
   document.querySelectorAll('[data-layout]').forEach((btn) => {
     btn.classList.toggle('active', btn.dataset.layout === m);
   });
+  syncAutoPilotUi();
 
   if (!opts.skipCollapse) {
     if (m === 'agent' || m === 'pilot') {
@@ -2192,11 +2263,31 @@ function bindUi() {
     if (e.target.closest('button')) return;
     if (state.termCollapsed) toggleTerm();
   });
-  // 布局预设 Agent / Review / Full
+  // 布局预设 Agent / Pilot / Review / Full
   document.querySelectorAll('[data-layout]').forEach((btn) => {
     btn.addEventListener('click', () => {
       applyLayoutMode(btn.dataset.layout, { toast: true });
     });
+  });
+  document.getElementById('btnAutoPilot')?.addEventListener('click', () => {
+    setAutoPilotEnabled(!getAutoPilotEnabled());
+    toast(
+      getAutoPilotEnabled()
+        ? localeIsEn()
+          ? 'Auto-Pilot on · ≥1600px → Pilot'
+          : '超宽自动 Pilot 已开 · ≥1600 → Pilot'
+        : localeIsEn()
+          ? 'Auto-Pilot off'
+          : '超宽自动 Pilot 已关',
+      'ok'
+    );
+  });
+  syncAutoPilotUi();
+  // resize → auto pilot with hysteresis
+  let _apResizeT = null;
+  window.addEventListener('resize', () => {
+    clearTimeout(_apResizeT);
+    _apResizeT = setTimeout(() => maybeAutoPilot({ toast: false }), 180);
   });
 
 
@@ -4474,6 +4565,23 @@ function sortedDiffItems() {
 
 /** Collect agent turns across all Diff files for the scrubber */
 function collectGlobalTurns() {
+  // Offline storyboard pack → filmstrip (imported JSON/HTML/AES)
+  if (state.storyboardOverlay?.turns?.length) {
+    return state.storyboardOverlay.turns.map((t, i) => {
+      const key = t.key || `imp-${t.ts || i}`;
+      return {
+        key,
+        turnId: t.turnId || t.key || null,
+        ts: t.ts || 0,
+        taskTitle: t.taskTitle || '',
+        prompt: t.prompt || '',
+        files: new Set(Array.isArray(t.files) ? t.files : []),
+        imported: true,
+        diffs: t.diffs || [],
+        note: t.note || '',
+      };
+    });
+  }
   const map = new Map();
   for (const [filePath, e] of changesMap()) {
     const cps = e.checkpoints || [];
@@ -4501,6 +4609,122 @@ function collectGlobalTurns() {
   }
   return [...map.values()].sort((a, b) => (a.ts || 0) - (b.ts || 0));
 }
+
+/**
+ * Import storyboard pack into Diff filmstrip (offline re-view).
+ * Hydrates change entries + checkpoints; mini-diff text shown when full content missing.
+ */
+async function importStoryboardToFilmstrip() {
+  const en = localeIsEn();
+  try {
+    toast(en ? 'Pick storyboard pack…' : '选择 storyboard 包…', 'ok');
+    const raw = await window.grok.templateImportRaw({ storyboard: true });
+    if (raw?.canceled) return;
+    const resolved = await resolveStoryboardImport(raw, en);
+    if (!resolved.pack) {
+      toast(resolved.error || 'import failed', 'err');
+      return;
+    }
+    hydrateStoryboardOverlay(resolved.pack, resolved.file);
+    applyLayoutMode('review', { toast: false, persist: true });
+    switchTab('diff');
+    const turns = collectGlobalTurns();
+    if (turns.length) scrubToTurn(turns[turns.length - 1].key);
+    renderDiffPane();
+    updateReviewBridgeUi();
+    const n = turns.length;
+    toast(
+      en
+        ? `Storyboard loaded · ${n} turns · ${resolved.file?.split(/[/\\]/).pop() || 'pack'}`
+        : `已载入 storyboard · ${n} 轮 · ${resolved.file?.split(/[/\\]/).pop() || '包'}`,
+      'ok'
+    );
+  } catch (e) {
+    toast(e.message || 'import failed', 'err');
+  }
+}
+window.importStoryboardToFilmstrip = importStoryboardToFilmstrip;
+
+function hydrateStoryboardOverlay(pack, file) {
+  const turns = Array.isArray(pack?.turns) ? pack.turns : [];
+  state.storyboardOverlay = {
+    pack,
+    file: file || '',
+    turns,
+    importedAt: Date.now(),
+  };
+  for (const t of turns) {
+    const key = t.key || `imp-${t.ts || Math.random().toString(36).slice(2, 8)}`;
+    if (!t.key) t.key = key;
+    if (t.note) setTurnNote(key, t.note);
+    const paths = Array.isArray(t.files) ? t.files : [];
+    for (const filePath of paths) {
+      if (!filePath) continue;
+      let entry = changesMap().get(filePath);
+      if (!entry) {
+        entry = {
+          path: filePath,
+          before: '',
+          after: '',
+          created: false,
+          restored: false,
+          reviewed: false,
+          ts: t.ts || Date.now(),
+          stats: { adds: 0, dels: 0 },
+          ops: [],
+          checkpoints: [],
+          fromImport: true,
+        };
+        changesMap().set(filePath, entry);
+      }
+      if (!Array.isArray(entry.checkpoints)) entry.checkpoints = [];
+      const exists = entry.checkpoints.some((c, i) => turnKeyOfCheckpoint(c, i) === key);
+      if (!exists) {
+        const d = (t.diffs || []).find((x) => x && x.path === filePath);
+        entry.checkpoints.push({
+          turnId: key,
+          ts: t.ts || Date.now(),
+          prompt: t.prompt || '',
+          taskTitle: t.taskTitle || '',
+          after: entry.after ?? '',
+          fromImport: true,
+          importDiffText: d?.text || '',
+          importStats: d?.stats || null,
+        });
+        if (d?.stats) {
+          entry.stats = {
+            adds: (entry.stats?.adds || 0) + (d.stats.adds || 0),
+            dels: (entry.stats?.dels || 0) + (d.stats.dels || 0),
+          };
+        }
+      }
+    }
+  }
+  // pick first file if none selected
+  if (P() && !P().selectedDiffPath && changesMap().size) {
+    P().selectedDiffPath = changesMap().keys().next().value;
+  }
+}
+
+function clearStoryboardOverlay() {
+  if (!state.storyboardOverlay) return;
+  // remove import-only file entries (no live agent content)
+  for (const [path, e] of [...changesMap().entries()]) {
+    if (e.fromImport && !(e.after || e.before) && (e.checkpoints || []).every((c) => c.fromImport)) {
+      changesMap().delete(path);
+    } else if (e.checkpoints?.length) {
+      e.checkpoints = e.checkpoints.filter((c) => !c.fromImport);
+      if (!e.checkpoints.length && e.fromImport) changesMap().delete(path);
+    }
+  }
+  state.storyboardOverlay = null;
+  state.diffScrubTurn = null;
+  saveScrubSelection(null);
+  renderDiffPane();
+  updateReviewBridgeUi();
+  toast(localeIsEn() ? 'Storyboard overlay cleared' : '已退出 storyboard 回灌', 'ok');
+}
+window.clearStoryboardOverlay = clearStoryboardOverlay;
 
 function turnKeyOfCheckpoint(cp, fallbackIdx = 0) {
   if (!cp) return null;
@@ -5972,6 +6196,7 @@ function scrubberHtml(turns) {
     <button type="button" class="diff-scrub-export html" data-scrub-export-png="1" title="${en ? 'Export PNG overview' : '导出 PNG 总览'}">PNG</button>
     <button type="button" class="diff-scrub-export html" data-scrub-export-folder="1" title="${en ? 'Export review folder (HTML+MD+JSON+PNG)' : '导出审阅文件夹'}">📁</button>
     <button type="button" class="diff-scrub-export html" data-scrub-compare="1" title="${en ? 'Compare two packs (JSON/HTML/encrypted)' : '对比两个包（JSON/HTML/加密）'}">A|B</button>
+    <button type="button" class="diff-scrub-export html" data-scrub-import="1" title="${en ? 'Import storyboard into filmstrip' : '导入 storyboard 到胶片条'}">⬆</button>
     <button type="button" class="diff-scrub-export html" data-scrub-export-enc="1" title="${en ? 'Export encrypted storyboard JSON' : '导出加密 storyboard JSON'}">🔒</button>
     <span class="diff-scrub-budget" title="${en ? 'Export pack size budget' : '导出包体积预算'}">
       ${['full', 'balanced', 'compact']
@@ -6092,6 +6317,18 @@ function getDiffViewSnapshot(entry) {
     };
   }
   const cp = cps[idx];
+  // Offline storyboard mini-diff text (no full before/after)
+  if (cp?.fromImport && cp.importDiffText) {
+    return {
+      ops: null,
+      importText: cp.importDiffText,
+      stats: cp.importStats || { adds: 0, dels: 0 },
+      after: cp.after,
+      label: `import#${idx + 1}`,
+      checkpoint: cp,
+      index: idx,
+    };
+  }
   const recomputed = window.DiffUtil.computeLineDiff(entry.before ?? '', cp.after ?? '');
   return {
     ops: recomputed.ops,
@@ -6419,36 +6656,68 @@ function renderDiffPane() {
         </div>`
       : '';
 
-  const viewOps = snap?.ops || cur.ops;
-  const bodyHtml =
-    viewMode === 'split'
-      ? window.DiffUtil.toSideBySideHtml(viewOps, { context: 3, blame })
-      : window.DiffUtil.toUnifiedHtml(viewOps, {
-          context: 3,
-          collapsed: state.diffHunkCollapsed,
-          blame,
-        });
+  let bodyHtml = '';
+  if (snap?.importText) {
+    // Offline pack mini-diff (no full file content)
+    const lines = String(snap.importText)
+      .split('\n')
+      .map((line) => {
+        const cls =
+          line.startsWith('+') && !line.startsWith('+++')
+            ? 'add'
+            : line.startsWith('-') && !line.startsWith('---')
+              ? 'del'
+              : 'ctx';
+        return `<div class="diff-import-line ${cls}">${esc(line) || ' '}</div>`;
+      })
+      .join('');
+    bodyHtml = `<div class="diff-import-pack">
+      <div class="diff-import-hint">${localeIsEn() ? 'Imported mini-diff (offline pack · no full file snapshot)' : '导入的迷你 Diff（离线包 · 无完整文件快照）'}</div>
+      <pre class="diff-import-pre">${lines}</pre>
+    </div>`;
+  } else {
+    const viewOps = snap?.ops || cur.ops || [];
+    bodyHtml =
+      viewMode === 'split'
+        ? window.DiffUtil.toSideBySideHtml(viewOps, { context: 3, blame })
+        : window.DiffUtil.toUnifiedHtml(viewOps, {
+            context: 3,
+            collapsed: state.diffHunkCollapsed,
+            blame,
+          });
+  }
 
   // stats reflect current view
   if (snap?.stats && !cur.restored) {
     const bits2 = [
       `<span class="a" style="color:var(--ok)">+${snap.stats.adds}</span> · <span class="d" style="color:var(--danger)">-${snap.stats.dels}</span>`,
     ];
-    if (snap.index >= 0) bits2.push(`<span style="color:#fbbf24">· cp#${snap.index + 1}</span>`);
+    if (snap.importText) bits2.push(`<span style="color:#fbbf24">· import</span>`);
+    else if (snap.index >= 0) bits2.push(`<span style="color:#fbbf24">· cp#${snap.index + 1}</span>`);
     if (cur.reviewed) bits2.push('<span style="color:#7dd3fc">· 已审阅</span>');
     $('#diffStats').innerHTML = bits2.join(' ');
   }
 
   const globalTurns = collectGlobalTurns();
+  let overlayBanner = '';
+  if (state.storyboardOverlay) {
+    const en = localeIsEn();
+    const name = (state.storyboardOverlay.file || '').split(/[/\\]/).pop() || 'pack';
+    overlayBanner = `<div class="diff-banner storyboard-overlay-banner">
+      ${en ? 'Offline storyboard' : '离线 Storyboard'} · ${esc(name)} · ${globalTurns.length} turns
+      <button type="button" class="link-btn" data-storyboard-clear>${en ? 'Exit' : '退出回灌'}</button>
+    </div>`;
+  }
   content.innerHTML =
     scrubberHtml(globalTurns) +
+    overlayBanner +
     banner +
     cpBar +
     `<div class="diff-hunk-toolbar">
       <button type="button" class="link-btn${viewMode === 'unified' ? ' active-view' : ''}" data-diff-act="unified">Unified</button>
       <button type="button" class="link-btn${viewMode === 'split' ? ' active-view' : ''}" data-diff-act="split">Side-by-side</button>
       ${
-        viewMode === 'unified'
+        viewMode === 'unified' && !snap?.importText
           ? `<button type="button" class="link-btn" data-diff-act="expand">全部展开</button>
       <button type="button" class="link-btn" data-diff-act="collapse">全部折叠</button>`
           : ''
@@ -6490,6 +6759,12 @@ function renderDiffPane() {
   });
   content.querySelector('[data-scrub-export-enc]')?.addEventListener('click', () => {
     exportStoryboardEncrypted();
+  });
+  content.querySelector('[data-scrub-import]')?.addEventListener('click', () => {
+    importStoryboardToFilmstrip();
+  });
+  content.querySelector('[data-storyboard-clear]')?.addEventListener('click', () => {
+    clearStoryboardOverlay();
   });
   content.querySelectorAll('[data-budget-mode]').forEach((btn) => {
     btn.onclick = (e) => {

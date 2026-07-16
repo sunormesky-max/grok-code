@@ -104,6 +104,16 @@ body.layout-v15 .top-actions .btn .btn-ico {
   font-weight: 700;
   box-shadow: 0 0 16px rgba(125, 211, 252, 0.35);
 }
+.layout-preset.auto-pilot {
+  border-left: 1px solid rgba(125, 211, 252, 0.12);
+  margin-left: 2px;
+  color: var(--faint);
+}
+.layout-preset.auto-pilot.active {
+  color: #0c1220;
+  background: linear-gradient(105deg, rgba(167, 139, 250, 0.95), #7dd3fc);
+  box-shadow: 0 0 14px rgba(167, 139, 250, 0.35);
+}
 
 /* ── Workspace strip (projects) — single dense rail ──── */
 body.layout-v15 .project-bar {

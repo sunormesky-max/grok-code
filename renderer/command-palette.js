@@ -221,6 +221,37 @@
         run: run(() => global.openReviewBridge?.()),
       },
       {
+        id: 'diff.storyboard.import',
+        title: t('cmd.diff.storyboard.import', '导入 Storyboard 到胶片条'),
+        keywords: 'diff storyboard import filmstrip offline 导入 回灌',
+        group: 'actions',
+        run: run(() => {
+          global.switchTab?.('diff');
+          global.importStoryboardToFilmstrip?.();
+        }),
+      },
+      {
+        id: 'diff.storyboard.clear',
+        title: t('cmd.diff.storyboard.clear', '退出 Storyboard 回灌'),
+        keywords: 'diff storyboard clear exit 退出 回灌',
+        group: 'actions',
+        run: run(() => global.clearStoryboardOverlay?.()),
+      },
+      {
+        id: 'layout.auto.pilot',
+        title: t('cmd.layout.auto.pilot', '切换超宽自动 Pilot'),
+        keywords: 'layout auto pilot ultrawide 自动 超宽',
+        group: 'actions',
+        run: run(() => {
+          const on = !(global.getAutoPilotEnabled?.() ?? true);
+          global.setAutoPilotEnabled?.(on);
+          global.toast?.(
+            on ? 'Auto-Pilot on' : 'Auto-Pilot off',
+            'ok'
+          );
+        }),
+      },
+      {
         id: 'tree.refresh',
         title: t('cmd.tree.refresh', '刷新文件树'),
         keywords: 'refresh tree 刷新',

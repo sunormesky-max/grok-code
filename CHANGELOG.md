@@ -11,6 +11,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 - See [ROADMAP.md](ROADMAP.md)
 
+## [1.5.2] — 2026-07-16
+
+### Auto-Pilot · storyboard filmstrip import
+
+- **Auto-Pilot**: titlebar **Auto** chip — when enabled, window ≥1600px switches to Pilot (hysteresis &lt;1500 → Agent); skips Review/Full
+- **Import storyboard** into Diff filmstrip (**⬆** on scrubber / Ctrl+K): JSON · HTML · AES encrypted packs
+- Offline mini-diffs displayed when full file snapshots are missing
+- **Exit** overlay banner to leave imported review mode
+
 ## [1.5.1] — 2026-07-16
 
 ### Pilot layout · Diff ↔ Agent review bridge
