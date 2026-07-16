@@ -22,6 +22,48 @@ const persist = createPersist();
 app.setName('GrokCode');
 Menu.setApplicationMenu(null);
 
+/**
+ * Windows PowerShell `Set-Content -Encoding UTF8` writes a UTF-8 BOM.
+ * electron-store / conf use JSON.parse which rejects BOM → app won't start.
+ * Strip EF BB BF from known config paths before opening the store.
+ */
+function stripUtf8BomFile(filePath) {
+  try {
+    if (!filePath || !fs.existsSync(filePath)) return false;
+    const buf = fs.readFileSync(filePath);
+    if (buf.length >= 3 && buf[0] === 0xef && buf[1] === 0xbb && buf[2] === 0xbf) {
+      fs.writeFileSync(filePath, buf.subarray(3));
+      return true;
+    }
+  } catch {
+    /* ignore */
+  }
+  return false;
+}
+
+function sanitizeStoreConfigs() {
+  const name = 'grok-code-config.json';
+  const dirs = new Set();
+  try {
+    if (app.isReady?.() || app.getPath) {
+      dirs.add(app.getPath('userData'));
+    }
+  } catch {
+    /* app path not ready */
+  }
+  if (process.env.APPDATA) {
+    dirs.add(path.join(process.env.APPDATA, 'GrokCode'));
+    dirs.add(path.join(process.env.APPDATA, 'grok-code'));
+    dirs.add(path.join(process.env.APPDATA, 'grokcode'));
+    dirs.add(path.join(process.env.APPDATA, 'Electron'));
+  }
+  for (const dir of dirs) {
+    if (dir) stripUtf8BomFile(path.join(dir, name));
+  }
+}
+
+sanitizeStoreConfigs();
+
 const store = new Store({
   name: 'grok-code-config',
   defaults: {
