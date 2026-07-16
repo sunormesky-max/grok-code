@@ -162,6 +162,7 @@ async function init() {
 
   restoreLayout();
   bindUi();
+  bindWorkModeUi(); // early — must not wait on project restore (chips become dead)
   bindResizers();
   bindShortcuts();
   bindAgentEvents();
@@ -204,10 +205,9 @@ async function init() {
   window.switchProject = switchProject;
   window.renderTaskTabs = renderTaskTabs;
 
-  bindWorkModeUi();
   syncAutoPilotUi();
   maybeAutoPilot({ toast: false });
-  // sync mode from config if present
+  // sync mode from config if present (local chips already bound)
   try {
     const cfg = await window.grok.getConfig();
     if (cfg.workMode) setWorkMode(cfg.workMode, { persistRemote: false });
@@ -3085,8 +3085,11 @@ function setWorkMode(mode, opts = {}) {
   state.workMode = m;
   saveJson(MODE_KEY, m);
   document.body.dataset.workMode = m;
-  document.querySelectorAll('.mode-chip').forEach((btn) => {
-    btn.classList.toggle('active', btn.dataset.mode === m);
+  // Scope to mode bar — avoid clobbering unrelated .mode-chip classes
+  document.querySelectorAll('#modeBar .mode-chip, .mode-bar .mode-chip').forEach((btn) => {
+    const on = btn.dataset.mode === m;
+    btn.classList.toggle('active', on);
+    btn.setAttribute('aria-pressed', on ? 'true' : 'false');
   });
   const loc = localeIsEn() ? 'en' : 'zh';
   const hint = MODE_HINTS[m];
@@ -3118,7 +3121,7 @@ function setWorkMode(mode, opts = {}) {
   if (opts.toast) {
     toast(loc === 'en' ? `Mode: ${m}` : `模式：${m.toUpperCase()}`, 'ok');
   }
-  if (opts.persistRemote !== false) {
+  if (opts.persistRemote !== false && window.grok?.setConfig) {
     window.grok.setConfig({ workMode: m }).catch(() => {});
   }
 }
@@ -3129,29 +3132,46 @@ function cycleWorkMode() {
   setWorkMode(order[(i + 1) % order.length], { toast: true });
 }
 
+let _workModeUiBound = false;
 function bindWorkModeUi() {
-  document.querySelectorAll('.mode-chip').forEach((btn) => {
-    btn.onclick = () => setWorkMode(btn.dataset.mode, { toast: true });
-  });
-  // Ctrl+1/2/3 → Craft / Plan / Ask
+  if (_workModeUiBound) {
+    setWorkMode(state.workMode || 'craft', { persistRemote: false });
+    return;
+  }
+  _workModeUiBound = true;
+
+  // Event delegation (survives re-render / partial DOM updates)
+  const onModeClick = (e) => {
+    const btn = e.target?.closest?.('.mode-chip[data-mode]');
+    if (!btn || !btn.closest?.('#modeBar, .mode-bar')) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const mode = btn.getAttribute('data-mode') || btn.dataset.mode;
+    if (mode) setWorkMode(mode, { toast: true });
+  };
+  document.addEventListener('click', onModeClick, true);
+
+  // Ctrl/Cmd+1/2/3 → Craft / Plan / Ask (also Digit* codes)
   window.addEventListener('keydown', (e) => {
-    if (!(e.ctrlKey || e.metaKey) || e.altKey) return;
-    // Ctrl+Shift+Enter → one-shot Craft (handled on prompt)
-    if (e.shiftKey) return;
-    if (e.key === '1') {
+    if (!(e.ctrlKey || e.metaKey) || e.altKey || e.shiftKey) return;
+    const code = e.code || '';
+    const key = e.key || '';
+    if (key === '1' || code === 'Digit1' || code === 'Numpad1') {
       e.preventDefault();
       setWorkMode('craft', { toast: true });
-    } else if (e.key === '2') {
+    } else if (key === '2' || code === 'Digit2' || code === 'Numpad2') {
       e.preventDefault();
       setWorkMode('plan', { toast: true });
-    } else if (e.key === '3') {
+    } else if (key === '3' || code === 'Digit3' || code === 'Numpad3') {
       e.preventDefault();
       setWorkMode('ask', { toast: true });
     }
   });
   // status badge click cycles mode
   document.addEventListener('click', (e) => {
-    if (e.target?.id === 'sbMode') cycleWorkMode();
+    if (e.target?.id === 'sbMode' || e.target?.closest?.('#sbMode')) {
+      cycleWorkMode();
+    }
   });
   document.addEventListener('keydown', (e) => {
     if (e.target?.id === 'sbMode' && (e.key === 'Enter' || e.key === ' ')) {

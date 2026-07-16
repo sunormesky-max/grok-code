@@ -11,6 +11,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 - See [ROADMAP.md](ROADMAP.md)
 
+## [1.8.2] — 2026-07-16
+
+### Fix Craft / Plan / Ask mode switching
+
+- Bind mode chips **early** in `init` (no longer blocked if project restore fails)
+- Capture-phase **event delegation** on `#modeBar` (robust clicks)
+- Ctrl/Cmd+1/2/3 also match `Digit*` key codes
+- Distinct active colors for Plan (orange) / Ask (violet) over flight-deck CSS
+- Composer / mode bar raised above panel chrome (`z-index` + `pointer-events`)
+
 ## [1.8.1] — 2026-07-16
 
 ### Code / Diff chrome collapse — keep body visible

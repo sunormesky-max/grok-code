@@ -3843,6 +3843,10 @@ button.pill:hover {
   border-top: 1px solid var(--border);
   padding: 12px;
   background: linear-gradient(180deg, rgba(0, 0, 0, 0.2), rgba(0, 0, 0, 0.55));
+  position: relative;
+  z-index: 5;
+  flex-shrink: 0;
+  pointer-events: auto;
 }
 .composer-box {
   position: relative;
