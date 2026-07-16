@@ -11,6 +11,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 - See [ROADMAP.md](ROADMAP.md)
 
+## [1.4.10] — 2026-07-16
+
+### HTML pack compare · encrypted storyboard
+
+- **Compare HTML packs**: A|B import accepts JSON, offline HTML (parses `const TURNS`), and AES-encrypted packs
+- **Encrypted export**: toolbar **🔒** / Ctrl+K → AES-GCM storyboard JSON (`grokcode-storyboard-aes-v1`, passphrase, same KDF as template packs)
+
 ## [1.4.9] — 2026-07-16
 
 ### Pack compare polish · progressive compress

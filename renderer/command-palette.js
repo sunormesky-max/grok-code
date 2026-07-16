@@ -509,12 +509,22 @@
       },
       {
         id: 'diff.storyboard.compare',
-        title: t('cmd.diff.storyboard.compare', '对比两个 Storyboard JSON 包'),
-        keywords: 'diff storyboard compare packs ab review 对比 审阅包',
+        title: t('cmd.diff.storyboard.compare', '对比两个 Storyboard 包'),
+        keywords: 'diff storyboard compare packs ab review html json 对比 审阅包',
         group: 'actions',
         run: run(() => {
           global.switchTab?.('diff');
           global.compareStoryboardPacks?.();
+        }),
+      },
+      {
+        id: 'diff.storyboard.encrypt',
+        title: t('cmd.diff.storyboard.encrypt', '导出加密 Storyboard JSON'),
+        keywords: 'diff storyboard encrypt aes passphrase 加密 口令',
+        group: 'actions',
+        run: run(() => {
+          global.switchTab?.('diff');
+          global.exportStoryboardEncrypted?.();
         }),
       },
       {

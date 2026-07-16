@@ -1640,7 +1640,7 @@ async function deriveTemplateKey(passphrase, salt) {
   );
 }
 
-async function encryptTemplatesPayload(jsonStr, passphrase) {
+async function encryptAesPayload(jsonStr, passphrase, format) {
   const salt = crypto.getRandomValues(new Uint8Array(16));
   const iv = crypto.getRandomValues(new Uint8Array(12));
   const key = await deriveTemplateKey(passphrase, salt);
@@ -1650,7 +1650,7 @@ async function encryptTemplatesPayload(jsonStr, passphrase) {
     new TextEncoder().encode(jsonStr)
   );
   return {
-    format: 'grokcode-templates-aes-v1',
+    format,
     kdf: 'PBKDF2-SHA256-120k',
     cipher: 'AES-256-GCM',
     salt: b64FromBytes(salt),
@@ -1660,9 +1660,18 @@ async function encryptTemplatesPayload(jsonStr, passphrase) {
   };
 }
 
-async function decryptTemplatesPayload(pack, passphrase) {
-  if (!pack || pack.format !== 'grokcode-templates-aes-v1') {
-    throw new Error('Not an encrypted GrokCode template pack');
+async function encryptTemplatesPayload(jsonStr, passphrase) {
+  return encryptAesPayload(jsonStr, passphrase, 'grokcode-templates-aes-v1');
+}
+
+async function encryptStoryboardPayload(jsonStr, passphrase) {
+  return encryptAesPayload(jsonStr, passphrase, 'grokcode-storyboard-aes-v1');
+}
+
+async function decryptAesPayload(pack, passphrase, allowedFormats) {
+  const formats = Array.isArray(allowedFormats) ? allowedFormats : [allowedFormats];
+  if (!pack || !formats.includes(pack.format)) {
+    throw new Error('Not an encrypted GrokCode pack');
   }
   const salt = bytesFromB64(pack.salt);
   const iv = bytesFromB64(pack.iv);
@@ -1673,6 +1682,14 @@ async function decryptTemplatesPayload(pack, passphrase) {
     bytesFromB64(pack.data)
   );
   return new TextDecoder().decode(pt);
+}
+
+async function decryptTemplatesPayload(pack, passphrase) {
+  return decryptAesPayload(pack, passphrase, 'grokcode-templates-aes-v1');
+}
+
+async function decryptStoryboardPayload(pack, passphrase) {
+  return decryptAesPayload(pack, passphrase, 'grokcode-storyboard-aes-v1');
 }
 
 async function exportTemplatesEncrypted() {
@@ -5004,31 +5021,145 @@ if (TURNS.length) show(0);
 </html>`;
 }
 
-/** Side-by-side compare of two exported storyboard JSON packs */
+/** Extract balanced JSON value starting at index (array/object). */
+function extractBalancedJson(text, startIdx) {
+  if (startIdx < 0 || startIdx >= text.length) return null;
+  const open = text[startIdx];
+  if (open !== '[' && open !== '{') return null;
+  const close = open === '[' ? ']' : '}';
+  let depth = 0;
+  let inStr = false;
+  let esc = false;
+  for (let i = startIdx; i < text.length; i++) {
+    const ch = text[i];
+    if (inStr) {
+      if (esc) esc = false;
+      else if (ch === '\\') esc = true;
+      else if (ch === '"') inStr = false;
+      continue;
+    }
+    if (ch === '"') {
+      inStr = true;
+      continue;
+    }
+    if (ch === open) depth++;
+    else if (ch === close) {
+      depth--;
+      if (depth === 0) {
+        const slice = text.slice(startIdx, i + 1);
+        try {
+          return JSON.parse(slice);
+        } catch {
+          return null;
+        }
+      }
+    }
+  }
+  return null;
+}
+
+/** Parse offline HTML review pack → storyboard data (const TURNS = …). */
+function parseStoryboardFromHtml(html) {
+  if (!html || typeof html !== 'string') return null;
+  const marker = /const\s+TURNS\s*=\s*/;
+  const m = marker.exec(html);
+  if (!m) return null;
+  let i = m.index + m[0].length;
+  while (i < html.length && /\s/.test(html[i])) i++;
+  const turns = extractBalancedJson(html, i);
+  if (!Array.isArray(turns)) return null;
+  let name = null;
+  let path = null;
+  const titleM = html.match(/<title>\s*GrokCode Storyboard\s*[·•]\s*([^<]+?)\s*<\/title>/i);
+  if (titleM) name = titleM[1].trim();
+  const metaM = html.match(/class="meta"[^>]*>\s*([^<]+)/i);
+  if (metaM) {
+    const parts = metaM[1].split('·').map((s) => s.trim());
+    if (parts[0] && parts[0] !== '—') path = parts[0];
+  }
+  return {
+    format: 'grokcode-storyboard-v1',
+    project: { name: name || null, path: path || null },
+    exportedAt: null,
+    turns,
+    source: 'html',
+  };
+}
+
+/**
+ * Resolve a picked file (JSON / encrypted AES / HTML) into storyboard pack.
+ * @returns {{ pack: object|null, file: string, error?: string }}
+ */
+async function resolveStoryboardImport(raw, en) {
+  if (!raw?.ok) return { pack: null, file: raw?.file || '', error: raw?.error || 'import failed' };
+  const file = raw.file || '';
+  let data = raw.data;
+  const text = raw.text || '';
+
+  // Encrypted storyboard JSON
+  if (data?.format === 'grokcode-storyboard-aes-v1') {
+    const pass = prompt(en ? 'Passphrase for encrypted storyboard' : '加密 storyboard 口令');
+    if (!pass) return { pack: null, file, error: en ? 'Canceled' : '已取消' };
+    try {
+      const json = await decryptStoryboardPayload(data, pass);
+      data = JSON.parse(json);
+    } catch (e) {
+      return { pack: null, file, error: e.message || 'decrypt failed' };
+    }
+  }
+
+  let pack = normalizeStoryboardPack(data);
+  if (pack) return { pack, file };
+
+  // HTML offline pack
+  const lower = file.toLowerCase();
+  if (text && (lower.endsWith('.html') || lower.endsWith('.htm') || /const\s+TURNS\s*=/.test(text))) {
+    pack = parseStoryboardFromHtml(text);
+    if (pack) return { pack, file };
+  }
+
+  // raw text that is actually JSON storyboard (data parse failed earlier? unlikely)
+  if (!data && text) {
+    try {
+      pack = normalizeStoryboardPack(JSON.parse(text));
+      if (pack) return { pack, file };
+    } catch {
+      /* ignore */
+    }
+    pack = parseStoryboardFromHtml(text);
+    if (pack) return { pack, file };
+  }
+
+  return {
+    pack: null,
+    file,
+    error: en
+      ? 'Need storyboard JSON, encrypted pack, or HTML review pack'
+      : '需要 storyboard JSON、加密包或 HTML 审阅包',
+  };
+}
+
+/** Side-by-side compare of two storyboard packs (JSON / HTML / encrypted) */
 async function compareStoryboardPacks() {
   const en = localeIsEn();
   try {
-    toast(en ? 'Pick pack A…' : '选择包 A…', 'ok');
-    const rawA = await window.grok.templateImportRaw();
+    toast(en ? 'Pick pack A (JSON/HTML)…' : '选择包 A（JSON/HTML）…', 'ok');
+    const rawA = await window.grok.templateImportRaw({ storyboard: true });
     if (rawA?.canceled) return;
-    if (!rawA?.ok) {
-      toast(rawA?.error || 'import A failed', 'err');
+    const resolvedA = await resolveStoryboardImport(rawA, en);
+    if (!resolvedA.pack) {
+      toast(resolvedA.error || 'import A failed', 'err');
       return;
     }
-    toast(en ? 'Pick pack B…' : '选择包 B…', 'ok');
-    const rawB = await window.grok.templateImportRaw();
+    toast(en ? 'Pick pack B (JSON/HTML)…' : '选择包 B（JSON/HTML）…', 'ok');
+    const rawB = await window.grok.templateImportRaw({ storyboard: true });
     if (rawB?.canceled) return;
-    if (!rawB?.ok) {
-      toast(rawB?.error || 'import B failed', 'err');
+    const resolvedB = await resolveStoryboardImport(rawB, en);
+    if (!resolvedB.pack) {
+      toast(resolvedB.error || 'import B failed', 'err');
       return;
     }
-    const packA = normalizeStoryboardPack(rawA.data);
-    const packB = normalizeStoryboardPack(rawB.data);
-    if (!packA || !packB) {
-      toast(en ? 'Both files must be storyboard JSON' : '两个文件都需是 storyboard JSON', 'err');
-      return;
-    }
-    showStoryboardCompareModal(packA, packB, rawA.file, rawB.file);
+    showStoryboardCompareModal(resolvedA.pack, resolvedB.pack, resolvedA.file, resolvedB.file);
   } catch (e) {
     toast(e.message || 'compare failed', 'err');
   }
@@ -5036,10 +5167,52 @@ async function compareStoryboardPacks() {
 
 function normalizeStoryboardPack(data) {
   if (!data) return null;
+  if (data.format === 'grokcode-storyboard-aes-v1') return null; // needs decrypt first
   if (data.format === 'grokcode-storyboard-v1' && Array.isArray(data.turns)) return data;
   if (Array.isArray(data.turns)) return { ...data, format: data.format || 'grokcode-storyboard-v1' };
   return null;
 }
+
+/** Export passphrase-encrypted storyboard JSON (AES-GCM) */
+async function exportStoryboardEncrypted() {
+  const turns = collectGlobalTurns();
+  if (!turns.length) {
+    toast(localeIsEn() ? 'No turns to export' : '暂无 turn 可导出', 'err');
+    return;
+  }
+  const en = localeIsEn();
+  const pass = prompt(en ? 'Passphrase for encrypted storyboard' : '加密 storyboard 口令');
+  if (!pass) return;
+  const pass2 = prompt(en ? 'Confirm passphrase' : '再次确认口令');
+  if (pass2 !== pass) {
+    toast(en ? 'Passphrases do not match' : '两次口令不一致', 'err');
+    return;
+  }
+  try {
+    const data = buildStoryboardData({ withDiffs: true });
+    const sealed = await encryptStoryboardPayload(JSON.stringify(data), pass);
+    const safe = String(data.project?.name || 'session')
+      .replace(/[^\w\u4e00-\u9fff.-]+/g, '-')
+      .slice(0, 40);
+    const r = await window.grok.templateExportPack({
+      json: JSON.stringify(sealed, null, 2),
+      defaultName: `grok-storyboard-${safe}.enc.json`,
+      title: en ? 'Export encrypted storyboard' : '导出加密 storyboard',
+    });
+    if (r?.canceled) return;
+    if (r?.ok) {
+      toast(
+        (en ? 'Encrypted storyboard: ' : '已加密导出：') +
+          (r.file || '') +
+          storyboardCompressToast(data, en),
+        'ok'
+      );
+    } else toast(r?.error || 'export failed', 'err');
+  } catch (e) {
+    toast(e.message || 'encrypt failed', 'err');
+  }
+}
+window.exportStoryboardEncrypted = exportStoryboardEncrypted;
 
 function fileSetKey(files) {
   return [...(files || [])].map(String).sort().join('\n');
@@ -5518,6 +5691,7 @@ window.exportFilmstripStoryboard = exportFilmstripStoryboard;
 window.exportFilmstripHtml = () => exportFilmstripStoryboard({ format: 'html' });
 window.exportFilmstripPng = () => exportFilmstripStoryboard({ format: 'png' });
 window.exportReviewFolder = () => exportFilmstripStoryboard({ format: 'folder' });
+window.exportStoryboardEncrypted = exportStoryboardEncrypted;
 
 function scrubberHtml(turns) {
   if (!turns.length) return '';
@@ -5540,7 +5714,8 @@ function scrubberHtml(turns) {
     <button type="button" class="diff-scrub-export html" data-scrub-export-html="1" title="${en ? 'Export HTML review pack' : '导出 HTML 审阅包'}">HTML</button>
     <button type="button" class="diff-scrub-export html" data-scrub-export-png="1" title="${en ? 'Export PNG overview' : '导出 PNG 总览'}">PNG</button>
     <button type="button" class="diff-scrub-export html" data-scrub-export-folder="1" title="${en ? 'Export review folder (HTML+MD+JSON+PNG)' : '导出审阅文件夹'}">📁</button>
-    <button type="button" class="diff-scrub-export html" data-scrub-compare="1" title="${en ? 'Compare two storyboard JSON packs' : '对比两个 storyboard JSON 包'}">A|B</button>
+    <button type="button" class="diff-scrub-export html" data-scrub-compare="1" title="${en ? 'Compare two packs (JSON/HTML/encrypted)' : '对比两个包（JSON/HTML/加密）'}">A|B</button>
+    <button type="button" class="diff-scrub-export html" data-scrub-export-enc="1" title="${en ? 'Export encrypted storyboard JSON' : '导出加密 storyboard JSON'}">🔒</button>
     <span class="diff-scrub-budget" title="${en ? 'Export pack size budget' : '导出包体积预算'}">
       ${['full', 'balanced', 'compact']
         .map(
@@ -6055,6 +6230,9 @@ function renderDiffPane() {
   });
   content.querySelector('[data-scrub-compare]')?.addEventListener('click', () => {
     compareStoryboardPacks();
+  });
+  content.querySelector('[data-scrub-export-enc]')?.addEventListener('click', () => {
+    exportStoryboardEncrypted();
   });
   content.querySelectorAll('[data-budget-mode]').forEach((btn) => {
     btn.onclick = (e) => {

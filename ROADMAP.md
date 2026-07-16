@@ -37,12 +37,13 @@ Living plan for the GrokCode open-source ecosystem. Order may change based on co
 - [x] Mini diffs · PNG · review folder pack (v1.4.7)
 - [x] Storyboard notes · pack A|B compare · budget compress (v1.4.8)
 - [x] Pack compare polish · progressive compress modes (v1.4.9)
+- [x] HTML pack compare · encrypted storyboard export (v1.4.10)
 
 ## Next
 
 - [ ] Optional true cloud template vault (accounted service)
-- [ ] Compare HTML packs without requiring JSON
-- [ ] Storyboard pack encryption at rest
+- [ ] Import encrypted storyboard into Diff filmstrip (offline re-view)
+- [ ] Share encrypted packs via optional link service
 
 ## Later
 

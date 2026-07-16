@@ -1193,9 +1193,13 @@ ipcMain.handle('profile:dir', () => profiles.profilesDir());
 ipcMain.handle('template:exportPack', async (e, payload = {}) => {
   const win = BrowserWindow.fromWebContents(e.sender);
   const json = String(payload.json || '[]');
+  const defaultName = String(payload.defaultName || 'grok-templates.json').replace(
+    /[<>:"|?*]/g,
+    '-'
+  );
   const save = await dialog.showSaveDialog(win, {
-    title: '导出 GrokCode 模板包',
-    defaultPath: path.join(osHomedir(), 'grok-templates.json'),
+    title: payload.title || '导出 GrokCode 模板包',
+    defaultPath: path.join(osHomedir(), defaultName),
     filters: [{ name: 'JSON', extensions: ['json'] }],
   });
   if (save.canceled || !save.filePath) return { ok: false, canceled: true };
@@ -1244,18 +1248,34 @@ ipcMain.handle('template:importPack', async (e) => {
   }
 });
 
-ipcMain.handle('template:importRaw', async (e) => {
+ipcMain.handle('template:importRaw', async (e, payload = {}) => {
   const win = BrowserWindow.fromWebContents(e.sender);
+  const storyboard = !!payload.storyboard;
   const open = await dialog.showOpenDialog(win, {
-    title: '导入 GrokCode 模板包（支持加密）',
+    title: storyboard
+      ? '导入 Storyboard 审阅包（JSON / HTML / 加密）'
+      : '导入 GrokCode 模板包（支持加密）',
     properties: ['openFile'],
-    filters: [{ name: 'JSON', extensions: ['json'] }],
+    filters: storyboard
+      ? [
+          { name: 'Storyboard pack', extensions: ['json', 'html', 'htm'] },
+          { name: 'JSON', extensions: ['json'] },
+          { name: 'HTML', extensions: ['html', 'htm'] },
+          { name: 'All', extensions: ['*'] },
+        ]
+      : [{ name: 'JSON', extensions: ['json'] }],
   });
   if (open.canceled || !open.filePaths[0]) return { ok: false, canceled: true };
   try {
-    const raw = fs.readFileSync(open.filePaths[0], 'utf8');
-    const data = JSON.parse(raw);
-    return { ok: true, data, file: open.filePaths[0] };
+    const file = open.filePaths[0];
+    const text = fs.readFileSync(file, 'utf8');
+    let data = null;
+    try {
+      data = JSON.parse(text);
+    } catch {
+      /* plain HTML or other text — renderer may parse */
+    }
+    return { ok: true, data, text, file };
   } catch (err) {
     return { ok: false, error: err.message || String(err) };
   }
