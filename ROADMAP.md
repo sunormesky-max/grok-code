@@ -21,13 +21,14 @@ Living plan for the GrokCode open-source ecosystem. Order may change based on co
 - [x] Craft flight deck (one-shot Craft, mission bar, mode HUD)
 - [x] Skill preview modal · outline sticky · plan auto-detect · session share card
 - [x] Task rename · Live filters · Diff hunk fold · Composer model chip
+- [x] Diff review/j-k/multi-select · slash cmds · chat message search
 
 ## Next
 
-- [ ] Diff “accept file” reviewed mark + keyboard next/prev file
-- [ ] Multi-select dismiss/restore in Diff list
-- [ ] Composer slash-command palette (skills / modes / model)
-- [ ] Session search within current task messages
+- [ ] Composer @-file mention insert paths from workspace
+- [ ] Diff side-by-side view toggle
+- [ ] Task pin / reorder tabs
+- [ ] Crash-safe auto-backup of in-flight prompt drafts
 
 ## Later
 

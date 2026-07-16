@@ -58,6 +58,8 @@ const state = {
   model: '',
   /** collapsed diff hunk indices for current file view */
   diffHunkCollapsed: new Set(),
+  /** multi-select paths in Diff list */
+  diffSelected: new Set(),
 };
 
 /** 当前激活任务 */
@@ -1105,6 +1107,7 @@ function bindUi() {
 
 
   $('#prompt').addEventListener('keydown', (e) => {
+    if (handleSlashKeydown(e)) return;
     if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
       e.preventDefault();
       // Ctrl+Shift+Enter → one-shot Craft without leaving current mode UI
@@ -1115,6 +1118,7 @@ function bindUi() {
   $('#prompt').addEventListener('input', () => {
     autoResizePrompt();
     updateCharCount();
+    updateSlashMenu();
   });
 
   $('#termInput').addEventListener('keydown', onTermKey);
@@ -1179,6 +1183,13 @@ function bindUi() {
   $('#btnRestoreFile')?.addEventListener('click', () => restoreSelectedFile());
   $('#btnRestoreAll')?.addEventListener('click', () => restoreAllFiles());
   $('#btnDismissDiff')?.addEventListener('click', () => dismissSelectedDiff());
+  $('#btnReviewDiff')?.addEventListener('click', () => {
+    const path = P() && P().selectedDiffPath;
+    const cur = path && changesMap().get(path);
+    markDiffReviewed(path, !cur?.reviewed);
+  });
+  bindSlashCommands();
+  bindChatSearch();
 
   $('#linkConsole').onclick = (e) => {
     e.preventDefault();
@@ -1188,6 +1199,12 @@ function bindUi() {
   $('#settingsModal').addEventListener('click', (e) => {
     if (e.target === $('#settingsModal')) closeSettings();
   });
+}
+
+function isTypingTarget(el) {
+  if (!el) return false;
+  const tag = (el.tagName || '').toLowerCase();
+  return tag === 'input' || tag === 'textarea' || el.isContentEditable;
 }
 
 function bindShortcuts() {
@@ -1215,7 +1232,45 @@ function bindShortcuts() {
       e.preventDefault();
       addTask();
     }
+    // Ctrl+F in chat/composer → in-task message search (global content search remains Ctrl+Shift+F)
+    if (mod && !e.shiftKey && e.key.toLowerCase() === 'f') {
+      if (
+        document.activeElement?.id === 'prompt' ||
+        document.activeElement?.closest?.('#messagesHost') ||
+        document.activeElement?.closest?.('.composer') ||
+        document.activeElement?.id === 'chatSearchInput'
+      ) {
+        e.preventDefault();
+        openChatSearch();
+        return;
+      }
+    }
+    // Diff review keys when Diff tab active and not typing
+    if (!mod && !e.altKey && !isTypingTarget(document.activeElement) && state.activeTab === 'diff') {
+      if (e.key === 'j' || e.key === 'J') {
+        e.preventDefault();
+        navigateDiffFile(1);
+        return;
+      }
+      if (e.key === 'k' || e.key === 'K') {
+        e.preventDefault();
+        navigateDiffFile(-1);
+        return;
+      }
+      if (e.key === 'a' || e.key === 'A') {
+        e.preventDefault();
+        const path = P() && P().selectedDiffPath;
+        const cur = path && changesMap().get(path);
+        if (cur && !cur.restored) markDiffReviewed(path, !cur.reviewed);
+        return;
+      }
+    }
     if (e.key === 'Escape') {
+      hideSlashMenu();
+      if (document.getElementById('chatSearchBar') && !document.getElementById('chatSearchBar').classList.contains('hidden')) {
+        closeChatSearch();
+        return;
+      }
       if (window.GrokCommandPalette?.isOpen?.()) {
         window.GrokCommandPalette.close();
         return;
@@ -1881,6 +1936,357 @@ function bindModelChipUi() {
 }
 window.setModelPreset = setModelPreset;
 window.getComposerModel = () => state.model || '';
+window.navigateDiffFile = navigateDiffFile;
+window.markDiffReviewed = markDiffReviewed;
+
+// ── Slash commands in composer ──────────────────────────
+const SLASH_COMMANDS = () => [
+  { id: 'craft', label: '/craft', desc: localeIsEn() ? 'Switch to Craft' : '切换 Craft 飞行', run: () => setWorkMode('craft', { toast: true }) },
+  { id: 'plan', label: '/plan', desc: localeIsEn() ? 'Switch to Plan' : '切换 Plan', run: () => setWorkMode('plan', { toast: true }) },
+  { id: 'ask', label: '/ask', desc: localeIsEn() ? 'Switch to Ask' : '切换 Ask', run: () => setWorkMode('ask', { toast: true }) },
+  {
+    id: 'model',
+    label: '/model',
+    desc: localeIsEn() ? 'Cycle model preset' : '切换模型预设',
+    run: async () => {
+      const presets = MODEL_PRESETS.map((p) => p.id);
+      const i = presets.indexOf(state.model || '');
+      await setModelPreset(presets[(i + 1) % presets.length]);
+    },
+  },
+  {
+    id: 'share',
+    label: '/share',
+    desc: localeIsEn() ? 'Export session share card' : '导出会话分享卡',
+    run: () => openSessionShareCard(),
+  },
+  {
+    id: 'rename',
+    label: '/rename',
+    desc: localeIsEn() ? 'Rename current task' : '重命名当前任务',
+    run: () => {
+      const id = window.TaskStore?.activeId;
+      if (id) beginTaskRename(id);
+    },
+  },
+  {
+    id: 'diff',
+    label: '/diff',
+    desc: localeIsEn() ? 'Open Diff tab' : '打开 Diff',
+    run: () => switchTab('diff'),
+  },
+  {
+    id: 'search',
+    label: '/search',
+    desc: localeIsEn() ? 'Search messages in task' : '搜索本任务消息',
+    run: () => openChatSearch(),
+  },
+  {
+    id: 'skill',
+    label: '/skill',
+    desc: localeIsEn() ? 'Browse skills…' : '浏览 Skills…',
+    run: async () => {
+      try {
+        const list = await window.grok.skillsList({ projectPath: P()?.path || null });
+        const enabled = (list || []).filter((s) => s.enabled !== false).slice(0, 12);
+        if (!enabled.length) {
+          toast(localeIsEn() ? 'No skills' : '暂无 Skills', 'err');
+          return;
+        }
+        // open first match menu via skill preview list in toast-style picker
+        showSkillPickMenu(enabled);
+      } catch (e) {
+        toast(e.message || 'skills failed', 'err');
+      }
+    },
+  },
+  {
+    id: 'help',
+    label: '/help',
+    desc: localeIsEn() ? 'Keyboard shortcuts' : '快捷键速查',
+    run: () => window.GrokHelp?.open?.(),
+  },
+];
+
+let slashIndex = 0;
+let slashFiltered = [];
+
+function ensureSlashMenu() {
+  let menu = document.getElementById('slashMenu');
+  if (menu) return menu;
+  menu = document.createElement('div');
+  menu.id = 'slashMenu';
+  menu.className = 'slash-menu hidden';
+  menu.setAttribute('role', 'listbox');
+  document.body.appendChild(menu);
+  return menu;
+}
+
+function hideSlashMenu() {
+  const menu = document.getElementById('slashMenu');
+  if (menu) menu.classList.add('hidden');
+  slashFiltered = [];
+}
+
+function getSlashQuery() {
+  const ta = document.getElementById('prompt');
+  if (!ta) return null;
+  const val = ta.value;
+  // only when line starts with /
+  if (!val.startsWith('/')) return null;
+  const space = val.indexOf(' ');
+  if (space !== -1) return null; // already chose a command with args
+  return val.slice(1).toLowerCase();
+}
+
+function updateSlashMenu() {
+  const q = getSlashQuery();
+  const menu = ensureSlashMenu();
+  if (q == null) {
+    hideSlashMenu();
+    return;
+  }
+  const all = SLASH_COMMANDS();
+  slashFiltered = all.filter(
+    (c) => !q || c.id.includes(q) || c.label.slice(1).includes(q) || (c.desc || '').toLowerCase().includes(q)
+  );
+  if (!slashFiltered.length) {
+    hideSlashMenu();
+    return;
+  }
+  if (slashIndex >= slashFiltered.length) slashIndex = 0;
+  const ta = document.getElementById('prompt');
+  const rect = ta.getBoundingClientRect();
+  menu.style.left = `${Math.max(8, rect.left)}px`;
+  menu.style.bottom = `${window.innerHeight - rect.top + 6}px`;
+  menu.style.width = `${Math.min(360, rect.width)}px`;
+  menu.innerHTML = slashFiltered
+    .map(
+      (c, i) =>
+        `<button type="button" class="slash-item${i === slashIndex ? ' active' : ''}" data-idx="${i}" role="option">
+          <span class="slash-label">${esc(c.label)}</span>
+          <span class="slash-desc">${esc(c.desc)}</span>
+        </button>`
+    )
+    .join('');
+  menu.classList.remove('hidden');
+  menu.querySelectorAll('.slash-item').forEach((btn) => {
+    btn.onmousedown = (e) => {
+      e.preventDefault();
+      runSlashAt(Number(btn.dataset.idx));
+    };
+  });
+}
+
+function runSlashAt(idx) {
+  const cmd = slashFiltered[idx];
+  if (!cmd) return;
+  const ta = document.getElementById('prompt');
+  if (ta) {
+    ta.value = '';
+    autoResizePrompt();
+    updateCharCount();
+  }
+  hideSlashMenu();
+  Promise.resolve(cmd.run()).catch((e) => toast(e.message || String(e), 'err'));
+}
+
+function handleSlashKeydown(e) {
+  const menu = document.getElementById('slashMenu');
+  const open = menu && !menu.classList.contains('hidden') && slashFiltered.length;
+  if (!open) {
+    if (e.key === 'Escape' && getSlashQuery() != null) {
+      hideSlashMenu();
+    }
+    return false;
+  }
+  if (e.key === 'ArrowDown') {
+    e.preventDefault();
+    slashIndex = (slashIndex + 1) % slashFiltered.length;
+    updateSlashMenu();
+    return true;
+  }
+  if (e.key === 'ArrowUp') {
+    e.preventDefault();
+    slashIndex = (slashIndex - 1 + slashFiltered.length) % slashFiltered.length;
+    updateSlashMenu();
+    return true;
+  }
+  if (e.key === 'Enter' && !e.ctrlKey && !e.metaKey) {
+    e.preventDefault();
+    runSlashAt(slashIndex);
+    return true;
+  }
+  if (e.key === 'Tab') {
+    e.preventDefault();
+    runSlashAt(slashIndex);
+    return true;
+  }
+  if (e.key === 'Escape') {
+    e.preventDefault();
+    hideSlashMenu();
+    return true;
+  }
+  return false;
+}
+
+function bindSlashCommands() {
+  ensureSlashMenu();
+  document.addEventListener('click', (e) => {
+    if (!e.target.closest?.('#slashMenu') && e.target?.id !== 'prompt') hideSlashMenu();
+  });
+}
+
+function showSkillPickMenu(skills) {
+  let menu = document.getElementById('skillPickMenu');
+  if (!menu) {
+    menu = document.createElement('div');
+    menu.id = 'skillPickMenu';
+    menu.className = 'slash-menu skill-pick-menu';
+    document.body.appendChild(menu);
+  }
+  menu.innerHTML =
+    `<div class="slash-head">${localeIsEn() ? 'Skills' : 'Skills · 点开预览'}</div>` +
+    skills
+      .map(
+        (s) =>
+          `<button type="button" class="slash-item" data-file="${esc(s.skillFile || s.path || '')}" data-name="${esc(s.name)}">
+            <span class="slash-label">${esc(s.name)}</span>
+            <span class="slash-desc">${esc((s.description || '').slice(0, 80))}</span>
+          </button>`
+      )
+      .join('');
+  const ta = document.getElementById('prompt');
+  const rect = ta?.getBoundingClientRect() || { left: 40, top: window.innerHeight - 120, width: 320 };
+  menu.style.left = `${Math.max(8, rect.left)}px`;
+  menu.style.bottom = `${window.innerHeight - rect.top + 6}px`;
+  menu.style.width = `${Math.min(400, rect.width || 360)}px`;
+  menu.classList.remove('hidden');
+  menu.querySelectorAll('.slash-item').forEach((btn) => {
+    btn.onclick = async () => {
+      menu.classList.add('hidden');
+      await openSkillPreview(btn.dataset.file, btn.dataset.name);
+    };
+  });
+}
+
+// ── In-task message search ──────────────────────────────
+let chatSearchHits = [];
+let chatSearchIdx = 0;
+
+function ensureChatSearchBar() {
+  let bar = document.getElementById('chatSearchBar');
+  if (bar) return bar;
+  const host = document.querySelector('.composer')?.parentElement || document.getElementById('messagesHost')?.parentElement;
+  if (!host) return null;
+  bar = document.createElement('div');
+  bar.id = 'chatSearchBar';
+  bar.className = 'chat-search-bar hidden';
+  bar.innerHTML = `
+    <span class="chat-search-label">⌕</span>
+    <input type="search" id="chatSearchInput" placeholder="搜索本任务消息…" autocomplete="off" />
+    <span class="chat-search-count" id="chatSearchCount">0/0</span>
+    <button type="button" class="icon-btn" id="chatSearchPrev" title="上一个">↑</button>
+    <button type="button" class="icon-btn" id="chatSearchNext" title="下一个">↓</button>
+    <button type="button" class="icon-btn" id="chatSearchClose" title="关闭">✕</button>`;
+  const messagesHost = document.getElementById('messagesHost');
+  if (messagesHost) messagesHost.parentElement.insertBefore(bar, messagesHost);
+  else host.prepend(bar);
+  bar.querySelector('#chatSearchInput').addEventListener('input', () => runChatSearch());
+  bar.querySelector('#chatSearchInput').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      if (e.shiftKey) chatSearchStep(-1);
+      else chatSearchStep(1);
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      closeChatSearch();
+    }
+  });
+  bar.querySelector('#chatSearchPrev').onclick = () => chatSearchStep(-1);
+  bar.querySelector('#chatSearchNext').onclick = () => chatSearchStep(1);
+  bar.querySelector('#chatSearchClose').onclick = () => closeChatSearch();
+  return bar;
+}
+
+function openChatSearch() {
+  const bar = ensureChatSearchBar();
+  if (!bar) return;
+  bar.classList.remove('hidden');
+  const input = bar.querySelector('#chatSearchInput');
+  input?.focus();
+  input?.select();
+  runChatSearch();
+}
+
+function closeChatSearch() {
+  const bar = document.getElementById('chatSearchBar');
+  if (bar) bar.classList.add('hidden');
+  clearChatSearchHighlights();
+  chatSearchHits = [];
+  chatSearchIdx = 0;
+}
+
+function clearChatSearchHighlights() {
+  document.querySelectorAll('.msg.chat-hit, .msg.chat-hit-active').forEach((el) => {
+    el.classList.remove('chat-hit', 'chat-hit-active');
+  });
+}
+
+function runChatSearch() {
+  const q = (document.getElementById('chatSearchInput')?.value || '').trim().toLowerCase();
+  clearChatSearchHighlights();
+  chatSearchHits = [];
+  chatSearchIdx = 0;
+  const task = T();
+  const pane = task?.pane;
+  const countEl = document.getElementById('chatSearchCount');
+  if (!pane || !q) {
+    if (countEl) countEl.textContent = '0/0';
+    return;
+  }
+  pane.querySelectorAll('.msg').forEach((el) => {
+    const text = (el.textContent || '').toLowerCase();
+    if (text.includes(q)) {
+      el.classList.add('chat-hit');
+      chatSearchHits.push(el);
+    }
+  });
+  if (chatSearchHits.length) {
+    chatSearchIdx = 0;
+    focusChatHit(0);
+  }
+  if (countEl) {
+    countEl.textContent = chatSearchHits.length
+      ? `${chatSearchIdx + 1}/${chatSearchHits.length}`
+      : '0/0';
+  }
+}
+
+function focusChatHit(idx) {
+  if (!chatSearchHits.length) return;
+  chatSearchHits.forEach((el) => el.classList.remove('chat-hit-active'));
+  chatSearchIdx = ((idx % chatSearchHits.length) + chatSearchHits.length) % chatSearchHits.length;
+  const el = chatSearchHits[chatSearchIdx];
+  el.classList.add('chat-hit-active');
+  el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  const countEl = document.getElementById('chatSearchCount');
+  if (countEl) countEl.textContent = `${chatSearchIdx + 1}/${chatSearchHits.length}`;
+}
+
+function chatSearchStep(delta) {
+  if (!chatSearchHits.length) {
+    runChatSearch();
+    return;
+  }
+  focusChatHit(chatSearchIdx + delta);
+}
+
+function bindChatSearch() {
+  ensureChatSearchBar();
+  document.getElementById('btnChatSearch')?.addEventListener('click', () => openChatSearch());
+}
+window.openChatSearch = openChatSearch;
 
 // ── Live / Diff mission control ─────────────────────────
 function pushLiveEvent({ kind, title, sub, running = false, projectId = null }) {
@@ -2133,66 +2539,235 @@ async function recordFileChangeForProject(proj, filePath, { reason = 'change' } 
   }
 }
 
+function sortedDiffItems() {
+  return [...changesMap().entries()].sort((a, b) => (b[1].ts || 0) - (a[1].ts || 0));
+}
+
+function selectDiffFile(path, opts = {}) {
+  if (!path || !changesMap().has(path)) return;
+  requireProject().selectedDiffPath = path;
+  if (opts.render !== false) renderDiffPane();
+}
+
+function navigateDiffFile(delta) {
+  const items = sortedDiffItems();
+  if (!items.length) return;
+  const cur = (P() && P().selectedDiffPath) || items[0][0];
+  let idx = items.findIndex(([p]) => p === cur);
+  if (idx < 0) idx = 0;
+  idx = (idx + delta + items.length) % items.length;
+  selectDiffFile(items[idx][0]);
+}
+
+function markDiffReviewed(path, reviewed = true) {
+  path = path || (P() && P().selectedDiffPath);
+  if (!path || !changesMap().has(path)) return;
+  const entry = changesMap().get(path);
+  entry.reviewed = Boolean(reviewed);
+  entry.reviewedAt = reviewed ? Date.now() : null;
+  changesMap().set(path, entry);
+  renderLiveChanges();
+  renderDiffPane();
+  toast(
+    reviewed
+      ? localeIsEn()
+        ? `Reviewed: ${path.split('/').pop()}`
+        : `已审阅：${path.split('/').pop()}`
+      : localeIsEn()
+        ? 'Unmarked'
+        : '已取消审阅',
+    'ok'
+  );
+}
+
+function getDiffSelectedPaths() {
+  // prune stale
+  for (const p of [...state.diffSelected]) {
+    if (!changesMap().has(p)) state.diffSelected.delete(p);
+  }
+  return [...state.diffSelected];
+}
+
+function dismissDiffPaths(paths) {
+  const list = paths?.length ? paths : [(P() && P().selectedDiffPath)].filter(Boolean);
+  if (!list.length) return 0;
+  let n = 0;
+  for (const path of list) {
+    if (!changesMap().has(path)) continue;
+    changesMap().delete(path);
+    state.diffSelected.delete(path);
+    n += 1;
+  }
+  if (P() && !changesMap().has(P().selectedDiffPath)) {
+    const next = changesMap().keys().next();
+    requireProject().selectedDiffPath = next.done ? null : next.value;
+  }
+  renderLiveChanges();
+  renderDiffPane();
+  updateEditorChrome();
+  return n;
+}
+
+async function restoreDiffPaths(paths) {
+  const list = (paths?.length ? paths : [(P() && P().selectedDiffPath)].filter(Boolean)).filter(
+    (p) => changesMap().has(p) && !changesMap().get(p).restored
+  );
+  if (!list.length) {
+    toast(localeIsEn() ? 'Nothing to restore' : '没有可还原的文件');
+    return;
+  }
+  const ok = confirm(
+    list.length === 1
+      ? localeIsEn()
+        ? `Restore ${list[0]} to pre-agent snapshot?`
+        : `还原「${list[0]}」到改前快照？`
+      : localeIsEn()
+        ? `Restore ${list.length} files? New files will be deleted.`
+        : `还原 ${list.length} 个文件？新建文件会被删除。`
+  );
+  if (!ok) return;
+
+  let done = 0;
+  let failed = 0;
+  state._restoring = true;
+  for (const path of list) {
+    try {
+      const entry = changesMap().get(path);
+      if (!entry || entry.restored) continue;
+      requireProject().selectedDiffPath = path;
+      const isCreate = entry.created || entry.before === '';
+      if (isCreate) {
+        await window.grok.deleteFile(pid(), path);
+        contentCacheMap().set(path, '');
+      } else {
+        await window.grok.writeFile(pid(), path, entry.before ?? '');
+        contentCacheMap().set(path, entry.before ?? '');
+      }
+      entry.restored = true;
+      entry.restoredAt = Date.now();
+      changesMap().set(path, entry);
+      state.diffSelected.delete(path);
+      done += 1;
+    } catch {
+      failed += 1;
+    }
+  }
+  state._restoring = false;
+  pushLiveEvent({
+    kind: 'status',
+    title: localeIsEn() ? 'Restore done' : '还原完成',
+    sub: `${done}${failed ? ` · fail ${failed}` : ''}`,
+  });
+  renderLiveChanges();
+  renderDiffPane();
+  await loadTree();
+  toast(
+    localeIsEn()
+      ? `Restored ${done}${failed ? `, failed ${failed}` : ''}`
+      : `已还原 ${done}${failed ? `，失败 ${failed}` : ''}`,
+    failed ? 'err' : 'ok'
+  );
+}
+
 function renderDiffPane() {
   const body = $('#diffFileListBody');
   const content = $('#diffContent');
   if (!body || !content) return;
 
   const restoreAllBtn = $('#btnRestoreAll');
+  const multiBar = ensureDiffMultiBar();
+
   if (!changesMap().size) {
     body.innerHTML = '<div class="muted pad">本会话还没有捕获到变更。<br>Agent 写文件后会出现在这里。</div>';
-    content.innerHTML = `<div class="diff-placeholder"><h3>Real Diff</h3><p>统一 diff · 行级 +/- · 实时捕获 Agent 写入<br>审阅后可 <strong>还原此文件</strong> 或 <strong>忽略</strong></p></div>`;
+    content.innerHTML = `<div class="diff-placeholder"><h3>Real Diff</h3><p>统一 diff · 行级 +/- · 实时捕获 Agent 写入<br>审阅后可 <strong>还原此文件</strong> 或 <strong>忽略</strong> · <kbd>j</kbd>/<kbd>k</kbd> 切文件 · <kbd>a</kbd> 已审阅</p></div>`;
     $('#diffTitle').textContent = '选择左侧文件';
     $('#diffStats').textContent = '';
     setDiffActionsEnabled(false);
     restoreAllBtn?.classList.add('hidden');
+    multiBar?.classList.add('hidden');
+    state.diffSelected.clear();
     return;
   }
 
-  const items = [...changesMap().entries()].sort((a, b) => (b[1].ts || 0) - (a[1].ts || 0));
+  const items = sortedDiffItems();
   if (!(P() && P().selectedDiffPath) || !changesMap().has((P() && P().selectedDiffPath))) {
     requireProject().selectedDiffPath = items[0][0];
   }
 
+  // prune selection
+  for (const p of [...state.diffSelected]) {
+    if (!changesMap().has(p)) state.diffSelected.delete(p);
+  }
+
   const pending = items.filter(([, c]) => !c.restored);
   restoreAllBtn?.classList.toggle('hidden', pending.length === 0);
+  multiBar?.classList.remove('hidden');
+  updateDiffMultiBar();
 
   body.innerHTML = items
     .map(([p, c]) => {
       const active = p === (P() && P().selectedDiffPath) ? ' active' : '';
       const restored = c.restored ? ' restored' : '';
+      const reviewed = c.reviewed && !c.restored ? ' reviewed' : '';
+      const checked = state.diffSelected.has(p) ? ' checked' : '';
       const name = p.split('/').pop();
       const meta = c.restored
         ? '已还原'
-        : `<span class="a">+${c.stats?.adds ?? 0}</span> <span class="d">-${c.stats?.dels ?? 0}</span>`;
-      return `<button type="button" class="diff-file${active}${restored}" data-path="${esc(p)}">
-        <span class="df-path" title="${esc(p)}">${esc(name)}</span>
-        <span class="df-meta">${meta}</span>
-      </button>`;
+        : c.reviewed
+          ? '已审阅'
+          : `<span class="a">+${c.stats?.adds ?? 0}</span> <span class="d">-${c.stats?.dels ?? 0}</span>`;
+      return `<div class="diff-file${active}${restored}${reviewed}" data-path="${esc(p)}">
+        <label class="df-check" title="多选">
+          <input type="checkbox" data-path="${esc(p)}"${checked} />
+        </label>
+        <button type="button" class="df-main" data-path="${esc(p)}" title="${esc(p)}">
+          <span class="df-path">${esc(name)}${c.reviewed && !c.restored ? ' <em class="df-badge">OK</em>' : ''}</span>
+          <span class="df-meta">${meta}</span>
+        </button>
+      </div>`;
     })
     .join('');
 
-  body.querySelectorAll('.diff-file').forEach((btn) => {
-    btn.onclick = () => {
-      requireProject().selectedDiffPath = btn.dataset.path;
-      renderDiffPane();
+  body.querySelectorAll('.df-main').forEach((btn) => {
+    btn.onclick = () => selectDiffFile(btn.dataset.path);
+  });
+  body.querySelectorAll('.df-check input').forEach((inp) => {
+    inp.onclick = (e) => e.stopPropagation();
+    inp.onchange = () => {
+      const path = inp.dataset.path;
+      if (inp.checked) state.diffSelected.add(path);
+      else state.diffSelected.delete(path);
+      updateDiffMultiBar();
     };
   });
 
   const cur = changesMap().get((P() && P().selectedDiffPath));
   if (!cur) return;
   $('#diffTitle').textContent = (P() && P().selectedDiffPath);
-  $('#diffStats').innerHTML = cur.restored
-    ? '<span style="color:var(--ok)">已还原</span>'
-    : `<span class="a" style="color:var(--ok)">+${cur.stats.adds}</span> · <span class="d" style="color:var(--danger)">-${cur.stats.dels}</span>`;
+  const bits = [];
+  if (cur.restored) bits.push('<span style="color:var(--ok)">已还原</span>');
+  else {
+    bits.push(
+      `<span class="a" style="color:var(--ok)">+${cur.stats.adds}</span> · <span class="d" style="color:var(--danger)">-${cur.stats.dels}</span>`
+    );
+    if (cur.reviewed) bits.push('<span style="color:#7dd3fc">· 已审阅</span>');
+  }
+  $('#diffStats').innerHTML = bits.join(' ');
 
   setDiffActionsEnabled(true);
   $('#btnRestoreFile').disabled = Boolean(cur.restored);
   $('#btnRestoreFile').textContent = cur.created && !cur.restored ? '删除此文件' : '还原此文件';
+  const reviewBtn = $('#btnReviewDiff');
+  if (reviewBtn) {
+    reviewBtn.disabled = Boolean(cur.restored);
+    reviewBtn.textContent = cur.reviewed ? '取消审阅' : '已审阅';
+  }
 
   let banner = '';
   if (cur.restored) {
     banner = `<div class="diff-banner">✓ 已还原到改前快照${cur.created ? '（新建文件已删除）' : ''}</div>`;
+  } else if (cur.reviewed) {
+    banner = `<div class="diff-banner">✓ 已标记审阅 · 磁盘未改 · 可继续忽略或还原</div>`;
   } else if (cur.created) {
     banner = `<div class="diff-banner warn">此文件为 Agent 新建 · 还原 = 从磁盘删除</div>`;
   }
@@ -2208,7 +2783,7 @@ function renderDiffPane() {
     `<div class="diff-hunk-toolbar">
       <button type="button" class="link-btn" data-diff-act="expand">全部展开</button>
       <button type="button" class="link-btn" data-diff-act="collapse">全部折叠</button>
-      <span class="muted" style="font-size:11px">点击 hunk 头折叠/展开</span>
+      <span class="muted" style="font-size:11px">hunk 折叠 · <kbd>j</kbd>/<kbd>k</kbd> 文件 · <kbd>a</kbd> 审阅</span>
     </div>` +
     window.DiffUtil.toUnifiedHtml(cur.ops, {
       context: 3,
@@ -2234,11 +2809,71 @@ function renderDiffPane() {
   });
 }
 
+function ensureDiffMultiBar() {
+  let bar = document.getElementById('diffMultiBar');
+  if (bar) return bar;
+  const list = document.getElementById('diffFileList');
+  if (!list) return null;
+  bar = document.createElement('div');
+  bar.id = 'diffMultiBar';
+  bar.className = 'diff-multi-bar hidden';
+  bar.innerHTML = `
+    <button type="button" class="link-btn" data-act="all">全选</button>
+    <button type="button" class="link-btn" data-act="none">清空</button>
+    <span class="diff-multi-count" id="diffMultiCount">0 选中</span>
+    <button type="button" class="btn small ghost" data-act="dismiss">忽略选中</button>
+    <button type="button" class="btn small danger" data-act="restore">还原选中</button>
+    <button type="button" class="btn small ghost" data-act="review">审阅选中</button>`;
+  const head = list.querySelector('.diff-list-head');
+  if (head?.nextSibling) list.insertBefore(bar, head.nextSibling);
+  else list.appendChild(bar);
+  bar.querySelector('[data-act="all"]').onclick = () => {
+    for (const [p] of changesMap()) state.diffSelected.add(p);
+    renderDiffPane();
+  };
+  bar.querySelector('[data-act="none"]').onclick = () => {
+    state.diffSelected.clear();
+    renderDiffPane();
+  };
+  bar.querySelector('[data-act="dismiss"]').onclick = () => {
+    const n = dismissDiffPaths(getDiffSelectedPaths());
+    if (n) toast(localeIsEn() ? `Dismissed ${n}` : `已忽略 ${n} 个`, 'ok');
+  };
+  bar.querySelector('[data-act="restore"]').onclick = () => restoreDiffPaths(getDiffSelectedPaths());
+  bar.querySelector('[data-act="review"]').onclick = () => {
+    const paths = getDiffSelectedPaths();
+    if (!paths.length) {
+      toast(localeIsEn() ? 'Select files first' : '先勾选文件', 'err');
+      return;
+    }
+    for (const p of paths) {
+      const e = changesMap().get(p);
+      if (e && !e.restored) {
+        e.reviewed = true;
+        e.reviewedAt = Date.now();
+        changesMap().set(p, e);
+      }
+    }
+    renderDiffPane();
+    toast(localeIsEn() ? `Reviewed ${paths.length}` : `已审阅 ${paths.length} 个`, 'ok');
+  };
+  return bar;
+}
+
+function updateDiffMultiBar() {
+  const el = document.getElementById('diffMultiCount');
+  if (el) {
+    const n = getDiffSelectedPaths().length;
+    el.textContent = localeIsEn() ? `${n} selected` : `${n} 选中`;
+  }
+}
+
 function setDiffActionsEnabled(on) {
   if ($('#btnOpenFromDiff')) $('#btnOpenFromDiff').disabled = !on;
   if ($('#btnOpenExternal')) $('#btnOpenExternal').disabled = !on;
   if ($('#btnRestoreFile')) $('#btnRestoreFile').disabled = !on;
   if ($('#btnDismissDiff')) $('#btnDismissDiff').disabled = !on;
+  if ($('#btnReviewDiff')) $('#btnReviewDiff').disabled = !on;
 }
 
 /**
@@ -2373,17 +3008,8 @@ async function restoreAllFiles() {
 
 /** 仅从列表移除，不改磁盘 */
 function dismissSelectedDiff() {
-  const path = (P() && P().selectedDiffPath);
-  if (!path || !changesMap().has(path)) return;
-  changesMap().delete(path);
-  if (requireProject().selectedDiffPath === path) {
-    const next = changesMap().keys().next();
-    requireProject().selectedDiffPath = next.done ? null : next.value;
-  }
-  renderLiveChanges();
-  renderDiffPane();
-  updateEditorChrome();
-  toast('已从变更列表移除（磁盘未改）');
+  const n = dismissDiffPaths([(P() && P().selectedDiffPath)].filter(Boolean));
+  if (n) toast(localeIsEn() ? 'Removed from list (disk unchanged)' : '已从变更列表移除（磁盘未改）');
 }
 
 function clearMissionSession() {

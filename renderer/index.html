@@ -280,6 +280,7 @@
                   <div class="diff-actions">
                     <button class="btn small ghost" id="btnOpenFromDiff" disabled data-i18n="diff.openCode">在 Code 打开</button>
                     <button class="btn small primary" id="btnOpenExternal" disabled title="在 VS Code / Cursor 打开" data-i18n="diff.openExt">↗ 外部编辑器</button>
+                    <button class="btn small ghost" id="btnReviewDiff" disabled title="标记已审阅 (a)">已审阅</button>
                     <button class="btn small danger" id="btnRestoreFile" disabled title="用改前快照覆盖当前文件" data-i18n="diff.restore">还原此文件</button>
                     <button class="btn small ghost" id="btnDismissDiff" disabled title="仅从列表移除，不改磁盘" data-i18n="diff.dismiss">忽略</button>
                   </div>
@@ -331,6 +332,7 @@
               <span id="agentStatusText" data-i18n="chat.status">待命</span>
             </span>
             <span class="elapsed hidden" id="elapsedTimer">0s</span>
+            <button class="icon-btn" id="btnChatSearch" title="搜索本任务消息 (Ctrl+F)">⌕</button>
             <button class="icon-btn" id="btnShareSession" title="导出会话分享卡">⇪</button>
             <button class="icon-btn" id="btnNewChat" title="新任务 (Ctrl+T)">＋</button>
           </div>
@@ -359,6 +361,7 @@
               <div class="composer-hints">
                 <span class="hint-chip">Ctrl+Enter</span>
                 <span class="hint-chip" title="不切换模式的单次 Craft">⌃⇧↵ Craft</span>
+                <span class="hint-chip" title="斜杠命令">/cmds</span>
                 <span class="hint-chip">Ctrl+T 新任务</span>
                 <span class="hint-chip muted" id="charCount">0</span>
               </div>

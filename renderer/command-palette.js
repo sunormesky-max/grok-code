@@ -363,6 +363,31 @@
           const next = presets[(i + 1) % presets.length];
           await global.setModelPreset?.(next);
         }),
+      },
+      {
+        id: 'chat.search',
+        title: t('cmd.chat.search', '搜索本任务消息'),
+        hint: 'Ctrl+F',
+        keywords: 'search chat messages 消息 搜索',
+        group: 'actions',
+        run: run(() => global.openChatSearch?.()),
+      },
+      {
+        id: 'diff.next',
+        title: t('cmd.diff.next', 'Diff 下一个文件'),
+        keywords: 'diff next j',
+        group: 'actions',
+        run: run(() => {
+          global.switchTab?.('diff');
+          global.navigateDiffFile?.(1);
+        }),
+      },
+      {
+        id: 'diff.review',
+        title: t('cmd.diff.review', 'Diff 标记已审阅'),
+        keywords: 'diff review accept 审阅',
+        group: 'actions',
+        run: run(() => global.markDiffReviewed?.(undefined, true)),
       }
     );
   }

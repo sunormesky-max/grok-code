@@ -11,6 +11,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 - See [ROADMAP.md](ROADMAP.md)
 
+## [1.3.4] — 2026-07-16
+
+### Review & composer power tools
+
+- **Diff reviewed mark** (`a` / toolbar) + green list badge
+- **Diff j/k** next/prev file when Diff tab is active
+- **Multi-select Diff**: checkboxes · 忽略/还原/审阅选中 · 全选
+- **Slash commands** in composer: `/craft` `/plan` `/ask` `/model` `/share` `/rename` `/diff` `/search` `/skill` `/help`
+- **In-task message search**: ⌕ button or Ctrl+F in chat · Enter/↑↓ navigate hits
+
 ## [1.3.3] — 2026-07-16
 
 ### Flight-deck UX (self-directed)

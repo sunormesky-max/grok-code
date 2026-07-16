@@ -1298,15 +1298,16 @@ button.pill:hover {
 .diff-list-body { flex: 1; overflow: auto; padding: 6px; }
 .diff-list-body .pad { padding: 12px; line-height: 1.5; font-size: 12px; }
 .diff-file {
-  display: block;
+  display: flex;
+  align-items: flex-start;
+  gap: 4px;
   width: 100%;
   text-align: left;
   border: 0;
   background: transparent;
   color: var(--muted);
-  padding: 8px 10px;
+  padding: 4px 6px;
   border-radius: 8px;
-  cursor: pointer;
   font-family: var(--mono);
   font-size: 11.5px;
   margin-bottom: 2px;
@@ -1317,11 +1318,43 @@ button.pill:hover {
   color: var(--text);
   box-shadow: inset 0 0 0 1px rgba(125, 211, 252, 0.25);
 }
+.diff-file.reviewed {
+  box-shadow: inset 2px 0 0 0 #34d399;
+}
+.diff-file .df-check {
+  flex: 0 0 auto;
+  padding: 8px 2px 0;
+  cursor: pointer;
+}
+.diff-file .df-check input {
+  accent-color: #38bdf8;
+  cursor: pointer;
+}
+.diff-file .df-main {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  padding: 4px 4px;
+  cursor: pointer;
+  font: inherit;
+}
 .diff-file .df-path {
   display: block;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+.diff-file .df-badge {
+  font-style: normal;
+  font-size: 9px;
+  color: #34d399;
+  border: 1px solid rgba(52, 211, 153, 0.4);
+  border-radius: 4px;
+  padding: 0 4px;
+  margin-left: 4px;
 }
 .diff-file .df-meta {
   display: block;
@@ -1331,6 +1364,22 @@ button.pill:hover {
 }
 .diff-file .df-meta .a { color: var(--ok); }
 .diff-file .df-meta .d { color: var(--danger); }
+.diff-multi-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(0, 0, 0, 0.25);
+}
+.diff-multi-bar.hidden { display: none; }
+.diff-multi-count {
+  font-size: 10.5px;
+  color: var(--faint);
+  font-family: var(--mono);
+  margin-right: auto;
+}
 
 .diff-main {
   display: flex;
@@ -2012,6 +2061,102 @@ button.pill:hover {
 .model-menu-item.active {
   color: #c4b5fd;
   background: rgba(167, 139, 250, 0.12);
+}
+
+/* Slash command menu */
+.slash-menu {
+  position: fixed;
+  z-index: 13000;
+  max-height: min(320px, 50vh);
+  overflow: auto;
+  padding: 4px;
+  border-radius: 12px;
+  border: 1px solid rgba(125, 211, 252, 0.3);
+  background: rgba(8, 10, 18, 0.97);
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.55);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.slash-menu.hidden { display: none; }
+.slash-head {
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #7dd3fc;
+  padding: 6px 10px 4px;
+  font-family: var(--mono);
+}
+.slash-item {
+  appearance: none;
+  border: none;
+  background: transparent;
+  color: #e4e4e7;
+  text-align: left;
+  padding: 8px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.slash-item:hover,
+.slash-item.active {
+  background: rgba(56, 189, 248, 0.12);
+}
+.slash-label {
+  font-family: var(--mono);
+  font-size: 12.5px;
+  color: #7dd3fc;
+  font-weight: 700;
+}
+.slash-desc {
+  font-size: 11px;
+  color: var(--muted, #a1a1aa);
+}
+
+/* Chat message search */
+.chat-search-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border-bottom: 1px solid rgba(125, 211, 252, 0.15);
+  background: rgba(0, 0, 0, 0.35);
+}
+.chat-search-bar.hidden { display: none; }
+.chat-search-label {
+  color: #7dd3fc;
+  font-size: 14px;
+}
+#chatSearchInput {
+  flex: 1;
+  min-width: 0;
+  border: 1px solid rgba(125, 211, 252, 0.25);
+  background: rgba(0, 0, 0, 0.4);
+  color: #f4f4f5;
+  border-radius: 8px;
+  padding: 5px 8px;
+  font-size: 12.5px;
+  outline: none;
+}
+#chatSearchInput:focus {
+  border-color: rgba(56, 189, 248, 0.55);
+}
+.chat-search-count {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--faint);
+  min-width: 36px;
+  text-align: center;
+}
+.msg.chat-hit {
+  outline: 1px solid rgba(56, 189, 248, 0.35);
+  border-radius: 10px;
+}
+.msg.chat-hit-active {
+  outline: 2px solid rgba(56, 189, 248, 0.75);
+  box-shadow: 0 0 20px rgba(56, 189, 248, 0.15);
 }
   animation: liveBlink 1s ease infinite;
 }
