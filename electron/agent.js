@@ -125,6 +125,29 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
       !_resumeRetried &&
       /resume|session|not found|invalid|unknown session|expired|no such/i.test(String(msg || ''));
 
+    /** Windows reports killed process as 4294967295 (uint32 of -1) */
+    const normalizeExitCode = (code) => {
+      if (code === 4294967295 || code === -1) return -1;
+      return code;
+    };
+    const isForcedKillExit = (code) => {
+      const c = normalizeExitCode(code);
+      // -1 / 0xFFFFFFFF: TerminateProcess; 0xC000013A: Ctrl+C / console close
+      return c === -1 || c === 3221225786;
+    };
+    const formatExitError = (code, stderrHint) => {
+      const c = normalizeExitCode(code);
+      if (isForcedKillExit(code)) {
+        return (
+          'Grok CLI 进程被中断（退出码 -1 / 4294967295）。' +
+          '常见原因：点了停止、外部结束进程、或上次挂死被清理。' +
+          '请点「新会话 / Fresh」或「重试（跳过 resume）」后再发。' +
+          (stderrHint ? `\n${stderrHint}` : '')
+        );
+      }
+      return `Grok CLI 退出码 ${c}${stderrHint ? `\n${stderrHint}` : ''}`;
+    };
+
     return new Promise((resolve, reject) => {
       let finalText = '';
       let thoughtText = '';
@@ -426,22 +449,49 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
           return;
         }
 
+        const exitCode = normalizeExitCode(code);
+
         if (code !== 0 && code !== null) {
-          let errMsg = `Grok CLI 退出码 ${code}`;
           const errLine = stderrBuf
             .split(/\r?\n/)
             .map((l) => l.trim())
             .filter(Boolean)
             .slice(-5)
             .join('\n');
+          let errMsg = formatExitError(code, errLine);
           try {
             const maybe = JSON.parse(
               (stderrBuf || '').trim().split(/\r?\n/).filter(Boolean).pop() || '{}'
             );
             if (maybe.message) errMsg = maybe.message;
-            else if (errLine) errMsg = `${errMsg}\n${errLine}`;
           } catch {
-            if (errLine) errMsg = `${errMsg}\n${errLine}`;
+            /* keep formatExitError */
+          }
+
+          // Forced kill / crash with no text: drop broken resume and retry once
+          if (
+            !finalText &&
+            sessionId &&
+            !_resumeRetried &&
+            (isForcedKillExit(code) || isResumeError(errMsg))
+          ) {
+            setPhase('retry', 'CLI 中断或会话异常，无 resume 重试…');
+            run({
+              message,
+              sessionId: null,
+              signal,
+              taskId,
+              _resumeRetried: true,
+            })
+              .then((r) =>
+                resolve({
+                  ...r,
+                  resumedFallback: true,
+                  previousError: errMsg,
+                })
+              )
+              .catch(reject);
+            return;
           }
 
           if (!finalText) {
@@ -451,10 +501,32 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
             fail(new Error(errMsg));
             return;
           }
+          // Partial output after kill: treat as interrupted stop (keep text)
+          if (isForcedKillExit(code)) {
+            emitT('agent:done', {
+              text: finalText,
+              sessionId: newSessionId,
+              stopped: true,
+              warning: errMsg,
+              usage,
+              thought: thoughtText || undefined,
+            });
+            finish({
+              text: finalText,
+              stopped: true,
+              sessionId: newSessionId,
+              code: exitCode,
+              warning: errMsg,
+              taskId,
+              usage,
+              thought: thoughtText || undefined,
+            });
+            return;
+          }
           emitT('agent:done', {
             text: finalText,
             sessionId: newSessionId,
-            code,
+            code: exitCode,
             warning: errMsg,
             usage,
             stopReason,
@@ -465,7 +537,7 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
             text: finalText,
             stopped: false,
             sessionId: newSessionId,
-            code,
+            code: exitCode,
             warning: errMsg,
             taskId,
             usage,
