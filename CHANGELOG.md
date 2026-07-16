@@ -11,6 +11,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 - See [ROADMAP.md](ROADMAP.md)
 
+## [1.3.3] — 2026-07-16
+
+### Flight-deck UX (self-directed)
+
+- **Task rename**: double-click tab (or Ctrl+K) for inline rename
+- **Live filters**: 全部 / 写入 / 工具 / 错误 / 信号 chips under mission bar
+- **Diff hunk fold**: collapsible hunks + expand/collapse all toolbar
+- **Composer model chip**: quick presets (CLI default / grok-build / 4.5 / 4) + custom
+
 ## [1.3.2] — 2026-07-16
 
 ### Next-batch UX

@@ -17,6 +17,16 @@ const t = (key, fallback, vars) =>
 const LAYOUT_KEY = 'grokcode-layout-v1';
 const TERM_HIST_KEY = 'grokcode-term-hist';
 const MODE_KEY = 'grokcode-work-mode';
+const LIVE_FILTER_KEY = 'grokcode-live-filter';
+const MODEL_KEY = 'grokcode-model-chip';
+
+/** Common model presets — empty string = CLI default */
+const MODEL_PRESETS = [
+  { id: '', label: 'CLI 默认' },
+  { id: 'grok-build', label: 'grok-build' },
+  { id: 'grok-4.5', label: 'grok-4.5' },
+  { id: 'grok-4', label: 'grok-4' },
+];
 
 const state = {
   workMode: loadJson(MODE_KEY, 'craft') || 'craft',
@@ -35,6 +45,8 @@ const state = {
   activeTab: 'live',
   followAgent: true,
   activity: [],
+  /** all | write | tool | error | signal */
+  liveFilter: loadJson(LIVE_FILTER_KEY, 'all') || 'all',
   /** path -> change entry */
   changes: new Map(),
   contentCache: new Map(),
@@ -42,6 +54,10 @@ const state = {
   fsDebounce: new Map(),
   focusPath: null,
   _restoring: false,
+  /** model id string; empty = CLI default */
+  model: '',
+  /** collapsed diff hunk indices for current file view */
+  diffHunkCollapsed: new Set(),
 };
 
 /** 当前激活任务 */
@@ -610,16 +626,80 @@ async function restoreProjectEditor(p) {
   syncGutter();
 }
 
+function filterLiveEvents(events, filter) {
+  const f = filter || state.liveFilter || 'all';
+  if (!f || f === 'all') return events || [];
+  return (events || []).filter((ev) => {
+    const k = ev.kind || 'status';
+    if (f === 'write') return k === 'write';
+    if (f === 'tool') return k === 'tool';
+    if (f === 'error') return k === 'error';
+    if (f === 'signal') return k === 'status' || k === 'done' || k === 'error';
+    return true;
+  });
+}
+
+function setLiveFilter(filter, opts = {}) {
+  const allowed = ['all', 'write', 'tool', 'error', 'signal'];
+  const f = allowed.includes(filter) ? filter : 'all';
+  state.liveFilter = f;
+  saveJson(LIVE_FILTER_KEY, f);
+  document.querySelectorAll('.live-filter-chip').forEach((btn) => {
+    btn.classList.toggle('active', btn.dataset.filter === f);
+  });
+  if (opts.rebuild !== false) rebuildLiveTimeline(P());
+}
+
+function bindLiveFilterUi() {
+  let bar = document.getElementById('liveFilterBar');
+  if (!bar) {
+    const status = document.getElementById('liveStatusBar');
+    if (!status) return;
+    bar = document.createElement('div');
+    bar.id = 'liveFilterBar';
+    bar.className = 'live-filter-bar';
+    bar.setAttribute('role', 'toolbar');
+    bar.setAttribute('aria-label', 'Live filter');
+    const chips = [
+      ['all', '全部'],
+      ['write', '写入'],
+      ['tool', '工具'],
+      ['error', '错误'],
+      ['signal', '信号'],
+    ];
+    bar.innerHTML = chips
+      .map(
+        ([id, label]) =>
+          `<button type="button" class="live-filter-chip${state.liveFilter === id ? ' active' : ''}" data-filter="${id}">${label}</button>`
+      )
+      .join('');
+    status.insertAdjacentElement('afterend', bar);
+  }
+  bar.querySelectorAll('.live-filter-chip').forEach((btn) => {
+    btn.onclick = () => setLiveFilter(btn.dataset.filter);
+  });
+  setLiveFilter(state.liveFilter, { rebuild: false });
+}
+
 function rebuildLiveTimeline(proj) {
   const box = $('#liveTimeline');
   if (!box) return;
-  const events = proj?.activity || [];
-  if (!events.length) {
+  const raw = proj?.activity || [];
+  const events = filterLiveEvents(raw, state.liveFilter);
+  if (!raw.length) {
     box._virt = null;
     box.innerHTML = `<div class="live-empty" id="liveEmpty">
       <div class="grok-sigil" aria-hidden="true"><span></span><span></span><span></span></div>
       <h3>Mission Control</h3>
       <p>项目 <strong>${esc(proj?.name || '')}</strong> 的实时动态会出现在这里。</p>
+    </div>`;
+    return;
+  }
+  if (!events.length) {
+    box._virt = null;
+    box.innerHTML = `<div class="live-empty" id="liveEmpty">
+      <h3>无匹配事件</h3>
+      <p>当前过滤：<strong>${esc(state.liveFilter)}</strong> · 切换上方芯片查看全部</p>
     </div>`;
     return;
   }
@@ -736,9 +816,9 @@ function renderTaskTabs() {
     .map((t) => {
       const act = t.id === activeId ? ' active' : '';
       const run = t.running ? ' running' : '';
-      return `<div class="task-tab${act}${run}" data-id="${t.id}" title="${esc(t.title)}">
+      return `<div class="task-tab${act}${run}" data-id="${t.id}" title="${esc(t.title)} · 双击重命名">
         <span class="task-dot"></span>
-        <span class="task-name">${esc(t.title)}</span>
+        <span class="task-name" data-rename="${t.id}">${esc(t.title)}</span>
         <button type="button" class="task-x" data-close="${t.id}" title="关闭任务">×</button>
       </div>`;
     })
@@ -746,8 +826,14 @@ function renderTaskTabs() {
 
   host.querySelectorAll('.task-tab').forEach((el) => {
     el.onclick = (e) => {
-      if (e.target.closest('.task-x')) return;
+      if (e.target.closest('.task-x') || e.target.closest('input.task-rename')) return;
       switchTask(el.dataset.id);
+    };
+    el.ondblclick = (e) => {
+      if (e.target.closest('.task-x')) return;
+      e.preventDefault();
+      e.stopPropagation();
+      beginTaskRename(el.dataset.id);
     };
   });
   host.querySelectorAll('.task-x').forEach((btn) => {
@@ -757,6 +843,53 @@ function renderTaskTabs() {
     };
   });
   refreshTaskQueueHint();
+}
+
+/** Double-click task tab → inline rename */
+function beginTaskRename(taskId) {
+  const task = window.TaskStore.get(taskId);
+  const host = $('#taskTabs');
+  if (!task || !host) return;
+  const tab = host.querySelector(`.task-tab[data-id="${cssEscape(taskId)}"]`);
+  const nameEl = tab?.querySelector('.task-name');
+  if (!tab || !nameEl || nameEl.querySelector('input')) return;
+  switchTask(taskId);
+  const input = document.createElement('input');
+  input.type = 'text';
+  input.className = 'task-rename';
+  input.value = task.title || '';
+  input.setAttribute('aria-label', '重命名任务');
+  nameEl.textContent = '';
+  nameEl.appendChild(input);
+  input.focus();
+  input.select();
+  let done = false;
+  const commit = (ok) => {
+    if (done) return;
+    done = true;
+    if (ok) {
+      const next = input.value.trim().slice(0, 48);
+      if (next && next !== task.title) {
+        task.title = next;
+        schedulePersist(true);
+        toast(localeIsEn() ? `Renamed: ${next}` : `已重命名：${next}`, 'ok');
+      }
+    }
+    renderTaskTabs();
+  };
+  input.onkeydown = (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      commit(true);
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      commit(false);
+    }
+    e.stopPropagation();
+  };
+  input.onblur = () => commit(true);
+  input.onclick = (e) => e.stopPropagation();
+  input.ondblclick = (e) => e.stopPropagation();
 }
 
 function refreshTaskQueueHint() {
@@ -957,6 +1090,8 @@ function bindUi() {
   $('#btnNewChat').onclick = () => addTask();
   $('#btnShareSession')?.addEventListener('click', () => openSessionShareCard());
   $('#btnAddTask')?.addEventListener('click', () => addTask());
+  bindLiveFilterUi();
+  bindModelChipUi();
   $('#btnSave').onclick = saveCurrentFile;
   $('#btnClearTerm').onclick = () => {
     $('#termOut').innerHTML = '';
@@ -1647,6 +1782,105 @@ function bindWorkModeUi() {
 window.setWorkMode = setWorkMode;
 window.cycleWorkMode = cycleWorkMode;
 window.applySendLabel = applySendLabel;
+window.setLiveFilter = setLiveFilter;
+window.beginTaskRename = beginTaskRename;
+
+// ── Composer model chip ─────────────────────────────────
+function modelLabel(id) {
+  const p = MODEL_PRESETS.find((x) => x.id === (id || ''));
+  if (p) return p.label;
+  return id || 'CLI 默认';
+}
+
+function applyModelChip() {
+  const chip = document.getElementById('modelChip');
+  if (!chip) return;
+  const id = state.model || '';
+  chip.textContent = id ? id : 'model · default';
+  chip.title = (localeIsEn() ? 'Model: ' : '模型：') + modelLabel(id) + ' · click to switch';
+  chip.dataset.model = id;
+}
+
+async function setModelPreset(id, opts = {}) {
+  state.model = id == null ? '' : String(id).trim();
+  saveJson(MODEL_KEY, state.model);
+  applyModelChip();
+  try {
+    await window.grok.setConfig({ model: state.model });
+    const cfgInput = document.getElementById('cfgModel');
+    if (cfgInput) cfgInput.value = state.model;
+  } catch {
+    /* ignore */
+  }
+  if (opts.toast !== false) {
+    toast(
+      localeIsEn()
+        ? `Model: ${modelLabel(state.model)}`
+        : `模型：${modelLabel(state.model)}`,
+      'ok'
+    );
+  }
+  document.getElementById('modelMenu')?.classList.add('hidden');
+}
+
+function bindModelChipUi() {
+  const host = document.querySelector('.composer-hints');
+  if (!host) return;
+  let chip = document.getElementById('modelChip');
+  if (!chip) {
+    chip = document.createElement('button');
+    chip.type = 'button';
+    chip.id = 'modelChip';
+    chip.className = 'hint-chip model-chip';
+    host.insertBefore(chip, host.firstChild);
+  }
+  let menu = document.getElementById('modelMenu');
+  if (!menu) {
+    menu = document.createElement('div');
+    menu.id = 'modelMenu';
+    menu.className = 'model-menu hidden';
+    menu.setAttribute('role', 'menu');
+    document.body.appendChild(menu);
+  }
+  const openMenu = () => {
+    menu.innerHTML = MODEL_PRESETS.map(
+      (p) =>
+        `<button type="button" class="model-menu-item${(state.model || '') === p.id ? ' active' : ''}" data-id="${esc(p.id)}" role="menuitem">${esc(p.label)}</button>`
+    ).join('');
+    // custom
+    menu.innerHTML += `<button type="button" class="model-menu-item" data-act="custom" role="menuitem">${localeIsEn() ? 'Custom…' : '自定义…'}</button>`;
+    const rect = chip.getBoundingClientRect();
+    menu.style.left = `${Math.max(8, rect.left)}px`;
+    menu.style.bottom = `${window.innerHeight - rect.top + 6}px`;
+    menu.classList.remove('hidden');
+    menu.querySelectorAll('.model-menu-item').forEach((btn) => {
+      btn.onclick = async () => {
+        if (btn.dataset.act === 'custom') {
+          const cur = state.model || '';
+          const v = prompt(localeIsEn() ? 'Model id (empty = CLI default)' : '模型 ID（空=CLI 默认）', cur);
+          if (v === null) return;
+          await setModelPreset(v.trim());
+          return;
+        }
+        await setModelPreset(btn.dataset.id || '');
+      };
+    });
+  };
+  chip.onclick = (e) => {
+    e.stopPropagation();
+    if (menu.classList.contains('hidden')) openMenu();
+    else menu.classList.add('hidden');
+  };
+  document.addEventListener('click', (e) => {
+    if (!menu.contains(e.target) && e.target !== chip) menu.classList.add('hidden');
+  });
+  // hydrate from config later in init; local fallback
+  const local = loadJson(MODEL_KEY, null);
+  if (typeof local === 'string') state.model = local;
+  applyModelChip();
+}
+window.setModelPreset = setModelPreset;
+window.getComposerModel = () => state.model || '';
 
 // ── Live / Diff mission control ─────────────────────────
 function pushLiveEvent({ kind, title, sub, running = false, projectId = null }) {
@@ -1664,39 +1898,8 @@ function pushLiveEvent({ kind, title, sub, running = false, projectId = null }) 
     return;
   }
 
-  const empty = $('#liveEmpty');
-  if (empty) empty.remove();
-
-  const box = $('#liveTimeline');
-  if (!box) return;
-
-  const ev = { kind, title, sub, ts: Date.now(), running };
-  // 长列表：虚拟滚动；短列表：直接 append
-  if (window.GrokLiveVirtual && (proj.activity?.length || 0) > 40) {
-    window.GrokLiveVirtual.renderVirtualTimeline(box, proj.activity, { esc, forceBottom: true });
-  } else {
-    box.querySelectorAll('.live-event.running').forEach((el) => el.classList.remove('running'));
-    const now = new Date(ev.ts);
-    const t = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(
-      now.getSeconds()
-    ).padStart(2, '0')}`;
-    const row = document.createElement('div');
-    row.className = `live-event ${kind}${running ? ' running' : ''}`;
-    row.innerHTML = `
-      <div class="t">${t}</div>
-      <div class="dot"></div>
-      <div class="card">
-        <div class="kind">${esc(kind)}</div>
-        <div class="title">${esc(title)}</div>
-        ${sub ? `<div class="sub">${esc(sub)}</div>` : ''}
-      </div>`;
-    box.appendChild(row);
-    while (box.querySelectorAll('.live-event').length > 120) {
-      const first = box.querySelector('.live-event');
-      if (first) first.remove();
-    }
-    box.scrollTop = box.scrollHeight;
-  }
+  // Always rebuild through filter so chips stay consistent
+  rebuildLiveTimeline(proj);
   updateLiveStats();
 }
 
@@ -1994,7 +2197,41 @@ function renderDiffPane() {
     banner = `<div class="diff-banner warn">此文件为 Agent 新建 · 还原 = 从磁盘删除</div>`;
   }
 
-  content.innerHTML = banner + window.DiffUtil.toUnifiedHtml(cur.ops, { context: 3 });
+  // Reset hunk collapse when switching files
+  if (content.dataset.diffPath !== (P() && P().selectedDiffPath)) {
+    state.diffHunkCollapsed = new Set();
+    content.dataset.diffPath = (P() && P().selectedDiffPath) || '';
+  }
+
+  content.innerHTML =
+    banner +
+    `<div class="diff-hunk-toolbar">
+      <button type="button" class="link-btn" data-diff-act="expand">全部展开</button>
+      <button type="button" class="link-btn" data-diff-act="collapse">全部折叠</button>
+      <span class="muted" style="font-size:11px">点击 hunk 头折叠/展开</span>
+    </div>` +
+    window.DiffUtil.toUnifiedHtml(cur.ops, {
+      context: 3,
+      collapsed: state.diffHunkCollapsed,
+    });
+
+  content.querySelectorAll('.diff-hunk-head').forEach((btn) => {
+    btn.onclick = () => {
+      const hi = Number(btn.dataset.hunk);
+      if (state.diffHunkCollapsed.has(hi)) state.diffHunkCollapsed.delete(hi);
+      else state.diffHunkCollapsed.add(hi);
+      renderDiffPane();
+    };
+  });
+  content.querySelector('[data-diff-act="expand"]')?.addEventListener('click', () => {
+    state.diffHunkCollapsed = new Set();
+    renderDiffPane();
+  });
+  content.querySelector('[data-diff-act="collapse"]')?.addEventListener('click', () => {
+    const heads = content.querySelectorAll('.diff-hunk-head');
+    state.diffHunkCollapsed = new Set([...heads].map((h) => Number(h.dataset.hunk)));
+    renderDiffPane();
+  });
 }
 
 function setDiffActionsEnabled(on) {
@@ -3459,6 +3696,10 @@ async function refreshConfigUi() {
   $('#cfgYolo').checked = cfg.alwaysApprove !== false;
   $('#cfgRules').value = cfg.rules || '';
 
+  state.model = cfg.model || '';
+  saveJson(MODEL_KEY, state.model);
+  applyModelChip();
+
   window.GrokSettingsExtra?.fillFromConfig?.(cfg);
 
   if (cfg.workspace) {
@@ -3479,6 +3720,9 @@ async function saveSettings() {
   const key = $('#cfgApiKey').value.trim();
   if (key) partial.apiKey = key;
   await window.grok.setConfig(partial);
+  state.model = partial.model || '';
+  saveJson(MODEL_KEY, state.model);
+  applyModelChip();
   closeSettings();
   await refreshCliStatus();
   toast(t('toast.saved', '设置已保存'), 'ok');

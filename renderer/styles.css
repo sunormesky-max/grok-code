@@ -1857,6 +1857,162 @@ button.pill:hover {
 .task-tab.running .task-dot {
   background: var(--mars);
   box-shadow: 0 0 8px var(--mars-glow);
+}
+.task-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+.task-rename {
+  width: 100px;
+  max-width: 120px;
+  border: 1px solid rgba(125, 211, 252, 0.45);
+  background: rgba(0, 0, 0, 0.55);
+  color: var(--text, #f4f4f5);
+  font: inherit;
+  font-size: 11.5px;
+  padding: 1px 4px;
+  border-radius: 4px;
+  outline: none;
+}
+
+/* Live filter chips */
+.live-filter-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 4px 10px 6px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  background: rgba(0, 0, 0, 0.2);
+}
+.live-filter-chip {
+  appearance: none;
+  border: 1px solid rgba(125, 211, 252, 0.15);
+  background: transparent;
+  color: var(--muted, #a1a1aa);
+  font-size: 10.5px;
+  font-family: var(--mono, monospace);
+  padding: 2px 8px;
+  border-radius: 999px;
+  cursor: pointer;
+  letter-spacing: 0.02em;
+}
+.live-filter-chip:hover {
+  border-color: rgba(125, 211, 252, 0.35);
+  color: #e4e4e7;
+}
+.live-filter-chip.active {
+  border-color: rgba(56, 189, 248, 0.5);
+  background: rgba(56, 189, 248, 0.12);
+  color: #7dd3fc;
+}
+
+/* Diff foldable hunks */
+.diff-hunk-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 10px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(0, 0, 0, 0.25);
+  position: sticky;
+  top: 0;
+  z-index: 2;
+}
+.diff-hunk {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+}
+.diff-hunk-head {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  text-align: left;
+  border: none;
+  background: rgba(125, 211, 252, 0.04);
+  color: var(--muted, #a1a1aa);
+  font-family: var(--mono, monospace);
+  font-size: 11px;
+  padding: 6px 10px;
+  cursor: pointer;
+}
+.diff-hunk-head:hover {
+  background: rgba(125, 211, 252, 0.1);
+  color: #e4e4e7;
+}
+.diff-hunk-head .dh-chev {
+  color: #7dd3fc;
+  width: 12px;
+}
+.diff-hunk-head .dh-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.diff-hunk-head .dh-meta .a {
+  color: var(--ok, #34d399);
+}
+.diff-hunk-head .dh-meta .d {
+  color: var(--danger, #f87171);
+}
+.diff-hunk.collapsed .diff-hunk-head {
+  background: rgba(0, 0, 0, 0.2);
+}
+.diff-hunk-body[hidden] {
+  display: none;
+}
+
+/* Model chip menu */
+.model-chip {
+  border-color: rgba(167, 139, 250, 0.35) !important;
+  color: #c4b5fd !important;
+  cursor: pointer;
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.model-chip:hover {
+  border-color: rgba(167, 139, 250, 0.6) !important;
+  background: rgba(167, 139, 250, 0.1);
+}
+.model-menu {
+  position: fixed;
+  z-index: 13000;
+  min-width: 160px;
+  padding: 4px;
+  border-radius: 10px;
+  border: 1px solid rgba(167, 139, 250, 0.35);
+  background: rgba(10, 12, 20, 0.96);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.55);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.model-menu.hidden {
+  display: none;
+}
+.model-menu-item {
+  appearance: none;
+  border: none;
+  background: transparent;
+  color: #e4e4e7;
+  text-align: left;
+  font-size: 12px;
+  font-family: var(--mono, monospace);
+  padding: 7px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.model-menu-item:hover {
+  background: rgba(167, 139, 250, 0.15);
+}
+.model-menu-item.active {
+  color: #c4b5fd;
+  background: rgba(167, 139, 250, 0.12);
+}
   animation: liveBlink 1s ease infinite;
 }
 .task-tab .task-dot {
@@ -3278,7 +3434,7 @@ body.booted #app {
   }
 }
 
-/* ©¤©¤ Onboarding / Doctor / Retry / Update (v1.1) ©¤©¤ */
+/* ï¿½ï¿½ï¿½ï¿½ Onboarding / Doctor / Retry / Update (v1.1) ï¿½ï¿½ï¿½ï¿½ */
 .onboarding-card { max-width: 560px; width: min(560px, 94vw); }
 .onb-dots {
   display: flex; gap: 8px; justify-content: center;

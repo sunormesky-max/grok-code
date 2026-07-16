@@ -20,13 +20,14 @@ Living plan for the GrokCode open-source ecosystem. Order may change based on co
 - [x] Plan execute chip · per-project split width · multi-lang outline · skill match chips
 - [x] Craft flight deck (one-shot Craft, mission bar, mode HUD)
 - [x] Skill preview modal · outline sticky · plan auto-detect · session share card
+- [x] Task rename · Live filters · Diff hunk fold · Composer model chip
 
 ## Next
 
-- [ ] Diff hunk fold / stage-selected UX polish
-- [ ] Task rename from tab double-click
-- [ ] Live timeline filter (tools / writes / errors only)
-- [ ] Optional local model picker shortcuts in composer
+- [ ] Diff “accept file” reviewed mark + keyboard next/prev file
+- [ ] Multi-select dismiss/restore in Diff list
+- [ ] Composer slash-command palette (skills / modes / model)
+- [ ] Session search within current task messages
 
 ## Later
 

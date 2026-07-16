@@ -84,7 +84,11 @@
     };
   }
 
-  function toUnifiedHtml(ops, { context = 3, maxRows = 800 } = {}) {
+  /**
+   * Build foldable unified hunks from line ops.
+   * @returns {{ html: string, hunkCount: number }}
+   */
+  function toUnifiedHtml(ops, { context = 3, maxRows = 800, collapsed = null } = {}) {
     // 只展示有变更的上下文窗口
     const show = new Array(ops.length).fill(false);
     for (let i = 0; i < ops.length; i++) {
@@ -94,9 +98,10 @@
         }
       }
     }
-    let html = '';
-    let rows = 0;
-    let gap = false;
+
+    // Pre-compute line numbers for each op index
+    const lineAAt = new Array(ops.length);
+    const lineBAt = new Array(ops.length);
     let lineA = 0;
     let lineB = 0;
     for (let i = 0; i < ops.length; i++) {
@@ -104,31 +109,93 @@
       if (o.type === 'same') {
         lineA++;
         lineB++;
-      } else if (o.type === 'del') lineA++;
-      else if (o.type === 'add') lineB++;
+        lineAAt[i] = lineA;
+        lineBAt[i] = lineB;
+      } else if (o.type === 'del') {
+        lineA++;
+        lineAAt[i] = lineA;
+        lineBAt[i] = lineB;
+      } else {
+        lineB++;
+        lineAAt[i] = lineA;
+        lineBAt[i] = lineB;
+      }
+    }
 
+    // Group contiguous shown ops into hunks
+    const hunks = [];
+    let cur = null;
+    for (let i = 0; i < ops.length; i++) {
       if (!show[i]) {
-        gap = true;
+        cur = null;
         continue;
       }
-      if (gap) {
-        html += `<div class="diff-row meta">···</div>`;
-        gap = false;
+      if (!cur) {
+        cur = { start: i, indices: [] };
+        hunks.push(cur);
       }
-      if (rows >= maxRows) {
+      cur.indices.push(i);
+    }
+
+    const collapsedSet =
+      collapsed instanceof Set
+        ? collapsed
+        : Array.isArray(collapsed)
+          ? new Set(collapsed)
+          : new Set();
+
+    let html = '';
+    let rows = 0;
+    let truncated = false;
+
+    for (let hi = 0; hi < hunks.length; hi++) {
+      const h = hunks[hi];
+      let adds = 0;
+      let dels = 0;
+      let firstA = null;
+      let firstB = null;
+      for (const i of h.indices) {
+        const o = ops[i];
+        if (o.type === 'add') adds++;
+        if (o.type === 'del') dels++;
+        if (firstA == null && (o.type === 'same' || o.type === 'del')) firstA = lineAAt[i];
+        if (firstB == null && (o.type === 'same' || o.type === 'add')) firstB = lineBAt[i];
+      }
+      const isCollapsed = collapsedSet.has(hi);
+      const headLabel = `@@ -${firstA || 0} +${firstB || 0} @@  +${adds} −${dels}`;
+      html += `<div class="diff-hunk${isCollapsed ? ' collapsed' : ''}" data-hunk="${hi}">
+        <button type="button" class="diff-hunk-head" data-hunk="${hi}" aria-expanded="${isCollapsed ? 'false' : 'true'}">
+          <span class="dh-chev">${isCollapsed ? '▸' : '▾'}</span>
+          <span class="dh-label">${escapeHtml(headLabel)}</span>
+          <span class="dh-meta"><span class="a">+${adds}</span> <span class="d">−${dels}</span></span>
+        </button>
+        <div class="diff-hunk-body"${isCollapsed ? ' hidden' : ''}>`;
+
+      if (!isCollapsed) {
+        for (const i of h.indices) {
+          if (rows >= maxRows) {
+            truncated = true;
+            break;
+          }
+          const o = ops[i];
+          const text = escapeHtml(o.text);
+          if (o.type === 'same') {
+            html += `<div class="diff-row same"><span class="ln">${lineAAt[i]}</span><span class="sign"> </span><span class="tx">${text}</span></div>`;
+          } else if (o.type === 'del') {
+            html += `<div class="diff-row del"><span class="ln">${lineAAt[i]}</span><span class="sign">-</span><span class="tx">${text}</span></div>`;
+          } else {
+            html += `<div class="diff-row add"><span class="ln">${lineBAt[i]}</span><span class="sign">+</span><span class="tx">${text}</span></div>`;
+          }
+          rows++;
+        }
+      }
+      html += `</div></div>`;
+      if (truncated) {
         html += `<div class="diff-row meta">… 其余变更已省略</div>`;
         break;
       }
-      const text = escapeHtml(o.text);
-      if (o.type === 'same') {
-        html += `<div class="diff-row same"><span class="ln">${lineA}</span><span class="sign"> </span><span class="tx">${text}</span></div>`;
-      } else if (o.type === 'del') {
-        html += `<div class="diff-row del"><span class="ln">${lineA}</span><span class="sign">-</span><span class="tx">${text}</span></div>`;
-      } else {
-        html += `<div class="diff-row add"><span class="ln">${lineB}</span><span class="sign">+</span><span class="tx">${text}</span></div>`;
-      }
-      rows++;
     }
+
     if (!html) {
       html = `<div class="diff-row meta">无行级差异（可能只是空白/换行）</div>`;
     }

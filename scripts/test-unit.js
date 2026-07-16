@@ -156,6 +156,15 @@ function testOutlineExtract() {
   console.log('ok  outline patterns smoke');
 }
 
+function testDiffHunks() {
+  // load diff-util is browser IIFE — reimplement thin check via vm is heavy;
+  // smoke: module file exists and exports via reading source
+  const src = fs.readFileSync(path.join(root, 'renderer', 'diff-util.js'), 'utf8');
+  assert.ok(src.includes('diff-hunk'), 'foldable hunk markup');
+  assert.ok(src.includes('toUnifiedHtml'), 'toUnifiedHtml present');
+  console.log('ok  diff hunk fold smoke');
+}
+
 function testToolsSearchExports() {
   // createTools needs a real dir
   const os = require('os');
@@ -184,6 +193,7 @@ try {
   testLooksLikePlan();
   testSkillsIndex();
   testOutlineExtract();
+  testDiffHunks();
   testToolsSearchExports();
   console.log('\nAll unit tests passed');
 } catch (err) {

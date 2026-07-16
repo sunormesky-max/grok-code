@@ -326,6 +326,43 @@
         keywords: 'export session share markdown 导出 会话 分享',
         group: 'actions',
         run: run(() => global.openSessionShareCard?.()),
+      },
+      {
+        id: 'task.rename',
+        title: t('cmd.task.rename', '重命名当前任务'),
+        keywords: 'rename task 重命名 任务',
+        group: 'actions',
+        run: run(() => {
+          const id = global.TaskStore?.activeId;
+          if (id) global.beginTaskRename?.(id);
+        }),
+      },
+      {
+        id: 'live.filter.write',
+        title: t('cmd.live.filter.write', 'Live 过滤 · 写入'),
+        keywords: 'live filter write 写入',
+        group: 'actions',
+        run: run(() => global.setLiveFilter?.('write')),
+      },
+      {
+        id: 'live.filter.all',
+        title: t('cmd.live.filter.all', 'Live 过滤 · 全部'),
+        keywords: 'live filter all 全部',
+        group: 'actions',
+        run: run(() => global.setLiveFilter?.('all')),
+      },
+      {
+        id: 'model.cycle',
+        title: t('cmd.model.cycle', '切换模型预设'),
+        keywords: 'model cycle 模型 grok',
+        group: 'actions',
+        run: run(async () => {
+          const presets = ['', 'grok-build', 'grok-4.5', 'grok-4'];
+          const cur = global.getComposerModel?.() ?? '';
+          const i = presets.indexOf(cur);
+          const next = presets[(i + 1) % presets.length];
+          await global.setModelPreset?.(next);
+        }),
       }
     );
   }
