@@ -20,6 +20,20 @@ const MODE_KEY = 'grokcode-work-mode';
 const LIVE_FILTER_KEY = 'grokcode-live-filter';
 const MODEL_KEY = 'grokcode-model-chip';
 
+/** 尽早打平台 class，避免标题栏布局闪一下 */
+(function applyPlatformClass() {
+  try {
+    const p = window.grok?.platform || '';
+    const isWin = p === 'win32' || /Win/i.test(navigator.platform || '');
+    const isMac = p === 'darwin' || /Mac/i.test(navigator.platform || '');
+    document.body.classList.toggle('plat-win', isWin);
+    document.body.classList.toggle('plat-mac', isMac);
+    document.body.classList.toggle('plat-linux', !isWin && !isMac);
+  } catch {
+    /* ignore */
+  }
+})();
+
 /** Common model presets — empty string = CLI default */
 const MODEL_PRESETS = [
   { id: '', label: 'CLI 默认' },
@@ -124,6 +138,15 @@ function contentCacheMap() {
 
 // ── Init ────────────────────────────────────────────────
 async function init() {
+  // 平台 class：Windows 用系统 titleBarOverlay，隐藏自定义 ─□✕
+  const plat = window.grok?.platform || (navigator.platform || '').toLowerCase();
+  const isWin = plat === 'win32' || /win/i.test(String(plat));
+  const isMac = plat === 'darwin' || /mac/i.test(String(plat));
+  document.body.classList.toggle('plat-win', isWin);
+  document.body.classList.toggle('plat-mac', isMac);
+  document.body.classList.toggle('plat-linux', !isWin && !isMac);
+  document.body.dataset.platform = isWin ? 'win32' : isMac ? 'darwin' : 'linux';
+
   restoreLayout();
   bindUi();
   bindResizers();
@@ -1051,78 +1074,58 @@ function syncComposerToTask(t) {
   applySendLabel();
 }
 
-// ── 无边框窗口控制 ──────────────────────────────────────
+// ── 窗口控制 ────────────────────────────────────────────
+// Windows：系统 titleBarOverlay 负责 ─□✕（不绑自定义按钮）
+// 其它平台：绑定 #winControls 自定义按钮
 function bindWindowControls() {
-  const forceNoDrag = (el) => {
-    if (!el) return;
-    try {
-      el.style.setProperty('-webkit-app-region', 'no-drag');
-      el.style.setProperty('app-region', 'no-drag');
-      el.style.pointerEvents = 'auto';
-    } catch {
-      /* ignore */
-    }
-  };
-
-  const host = document.getElementById('winControls');
-  forceNoDrag(host);
-  forceNoDrag(document.querySelector('.top-actions'));
-  document.querySelectorAll('#winControls, #winControls *, .top-actions, .top-actions button').forEach(forceNoDrag);
+  const isWin = document.body.classList.contains('plat-win');
 
   const runWin = async (action) => {
     const api = window.grok;
     if (!api) {
-      console.error('[win] window.grok missing');
       toast('窗口 API 不可用', 'err');
       return;
     }
     try {
-      if (action === 'min') {
-        await api.windowMinimize();
-      } else if (action === 'max') {
+      if (action === 'min') await api.windowMinimize();
+      else if (action === 'max') {
         const max = await api.windowMaximize();
         syncMaxBtn(max);
-      } else if (action === 'close') {
-        await api.windowClose();
-      }
+      } else if (action === 'close') await api.windowClose();
     } catch (err) {
       console.error('[win]', action, err);
       toast((err && err.message) || '窗口操作失败', 'err');
     }
   };
 
-  const bindWinBtn = (id, action) => {
-    const el = document.getElementById(id);
-    if (!el) {
-      console.error('[win] missing button', id);
-      return;
-    }
-    forceNoDrag(el);
-    let last = 0;
-    const fire = (e) => {
-      if (e.button != null && e.button !== 0) return;
-      e.preventDefault();
-      e.stopPropagation();
-      const now = Date.now();
-      if (now - last < 350) return; // 防 pointerdown+click 双发
-      last = now;
-      runWin(action);
+  if (!isWin) {
+    const forceNoDrag = (el) => {
+      if (!el) return;
+      el.style.setProperty('-webkit-app-region', 'no-drag');
+      el.style.setProperty('app-region', 'no-drag');
     };
-    // pointerdown 在 frameless Windows 上比 click 更稳；click 作兜底
-    el.addEventListener('pointerdown', fire, true);
-    el.addEventListener('click', fire, true);
-  };
+    document.querySelectorAll('#winControls, #winControls .win-btn, .top-actions').forEach(forceNoDrag);
 
-  bindWinBtn('btnWinMin', 'min');
-  bindWinBtn('btnWinMax', 'max');
-  bindWinBtn('btnWinClose', 'close');
+    const bindWinBtn = (id, action) => {
+      const el = document.getElementById(id);
+      if (!el) return;
+      forceNoDrag(el);
+      el.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        runWin(action);
+      });
+    };
+    bindWinBtn('btnWinMin', 'min');
+    bindWinBtn('btnWinMax', 'max');
+    bindWinBtn('btnWinClose', 'close');
+  }
 
-  // 双击可拖区域最大化
-  document.querySelectorAll('.titlebar-drag, #titlebar').forEach((zone) => {
-    zone.addEventListener('dblclick', async (e) => {
-      if (e.target.closest('button, input, a, .pill, .win-controls, .top-actions, #winControls')) return;
-      if (!e.target.closest('.titlebar-drag') && e.currentTarget.id === 'titlebar') return;
-      await runWin('max');
+  // 双击拖拽区最大化（系统按钮区域除外）
+  document.querySelectorAll('.titlebar-drag').forEach((zone) => {
+    zone.addEventListener('dblclick', (e) => {
+      if (e.target.closest('button, input, a, .pill, .win-controls, .top-actions')) return;
+      runWin('max');
     });
   });
 

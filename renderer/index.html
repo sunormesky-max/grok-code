@@ -73,7 +73,7 @@
       <div class="holo-beam"></div>
     </div>
 
-    <!-- 自定义无边框标题栏：仅 titlebar-drag 可拖，交互控件绝不放在 drag 祖先下 -->
+    <!-- 自定义标题栏：拖拽仅 titlebar-drag；Windows 窗口按钮用系统 titleBarOverlay -->
     <header class="topbar titlebar" id="titlebar">
       <div class="brand titlebar-drag">
         <div class="logo" aria-hidden="true" title="Grok">
@@ -117,7 +117,6 @@
         </div>
       </div>
 
-      <!-- 中间空白区负责拖窗，避免整条 topbar 设 drag 导致 Windows 吞按钮点击 -->
       <div class="titlebar-spacer titlebar-drag" aria-hidden="true"></div>
 
       <div class="top-actions">
@@ -126,6 +125,12 @@
         </button>
         <button type="button" class="btn ghost" id="btnOpenWindow" title="在新窗口打开项目（并排开发）">⧉ <span data-i18n="btn.newWindow">新窗口</span></button>
         <button type="button" class="btn ghost icon-only" id="btnSettings" data-i18n-title="btn.settings" data-i18n-aria="btn.settings" title="设置 (Ctrl+,)">⚙</button>
+        <!-- Linux / 无 titleBarOverlay 时显示；Windows 由系统绘制，JS 会隐藏 -->
+        <div class="win-controls" id="winControls" role="group" aria-label="窗口控制">
+          <button type="button" class="win-btn" id="btnWinMin" title="最小化" aria-label="最小化">─</button>
+          <button type="button" class="win-btn" id="btnWinMax" title="最大化" aria-label="最大化">□</button>
+          <button type="button" class="win-btn win-close" id="btnWinClose" title="关闭" aria-label="关闭">✕</button>
+        </div>
       </div>
     </header>
 
@@ -387,13 +392,6 @@
       <span id="sbAgent">待命</span>
       <span class="ml-auto" id="sbHint">Ctrl+1 Craft · ⌃⇧↵ 单次Craft · Ctrl+2 Plan · Ctrl+3 Ask · Ctrl+K</span>
     </footer>
-  </div>
-
-  <!-- 窗口按钮：在 #app 外，避开 drag / filter / ::after 层叠问题（Electron Windows） -->
-  <div class="win-controls" id="winControls" role="group" aria-label="窗口控制">
-    <button type="button" class="win-btn" id="btnWinMin" title="最小化" aria-label="最小化">─</button>
-    <button type="button" class="win-btn" id="btnWinMax" title="最大化" aria-label="最大化">□</button>
-    <button type="button" class="win-btn win-close" id="btnWinClose" title="关闭" aria-label="关闭">✕</button>
   </div>
 
   <div id="toasts" class="toasts" aria-live="polite"></div>

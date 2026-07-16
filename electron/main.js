@@ -266,17 +266,18 @@ function requireProject(projectId) {
 
 function createWindow(opts = {}) {
   const iconPath = path.join(__dirname, '..', 'build', 'icon.png');
-  const win = new BrowserWindow({
+  const isMac = process.platform === 'darwin';
+  const isWin = process.platform === 'win32';
+  // Windows：用系统 titleBarOverlay 绘制 ─□✕（自定义按钮在部分 Electron/Windows 组合下点不动）
+  // macOS：hiddenInset 交通灯；Linux：frameless + 自定义按钮
+  const winOpts = {
     width: 1440,
     height: 920,
     minWidth: 1100,
     minHeight: 700,
     backgroundColor: '#000000',
     title: 'GrokCode',
-    frame: false,
     autoHideMenuBar: true,
-    // Windows：不要用 hidden titleBarStyle 叠系统标题栏，纯自定义 + 独立按钮层
-    titleBarStyle: process.platform === 'darwin' ? 'hidden' : undefined,
     icon: fs.existsSync(iconPath) ? iconPath : undefined,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
@@ -285,7 +286,23 @@ function createWindow(opts = {}) {
       sandbox: false,
     },
     show: false,
-  });
+  };
+  if (isWin) {
+    winOpts.frame = false;
+    winOpts.titleBarStyle = 'hidden';
+    winOpts.titleBarOverlay = {
+      color: '#050506',
+      symbolColor: '#d4d4d8',
+      height: 52,
+    };
+  } else if (isMac) {
+    winOpts.frame = false;
+    winOpts.titleBarStyle = 'hiddenInset';
+    winOpts.trafficLightPosition = { x: 14, y: 16 };
+  } else {
+    winOpts.frame = false;
+  }
+  const win = new BrowserWindow(winOpts);
 
   if (!mainWindow) mainWindow = win;
 

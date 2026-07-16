@@ -386,8 +386,7 @@ body {
   display: flex;
   align-items: center;
   gap: 14px;
-  /* 右侧留给独立浮层窗口按钮 */
-  padding: 0 138px 0 14px;
+  padding: 0 10px 0 14px;
   height: var(--topbar-h);
   border-bottom: 1px solid var(--border);
   background:
@@ -397,9 +396,16 @@ body {
   z-index: 50;
   position: relative;
   flex-shrink: 0;
-  /* 关键：不要在 topbar 上设 drag。Windows Electron 会吞掉子按钮点击。 */
+  /* 整条不要 drag；只在 .titlebar-drag 上拖（避免吞按钮） */
   -webkit-app-region: no-drag;
   app-region: no-drag;
+}
+/* Windows 系统 titleBarOverlay 占右上角，给工具按钮留空 */
+body.plat-win .topbar {
+  padding-right: 146px;
+}
+body.plat-mac .topbar {
+  padding-left: 78px; /* 交通灯 */
 }
 .topbar.titlebar {
   z-index: 50;
@@ -413,14 +419,13 @@ body {
   pointer-events: none;
   box-shadow: 0 0 12px rgba(125, 211, 252, 0.2);
 }
-/* 仅这些节点可拖窗 */
 .titlebar-drag {
   -webkit-app-region: drag;
   app-region: drag;
 }
 .titlebar-spacer {
   flex: 1 1 auto;
-  min-width: 24px;
+  min-width: 16px;
   align-self: stretch;
   -webkit-app-region: drag;
   app-region: drag;
@@ -429,32 +434,30 @@ body {
 .topbar .top-actions *,
 .topbar button,
 .topbar .pill,
-.topbar .pills {
+.topbar .pills,
+.topbar .win-controls,
+.topbar .win-btn {
   -webkit-app-region: no-drag !important;
   app-region: no-drag !important;
 }
 
-/* Windows 风格窗口按钮 — fixed 浮层，脱离 drag 祖先 */
+/* 自定义窗口按钮（Linux 等；Windows 用系统 overlay 并隐藏） */
 .win-controls {
-  position: fixed;
-  top: 0;
-  right: 0;
-  height: var(--topbar-h);
   display: flex;
   align-items: stretch;
-  z-index: 2147483000;
-  margin: 0;
-  padding: 0 2px 0 6px;
+  margin-left: 6px;
+  height: 36px;
   border-left: 1px solid var(--border-soft);
-  background: linear-gradient(180deg, rgba(0, 0, 0, 0.92), rgba(0, 0, 0, 0.72));
+  padding-left: 4px;
   -webkit-app-region: no-drag !important;
   app-region: no-drag !important;
-  pointer-events: auto !important;
+}
+body.plat-win .win-controls {
+  display: none !important;
 }
 .win-btn {
-  width: 46px;
-  height: 100%;
-  min-height: var(--topbar-h);
+  width: 42px;
+  height: 36px;
   border: 0;
   background: transparent;
   color: var(--muted);
@@ -465,11 +468,8 @@ body {
   transition: background 0.12s, color 0.12s;
   border-radius: 0;
   line-height: 1;
-  position: relative;
-  z-index: 2147483001;
   -webkit-app-region: no-drag !important;
   app-region: no-drag !important;
-  pointer-events: auto !important;
   user-select: none;
 }
 .win-btn:hover {
@@ -615,13 +615,13 @@ button.pill:hover {
 .top-actions {
   margin-left: 0;
   display: flex;
+  align-items: center;
   gap: 8px;
   flex-shrink: 0;
   position: relative;
   z-index: 55;
   -webkit-app-region: no-drag !important;
   app-region: no-drag !important;
-  pointer-events: auto;
 }
 
 /* ── Layout ──────────────────────────────────────────── */
@@ -4337,9 +4337,6 @@ body.booted #app {
 }
 .win-controls {
   border-left-color: rgba(125, 211, 252, 0.12);
-}
-.win-btn {
-  border-radius: 0;
 }
 
 /* Project bar �� flight strip */

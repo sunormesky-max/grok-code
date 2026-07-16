@@ -13,7 +13,13 @@ body.density-compact {
 
 body.density-compact .topbar {
   padding-left: 10px;
-  padding-right: 130px;
+  padding-right: 10px;
+}
+body.density-compact.plat-win .topbar {
+  padding-right: 140px;
+}
+body.density-compact.plat-mac .topbar {
+  padding-left: 72px;
 }
 body.density-compact .brand-text .name {
   font-size: 14px;

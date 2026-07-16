@@ -11,6 +11,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 - See [ROADMAP.md](ROADMAP.md)
 
+## [1.4.13] — 2026-07-16
+
+### Window controls + titlebar cleanup
+
+- **Windows**: use native `titleBarOverlay` for min/max/close (system-drawn, always works)
+- Hide custom ─□✕ on Windows; keep them for Linux
+- Restore clean titlebar layout (no fixed floating button layer / no broken padding)
+
 ## [1.4.12] — 2026-07-16
 
 ### Fix window controls (Windows)
