@@ -35,12 +35,12 @@ Living plan for the GrokCode open-source ecosystem. Order may change based on co
 - [x] Filmstrip hover paths · L loop · storyboard export (v1.4.5)
 - [x] HTML review pack · tip open-in-Code (v1.4.6)
 - [x] Mini diffs · PNG · review folder pack (v1.4.7)
+- [x] Storyboard notes · pack A|B compare · budget compress (v1.4.8)
 
 ## Next
 
-- [ ] Annotate storyboard turns with reviewer notes (local)
-- [ ] Compare two HTML packs side-by-side
-- [ ] Compress large packs (omit diffs when over budget)
+- [ ] Pack compare polish (side-by-side file/diff detail)
+- [ ] Compress tuning / progressive strip options
 - [ ] Optional true cloud template vault (accounted service)
 
 ## Later

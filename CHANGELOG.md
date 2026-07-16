@@ -11,6 +11,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 - See [ROADMAP.md](ROADMAP.md)
 
+## [1.4.8] — 2026-07-16
+
+### Storyboard notes · pack compare · budget compress
+
+- **Reviewer notes**: per-turn local notes under the filmstrip (project-scoped, exported into MD/HTML/JSON)
+- **Pack compare**: pick two storyboard JSON files (toolbar **A|B** or Ctrl+K) → side-by-side turn table
+- **Budget compress**: large packs strip cold-turn mini diffs first (soft ~900k char budget)
+
 ## [1.4.7] — 2026-07-16
 
 ### Review handoff pack

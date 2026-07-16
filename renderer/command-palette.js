@@ -508,6 +508,16 @@
         }),
       },
       {
+        id: 'diff.storyboard.compare',
+        title: t('cmd.diff.storyboard.compare', '对比两个 Storyboard JSON 包'),
+        keywords: 'diff storyboard compare packs ab review 对比 审阅包',
+        group: 'actions',
+        run: run(() => {
+          global.switchTab?.('diff');
+          global.compareStoryboardPacks?.();
+        }),
+      },
+      {
         id: 'diff.restoreTurn',
         title: t('cmd.diff.restoreTurn', 'Diff 整轮还原'),
         keywords: 'diff restore turn 整轮 还原 checkpoint',

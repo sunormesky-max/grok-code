@@ -2891,6 +2891,119 @@ button.pill:hover {
   background: rgba(56, 189, 248, 0.15);
   color: #7dd3fc;
 }
+
+/* Storyboard reviewer notes (local, per turn) */
+.diff-note-bar {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 8px 12px 10px;
+  border-bottom: 1px solid rgba(251, 191, 36, 0.18);
+  background: linear-gradient(90deg, rgba(251, 191, 36, 0.06), rgba(0, 0, 0, 0.18));
+}
+.diff-note-label {
+  flex: 0 0 auto;
+  font-family: var(--mono, ui-monospace, monospace);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #fbbf24;
+  padding-top: 6px;
+}
+.diff-note-bar textarea {
+  flex: 1 1 auto;
+  min-height: 44px;
+  max-height: 120px;
+  resize: vertical;
+  border: 1px solid rgba(251, 191, 36, 0.28);
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.4);
+  color: #fef3c7;
+  font-size: 12px;
+  line-height: 1.4;
+  padding: 6px 8px;
+  font-family: inherit;
+}
+.diff-note-bar textarea:focus {
+  outline: none;
+  border-color: rgba(251, 191, 36, 0.55);
+  box-shadow: 0 0 0 1px rgba(251, 191, 36, 0.2);
+}
+.diff-note-bar .btn {
+  flex: 0 0 auto;
+  margin-top: 2px;
+}
+.diff-film-card.has-note {
+  border-color: rgba(251, 191, 36, 0.4);
+}
+.diff-film-card.has-note .dfc-meta {
+  color: #fbbf24;
+}
+
+/* Storyboard A|B compare modal */
+.storyboard-compare-card {
+  width: min(920px, 96vw);
+  max-height: min(88vh, 820px);
+}
+.sc-meta {
+  padding: 0 16px 8px;
+  font-family: var(--mono, ui-monospace, monospace);
+  font-size: 11px;
+  color: var(--muted, #a1a1aa);
+}
+.sc-table-wrap {
+  flex: 1;
+  overflow: auto;
+  margin: 0 16px;
+  border: 1px solid rgba(125, 211, 252, 0.14);
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.35);
+  max-height: 52vh;
+}
+.sc-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 11.5px;
+}
+.sc-table th,
+.sc-table td {
+  padding: 7px 10px;
+  text-align: left;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  vertical-align: top;
+}
+.sc-table th {
+  position: sticky;
+  top: 0;
+  background: rgba(12, 16, 26, 0.96);
+  color: #7dd3fc;
+  font-family: var(--mono, ui-monospace, monospace);
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  z-index: 1;
+}
+.sc-table tr.sc-same td {
+  color: var(--muted, #a1a1aa);
+}
+.sc-table tr.sc-diff td {
+  background: rgba(249, 115, 22, 0.08);
+}
+.sc-table tr.sc-only-a td {
+  background: rgba(56, 189, 248, 0.06);
+}
+.sc-table tr.sc-only-b td {
+  background: rgba(52, 211, 153, 0.06);
+}
+.sc-table .sc-notes {
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #fde68a;
+  font-size: 11px;
+}
+
 .diff-file.dim {
   opacity: 0.35;
 }

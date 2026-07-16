@@ -4496,13 +4496,14 @@ function filmstripHtml(turns) {
           .join(', ');
         const time = t.ts ? new Date(t.ts).toLocaleTimeString() : '—';
         const title = t.taskTitle || 'turn';
+        const hasNote = !!getTurnNote(t.key);
         // encode full paths for hover panel (base64 to avoid quote issues)
         const pathsB64 = btoa(unescape(encodeURIComponent(JSON.stringify(paths))));
-        return `<button type="button" class="diff-film-card heat-${heat}${cur === t.key ? ' active' : ''}" data-scrub="${esc(t.key)}" data-paths-b64="${pathsB64}" data-task="${esc(title)}" data-prompt="${esc(String(t.prompt || '').slice(0, 200))}" data-time="${esc(time)}" data-heat="${heat}">
+        return `<button type="button" class="diff-film-card heat-${heat}${cur === t.key ? ' active' : ''}${hasNote ? ' has-note' : ''}" data-scrub="${esc(t.key)}" data-paths-b64="${pathsB64}" data-task="${esc(title)}" data-prompt="${esc(String(t.prompt || '').slice(0, 200))}" data-time="${esc(time)}" data-heat="${heat}">
           <span class="dfc-heat heat-${heat}"></span>
           <span class="dfc-time">${esc(time)}</span>
           <span class="dfc-title">${esc(String(title).slice(0, 18))}</span>
-          <span class="dfc-meta">${n} files · H${heat}</span>
+          <span class="dfc-meta">${n} files · H${heat}${hasNote ? ' · ✎' : ''}</span>
           <span class="dfc-files">${esc(names)}${n > 4 ? '…' : ''}</span>
         </button>`;
       })
@@ -4597,6 +4598,37 @@ function bindFilmstripHover(root) {
   });
 }
 
+const STORYBOARD_NOTES_KEY = 'grokcode-storyboard-notes-v1';
+/** Soft budget for exported JSON (chars); over → strip mini diffs */
+const STORYBOARD_JSON_BUDGET = 900_000;
+
+function notesProjectKey() {
+  const p = P();
+  return p?.path || p?.id || '_global';
+}
+
+function getAllStoryboardNotes() {
+  return loadJson(STORYBOARD_NOTES_KEY, {}) || {};
+}
+
+function getTurnNote(turnKey) {
+  if (!turnKey) return '';
+  const all = getAllStoryboardNotes();
+  const bucket = all[notesProjectKey()] || {};
+  return bucket[turnKey] || '';
+}
+
+function setTurnNote(turnKey, note) {
+  if (!turnKey) return;
+  const all = getAllStoryboardNotes();
+  const pk = notesProjectKey();
+  if (!all[pk]) all[pk] = {};
+  const text = String(note || '').slice(0, 4000);
+  if (!text.trim()) delete all[pk][turnKey];
+  else all[pk][turnKey] = text;
+  saveJson(STORYBOARD_NOTES_KEY, all);
+}
+
 /**
  * Attach size-capped mini unified diffs per turn file (from checkpoints).
  */
@@ -4634,7 +4666,39 @@ function enrichStoryboardDiffs(data, { maxFiles = 6, maxRows = 36 } = {}) {
   return data;
 }
 
-function buildStoryboardData({ withDiffs = true } = {}) {
+/** Drop mini diffs until under char budget (prefer keeping recent / hotter turns). */
+function applyStoryboardBudget(data, maxBytes = STORYBOARD_JSON_BUDGET) {
+  if (!data?.turns) return data;
+  let json = JSON.stringify(data);
+  if (json.length <= maxBytes) {
+    data.compressed = false;
+    return data;
+  }
+  // strip diffs from coldest turns first
+  const ordered = [...data.turns].sort((a, b) => (a.heat || 0) - (b.heat || 0));
+  for (const t of ordered) {
+    if (json.length <= maxBytes) break;
+    if (t.diffs?.length) {
+      t.diffs = [];
+      t.diffsOmitted = true;
+      json = JSON.stringify(data);
+    }
+  }
+  // still too big: drop all remaining diffs
+  if (json.length > maxBytes) {
+    for (const t of data.turns) {
+      t.diffs = [];
+      t.diffsOmitted = true;
+    }
+    json = JSON.stringify(data);
+  }
+  data.compressed = true;
+  data.compressedSize = json.length;
+  data.budget = maxBytes;
+  return data;
+}
+
+function buildStoryboardData({ withDiffs = true, withNotes = true } = {}) {
   const turns = collectGlobalTurns();
   const proj = P();
   const heatFn =
@@ -4651,10 +4715,25 @@ function buildStoryboardData({ withDiffs = true } = {}) {
       prompt: t.prompt,
       heat: heatFn(t.ts),
       files: [...(t.files || [])],
+      note: withNotes ? getTurnNote(t.key) : '',
     })),
   };
   if (withDiffs) enrichStoryboardDiffs(data);
+  if (withDiffs) applyStoryboardBudget(data);
   return data;
+}
+
+/** Notes UI under filmstrip when a turn is scrubbed */
+function storyboardNotesBarHtml() {
+  const key = state.diffScrubTurn;
+  if (!key) return '';
+  const en = localeIsEn();
+  const note = getTurnNote(key);
+  return `<div class="diff-note-bar" id="diffNoteBar">
+    <span class="diff-note-label">${en ? 'Review note' : '审阅批注'}</span>
+    <textarea id="turnReviewNote" rows="2" placeholder="${en ? 'Local note for this turn (exported in storyboard)' : '本 turn 的本地批注（会打进 storyboard）'}">${esc(note)}</textarea>
+    <button type="button" class="btn small ghost" data-note-save>${en ? 'Save' : '保存'}</button>
+  </div>`;
 }
 
 function buildStoryboardMarkdown(data) {
@@ -4669,6 +4748,10 @@ function buildStoryboardMarkdown(data) {
     '---',
     '',
   ];
+  if (data.compressed) {
+    lines.push(`- **Compressed**: yes (budget ${data.budget || STORYBOARD_JSON_BUDGET} chars)`);
+    lines.push('');
+  }
   (data.turns || []).forEach((t, i) => {
     const time = t.ts ? new Date(t.ts).toISOString() : '—';
     lines.push(`## Turn ${i + 1} · ${t.taskTitle || 'task'} · heat ${t.heat ?? 0}`);
@@ -4676,8 +4759,10 @@ function buildStoryboardMarkdown(data) {
     lines.push(`- **Time**: ${time}`);
     lines.push(`- **Key**: \`${t.key}\``);
     if (t.prompt) lines.push(`- **Prompt**: ${String(t.prompt).replace(/\n/g, ' ').slice(0, 300)}`);
+    if (t.note) lines.push(`- **Reviewer note**: ${String(t.note).replace(/\n/g, ' ')}`);
     lines.push(`- **Files** (${(t.files || []).length}):`);
     (t.files || []).forEach((p) => lines.push(`  - \`${p}\``));
+    if (t.diffsOmitted) lines.push(`- **Mini diffs**: omitted (pack budget)`);
     if (Array.isArray(t.diffs) && t.diffs.length) {
       lines.push('');
       lines.push('### Mini diffs');
@@ -4730,6 +4815,7 @@ function buildStoryboardHtml(data) {
   section { background: var(--card); border:1px solid rgba(125,211,252,.12); border-radius: 12px; padding: 14px 16px; min-height: 200px; }
   section h2 { margin:0 0 8px; font-size: 14px; color: var(--ice); font-family: ui-monospace, monospace; letter-spacing:.06em; text-transform:uppercase; }
   .prompt { white-space: pre-wrap; word-break: break-word; font-size: 13px; color: var(--muted); margin-bottom: 12px; }
+  .note { white-space: pre-wrap; word-break: break-word; font-size: 13px; color: #fde68a; background: rgba(251,191,36,.08); border:1px solid rgba(251,191,36,.25); border-radius:8px; padding:8px 10px; margin-bottom: 12px; min-height: 2.5em; }
   ul.files { margin:0 0 12px; padding-left: 18px; font-family: ui-monospace, monospace; font-size: 12px; }
   ul.files li { margin: 3px 0; word-break: break-all; }
   .diff-block { margin: 10px 0 14px; border:1px solid rgba(255,255,255,.08); border-radius: 8px; overflow:hidden; }
@@ -4744,7 +4830,7 @@ function buildStoryboardHtml(data) {
 <header>
   <h1>${esc(title)}</h1>
   <div class="meta">
-    ${esc(data.project?.path || '—')} · ${data.turns?.length || 0} turns · ${esc(data.exportedAt || '')}
+    ${esc(data.project?.path || '—')} · ${data.turns?.length || 0} turns · ${esc(data.exportedAt || '')}${data.compressed ? ' · compressed' : ''}
   </div>
 </header>
 <div class="strip" id="strip"></div>
@@ -4752,6 +4838,8 @@ function buildStoryboardHtml(data) {
   <section>
     <h2>${en ? 'Prompt' : '提示'}</h2>
     <div class="prompt" id="prompt">—</div>
+    <h2>${en ? 'Reviewer note' : '审阅批注'}</h2>
+    <div class="note" id="note">—</div>
     <h2>${en ? 'Files' : '文件'}</h2>
     <ul class="files" id="files"></ul>
   </section>
@@ -4760,11 +4848,12 @@ function buildStoryboardHtml(data) {
     <div id="diffs"></div>
   </section>
 </main>
-<footer>GrokCode Diff storyboard · offline review pack · heat 0–4 · mini diffs size-capped</footer>
+<footer>GrokCode Diff storyboard · offline review pack · notes + mini diffs (budget-capped)</footer>
 <script>
 const TURNS = ${turnsJson};
 const strip = document.getElementById('strip');
 const promptEl = document.getElementById('prompt');
+const noteEl = document.getElementById('note');
 const filesEl = document.getElementById('files');
 const diffsEl = document.getElementById('diffs');
 function escHtml(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
@@ -4780,11 +4869,12 @@ function show(i) {
   if (!t) return;
   [...strip.children].forEach((c, j) => c.classList.toggle('active', j === i));
   promptEl.textContent = t.prompt || '(no prompt captured)';
+  noteEl.textContent = t.note || '(no reviewer note)';
   filesEl.innerHTML = (t.files || []).map(p => '<li>' + escHtml(p) + '</li>').join('')
     || '<li style="color:#71717a">(none)</li>';
   const diffs = t.diffs || [];
   if (!diffs.length) {
-    diffsEl.innerHTML = '<div style="color:#71717a;font-size:12px">${en ? 'No mini diffs captured for this turn' : '该轮无迷你 diff 快照'}</div>';
+    diffsEl.innerHTML = '<div style="color:#71717a;font-size:12px">' + (t.diffsOmitted ? '${en ? 'Diffs omitted (pack budget)' : 'diffs 已省略（包体积预算）'}' : '${en ? 'No mini diffs captured for this turn' : '该轮无迷你 diff 快照'}') + '</div>';
   } else {
     diffsEl.innerHTML = diffs.map(function(d){
       const st = d.stats || {};
@@ -4798,10 +4888,11 @@ TURNS.forEach((t, i) => {
   b.className = 'card';
   const heat = t.heat || 0;
   const time = t.ts ? new Date(t.ts).toLocaleString() : '—';
+  const noteMark = t.note ? ' · ✎' : '';
   b.innerHTML = '<span class="h h' + heat + '"></span>'
     + '<div class="t">' + time + '</div>'
     + '<div class="n">' + (t.taskTitle || ('Turn ' + (i+1))).slice(0, 24) + '</div>'
-    + '<div class="m">' + (t.files||[]).length + ' files · H' + heat + '</div>';
+    + '<div class="m">' + (t.files||[]).length + ' files · H' + heat + noteMark + '</div>';
   b.onclick = () => show(i);
   strip.appendChild(b);
 });
@@ -4810,6 +4901,121 @@ if (TURNS.length) show(0);
 </body>
 </html>`;
 }
+
+/** Side-by-side compare of two exported storyboard JSON packs */
+async function compareStoryboardPacks() {
+  const en = localeIsEn();
+  try {
+    toast(en ? 'Pick pack A…' : '选择包 A…', 'ok');
+    const rawA = await window.grok.templateImportRaw();
+    if (rawA?.canceled) return;
+    if (!rawA?.ok) {
+      toast(rawA?.error || 'import A failed', 'err');
+      return;
+    }
+    toast(en ? 'Pick pack B…' : '选择包 B…', 'ok');
+    const rawB = await window.grok.templateImportRaw();
+    if (rawB?.canceled) return;
+    if (!rawB?.ok) {
+      toast(rawB?.error || 'import B failed', 'err');
+      return;
+    }
+    const packA = normalizeStoryboardPack(rawA.data);
+    const packB = normalizeStoryboardPack(rawB.data);
+    if (!packA || !packB) {
+      toast(en ? 'Both files must be storyboard JSON' : '两个文件都需是 storyboard JSON', 'err');
+      return;
+    }
+    showStoryboardCompareModal(packA, packB, rawA.file, rawB.file);
+  } catch (e) {
+    toast(e.message || 'compare failed', 'err');
+  }
+}
+
+function normalizeStoryboardPack(data) {
+  if (!data) return null;
+  if (data.format === 'grokcode-storyboard-v1' && Array.isArray(data.turns)) return data;
+  if (Array.isArray(data.turns)) return { ...data, format: data.format || 'grokcode-storyboard-v1' };
+  return null;
+}
+
+function showStoryboardCompareModal(packA, packB, fileA, fileB) {
+  const en = localeIsEn();
+  let root = document.getElementById('storyboardCompareModal');
+  if (!root) {
+    root = document.createElement('div');
+    root.id = 'storyboardCompareModal';
+    root.className = 'gc-modal hidden';
+    document.body.appendChild(root);
+  }
+  const keysA = new Map((packA.turns || []).map((t) => [t.key || String(t.ts), t]));
+  const keysB = new Map((packB.turns || []).map((t) => [t.key || String(t.ts), t]));
+  const allKeys = [...new Set([...keysA.keys(), ...keysB.keys()])];
+  const rows = allKeys
+    .map((k) => {
+      const a = keysA.get(k);
+      const b = keysB.get(k);
+      const fa = a ? (a.files || []).length : '—';
+      const fb = b ? (b.files || []).length : '—';
+      const status =
+        a && b
+          ? fa === fb
+            ? 'same'
+            : 'diff'
+          : a
+            ? 'only-a'
+            : 'only-b';
+      const title = (a || b)?.taskTitle || k.slice(0, 12);
+      return `<tr class="sc-${status}">
+        <td>${esc(title)}</td>
+        <td>${a ? esc(String(a.heat ?? '')) : '—'}</td>
+        <td>${fa}</td>
+        <td>${b ? esc(String(b.heat ?? '')) : '—'}</td>
+        <td>${fb}</td>
+        <td>${status}</td>
+        <td class="sc-notes">${esc((a?.note || '').slice(0, 40))}</td>
+        <td class="sc-notes">${esc((b?.note || '').slice(0, 40))}</td>
+      </tr>`;
+    })
+    .join('');
+  root.classList.remove('hidden');
+  root.innerHTML = `
+    <div class="gc-modal-backdrop" data-close="1"></div>
+    <div class="gc-modal-card glass storyboard-compare-card">
+      <div class="gc-modal-head">
+        <div>
+          <div class="skill-preview-kicker">STORYBOARD COMPARE</div>
+          <h2>${en ? 'Pack A vs Pack B' : '包 A vs 包 B'}</h2>
+          <p class="skill-preview-desc">${esc((fileA || 'A').split(/[/\\]/).pop())} · ${esc((fileB || 'B').split(/[/\\]/).pop())}</p>
+        </div>
+        <button type="button" class="icon-btn" data-close="1">✕</button>
+      </div>
+      <div class="sc-meta">
+        A: ${packA.turns?.length || 0} turns · B: ${packB.turns?.length || 0} turns · keys: ${allKeys.length}
+      </div>
+      <div class="sc-table-wrap">
+        <table class="sc-table">
+          <thead>
+            <tr>
+              <th>${en ? 'Turn' : 'Turn'}</th>
+              <th>A H</th><th>A files</th>
+              <th>B H</th><th>B files</th>
+              <th>${en ? 'Status' : '状态'}</th>
+              <th>A note</th><th>B note</th>
+            </tr>
+          </thead>
+          <tbody>${rows || `<tr><td colspan="8">${en ? 'Empty' : '空'}</td></tr>`}</tbody>
+        </table>
+      </div>
+      <div class="gc-modal-actions">
+        <button type="button" class="btn small primary" data-close="1">${en ? 'Close' : '关闭'}</button>
+      </div>
+    </div>`;
+  root.querySelectorAll('[data-close]').forEach((el) => {
+    el.onclick = () => root.classList.add('hidden');
+  });
+}
+window.compareStoryboardPacks = compareStoryboardPacks;
 
 /** Raster PNG overview of the filmstrip (canvas) */
 function renderStoryboardPngDataUrl(data) {
@@ -4984,6 +5190,7 @@ function scrubberHtml(turns) {
     <button type="button" class="diff-scrub-export html" data-scrub-export-html="1" title="${en ? 'Export HTML review pack' : '导出 HTML 审阅包'}">HTML</button>
     <button type="button" class="diff-scrub-export html" data-scrub-export-png="1" title="${en ? 'Export PNG overview' : '导出 PNG 总览'}">PNG</button>
     <button type="button" class="diff-scrub-export html" data-scrub-export-folder="1" title="${en ? 'Export review folder (HTML+MD+JSON+PNG)' : '导出审阅文件夹'}">📁</button>
+    <button type="button" class="diff-scrub-export html" data-scrub-compare="1" title="${en ? 'Compare two storyboard JSON packs' : '对比两个 storyboard JSON 包'}">A|B</button>
     <span class="diff-scrub-speeds" title="${en ? 'Playback speed' : '播放倍速'}">
       ${SCRUB_SPEEDS.map(
         (s) =>
@@ -4998,12 +5205,13 @@ function scrubberHtml(turns) {
         .map((t) => {
           const label = t.ts ? new Date(t.ts).toLocaleTimeString() : t.key.slice(0, 8);
           const n = t.files?.size || 0;
-          return `<button type="button" class="diff-scrub-tick${cur === t.key ? ' active' : ''}" data-scrub="${esc(t.key)}" title="${esc(t.taskTitle || '')} · ${n} files · ${esc(String(t.prompt || '').slice(0, 80))}">${esc(label)}<small>${n}f</small></button>`;
+          const noteMark = getTurnNote(t.key) ? ' ✎' : '';
+          return `<button type="button" class="diff-scrub-tick${cur === t.key ? ' active' : ''}" data-scrub="${esc(t.key)}" title="${esc(t.taskTitle || '')} · ${n} files · ${esc(String(t.prompt || '').slice(0, 80))}">${esc(label)}<small>${n}f${noteMark}</small></button>`;
         })
         .join('')}
     </div>
     <span class="muted" style="font-size:10px"><kbd>[</kbd><kbd>]</kbd> · ▶ · <kbd>L</kbd> · ${speed}x${loop ? ' · ↻' : ''}</span>
-  </div>${filmstripHtml(turns)}`;
+  </div>${filmstripHtml(turns)}${storyboardNotesBarHtml()}`;
 }
 
 function heatLegendHtml() {
@@ -5486,6 +5694,24 @@ function renderDiffPane() {
   });
   content.querySelector('[data-scrub-export-folder]')?.addEventListener('click', () => {
     exportFilmstripStoryboard({ format: 'folder' });
+  });
+  content.querySelector('[data-scrub-compare]')?.addEventListener('click', () => {
+    compareStoryboardPacks();
+  });
+  content.querySelector('[data-note-save]')?.addEventListener('click', () => {
+    const key = state.diffScrubTurn;
+    const ta = content.querySelector('#turnReviewNote');
+    if (!key || !ta) return;
+    setTurnNote(key, ta.value);
+    toast(localeIsEn() ? 'Review note saved' : '批注已保存', 'ok');
+    // refresh filmstrip note markers without losing textarea focus issue: re-render
+    renderDiffPane();
+  });
+  content.querySelector('#turnReviewNote')?.addEventListener('keydown', (e) => {
+    if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+      e.preventDefault();
+      content.querySelector('[data-note-save]')?.click();
+    }
   });
   content.querySelectorAll('[data-speed]').forEach((btn) => {
     btn.onclick = (e) => {
