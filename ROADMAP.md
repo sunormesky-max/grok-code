@@ -17,13 +17,14 @@ Living plan for the GrokCode open-source ecosystem. Order may change based on co
 - [x] Global file/content search · Code|Diff split · Electron 43
 - [x] Craft/Plan/Ask modes · style packs · personal protect / trash delete
 - [x] Ask IPC hard-block · outline · split width persist · skills index inject
+- [x] Plan execute chip · per-project split width · multi-lang outline · skill match chips
 
 ## Next
 
-- [ ] Per-project split width (not only global)
-- [ ] Outline for more languages / nested symbols
-- [ ] Skill full-body load tool hint UX when matched
-- [ ] Plan mode: one-click「执行方案」chip after plan reply
+- [ ] Open skill file from chip even outside workspace (read-only preview modal)
+- [ ] Outline sticky current-symbol highlight while scrolling
+- [ ] Plan mode auto-detect plan-like replies (not only mode flag)
+- [ ] Session export share card
 
 ## Later
 

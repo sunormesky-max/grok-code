@@ -2484,6 +2484,15 @@ async function runTaskPrompt(task, text, opts = {}) {
       upsertAssistant('（无文本输出 — 可能只做了工具操作，请看资源管理器 / Diff）', true, task);
     }
     finalizeLiveMessages(task);
+    // Plan 模式：非「执行」类消息后，给出一键执行
+    const modeUsed = state.workMode || cfg.workMode || 'craft';
+    const wasExec =
+      /^(执行|开干|按方案|implement|execute|do it|lgtm|开搞)/i.test(String(text || '').trim());
+    if (modeUsed === 'plan' && !wasExec && !result?.stopped && finalText) {
+      appendPlanExecuteBar(task);
+    }
+    // Skills 匹配提示
+    showSkillHints(text, task).catch(() => {});
     await refreshTaskContext(task);
     schedulePersist(true);
     if (isActiveTask(task)) renderContextTiers(task);
@@ -2530,6 +2539,111 @@ async function runTaskPrompt(task, text, opts = {}) {
     updateLiveStats();
     scheduleTreeRefresh(true);
   }
+}
+
+/** Plan 模式：确认后一键执行方案 */
+function appendPlanExecuteBar(task) {
+  if (!task?.pane) return;
+  task.pane.querySelectorAll('.plan-exec-bar').forEach((el) => el.remove());
+  const bar = document.createElement('div');
+  bar.className = 'plan-exec-bar';
+  bar.innerHTML = `
+    <span class="plan-exec-hint">方案已就绪 · 确认后切换 Craft 并执行</span>
+    <div class="retry-actions">
+      <button type="button" class="btn small primary" data-act="exec">▶ 执行方案</button>
+      <button type="button" class="btn small ghost" data-act="dismiss">稍后</button>
+    </div>`;
+  bar.querySelector('[data-act="exec"]').onclick = () => {
+    bar.remove();
+    setWorkMode('craft');
+    const prompt = document.getElementById('prompt');
+    if (prompt) {
+      prompt.value = '执行方案：按你上一条给出的步骤动手实现，保持聚焦，改完做必要检查。';
+      autoResizePrompt();
+      updateCharCount();
+    }
+    runTaskPrompt(task, '执行方案：按你上一条给出的步骤动手实现，保持聚焦，改完做必要检查。', {
+      fromComposer: false,
+    });
+  };
+  bar.querySelector('[data-act="dismiss"]').onclick = () => bar.remove();
+  task.pane.appendChild(bar);
+  scrollMessages(true, task);
+}
+
+/** 根据用户句匹配 skills 元数据，提示可读 SKILL.md */
+async function showSkillHints(userText, task) {
+  if (!task?.pane || !userText) return;
+  task.pane.querySelectorAll('.skill-hint-bar').forEach((el) => el.remove());
+  let list = [];
+  try {
+    const projectPath = P()?.path || null;
+    list = await window.grok.skillsList({ projectPath });
+  } catch {
+    return;
+  }
+  const q = String(userText).toLowerCase();
+  const tokens = q
+    .split(/[\s,./\\:;|!?'"，。、]+/)
+    .map((t) => t.trim())
+    .filter((t) => t.length >= 2);
+  const scored = (list || [])
+    .filter((s) => s.enabled !== false)
+    .map((s) => {
+      const hay = `${s.name || ''} ${s.description || ''}`.toLowerCase();
+      let score = 0;
+      for (const t of tokens) {
+        if (hay.includes(t)) score += t.length > 4 ? 2 : 1;
+      }
+      if (hay && q.length > 8 && hay.includes(q.slice(0, 24))) score += 3;
+      return { s, score };
+    })
+    .filter((x) => x.score >= 2)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 3);
+  if (!scored.length) return;
+  const bar = document.createElement('div');
+  bar.className = 'skill-hint-bar';
+  bar.innerHTML = `
+    <span class="skill-hint-label">可能相关 Skills</span>
+    <div class="skill-hint-list">
+      ${scored
+        .map(
+          ({ s }) =>
+            `<button type="button" class="skill-hint-chip" data-file="${esc(
+              s.skillFile || s.path || ''
+            )}" title="${esc(s.description || '')}">${esc(s.name)}</button>`
+        )
+        .join('')}
+    </div>
+    <span class="skill-hint-tip">Agent 已见索引；也可点开 SKILL.md</span>`;
+  bar.querySelectorAll('.skill-hint-chip').forEach((btn) => {
+    btn.onclick = async () => {
+      const file = btn.dataset.file;
+      if (!file) return;
+      try {
+        // open skill file in code if under project; else toast path
+        const proj = P();
+        if (proj && file.replace(/\\/g, '/').includes(proj.path.replace(/\\/g, '/'))) {
+          const rel = file.replace(/\\/g, '/').replace(proj.path.replace(/\\/g, '/') + '/', '');
+          await openFile(rel);
+        } else {
+          toast(`Skill: ${file}`, 'ok');
+          try {
+            await window.grok.skillsRead({ path: file });
+            // show brief in toast
+            toast(`已加载 ${btn.textContent} 元数据`, 'ok');
+          } catch {
+            /* ignore */
+          }
+        }
+      } catch (e) {
+        toast(e.message || '无法打开 skill', 'err');
+      }
+    };
+  });
+  task.pane.appendChild(bar);
+  scrollMessages(true, task);
 }
 
 /** 失败后可一键重试 / 清空 session 重试 / 导出诊断 */

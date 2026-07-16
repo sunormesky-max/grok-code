@@ -4,13 +4,25 @@
 (function (global) {
   const KEY = 'grokcode-split-layout';
   const WIDTH_KEY = 'grokcode-split-width';
+  const WIDTH_MAP_KEY = 'grokcode-split-width-by-project';
 
   function isSplit() {
     return document.body.classList.contains('layout-split');
   }
 
+  function projectKey() {
+    try {
+      return global.ProjectStore?.active?.()?.path || '_global';
+    } catch {
+      return '_global';
+    }
+  }
+
   function getSavedWidth() {
     try {
+      const map = JSON.parse(localStorage.getItem(WIDTH_MAP_KEY) || '{}');
+      const pk = projectKey();
+      if (map[pk] > 160 && map[pk] < 2000) return map[pk];
       const n = Number(localStorage.getItem(WIDTH_KEY));
       return n > 160 && n < 2000 ? n : null;
     } catch {
@@ -20,7 +32,16 @@
 
   function saveWidth(px) {
     try {
-      localStorage.setItem(WIDTH_KEY, String(Math.round(px)));
+      const w = Math.round(px);
+      localStorage.setItem(WIDTH_KEY, String(w));
+      const map = JSON.parse(localStorage.getItem(WIDTH_MAP_KEY) || '{}');
+      map[projectKey()] = w;
+      // cap map size
+      const keys = Object.keys(map);
+      if (keys.length > 40) {
+        keys.slice(0, keys.length - 40).forEach((k) => delete map[k]);
+      }
+      localStorage.setItem(WIDTH_MAP_KEY, JSON.stringify(map));
     } catch {
       /* ignore */
     }

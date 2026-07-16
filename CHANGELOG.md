@@ -11,6 +11,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 - See [ROADMAP.md](ROADMAP.md)
 
+## [1.2.9] — 2026-07-16
+
+### Added
+
+- **Plan → Execute**: after a Plan reply, one-click **执行方案** (switches to Craft and runs)
+- **Per-project split width** map in localStorage
+- **Outline** multi-language (TS interfaces, Rust, Java/Kotlin, Ruby, CSS, HTML ids, JSON keys, nested depth)
+- **Skill match chips** after a turn when user text scores against skill descriptions
+
 ## [1.2.8] — 2026-07-16
 
 ### Added / hardened
@@ -153,7 +162,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Requires installed Grok CLI + auth (`grok login` or `XAI_API_KEY`)
 - YOLO / always-approve is full workspace trust
 
-[Unreleased]: https://github.com/sunormesky-max/grok-code/compare/v1.2.8...HEAD
+[Unreleased]: https://github.com/sunormesky-max/grok-code/compare/v1.2.9...HEAD
+[1.2.9]: https://github.com/sunormesky-max/grok-code/compare/v1.2.8...v1.2.9
 [1.2.8]: https://github.com/sunormesky-max/grok-code/compare/v1.2.7...v1.2.8
 [1.2.7]: https://github.com/sunormesky-max/grok-code/compare/v1.2.6...v1.2.7
 [1.2.6]: https://github.com/sunormesky-max/grok-code/compare/v1.2.5...v1.2.6

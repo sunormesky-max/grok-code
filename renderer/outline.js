@@ -1,56 +1,189 @@
 /**
- * Lightweight outline for current Code buffer (headings / functions / classes)
+ * Lightweight outline for current Code buffer (multi-language)
  */
 (function (global) {
-  function $(sel) {
-    return document.querySelector(sel);
-  }
-
   function extractOutline(text, filePath) {
     const lines = String(text || '').split(/\r?\n/);
     const ext = (filePath || '').split('.').pop()?.toLowerCase() || '';
     const items = [];
-    const push = (line, kind, name) => {
-      if (!name || items.length > 200) return;
-      items.push({ line, kind, name: name.slice(0, 120) });
+    const push = (line, kind, name, depth = 0) => {
+      if (!name || items.length > 250) return;
+      items.push({ line, kind, name: String(name).slice(0, 120), depth });
     };
+
+    let indentStack = [];
 
     for (let i = 0; i < lines.length; i++) {
       const L = lines[i];
       const n = i + 1;
-      // markdown headings
-      if (/^#{1,4}\s+/.test(L)) {
-        push(n, 'h', L.replace(/^#+\s+/, '').trim());
+      const trimmed = L.trim();
+      if (!trimmed || trimmed.startsWith('//') || trimmed.startsWith('/*') || trimmed.startsWith('*')) {
         continue;
       }
-      // js/ts functions / classes
-      if (/^(export\s+)?(async\s+)?function\s+([A-Za-z0-9_$]+)/.test(L)) {
-        push(n, 'fn', L.match(/function\s+([A-Za-z0-9_$]+)/)?.[1]);
-        continue;
+
+      // markdown
+      if (/md|mdx|markdown/.test(ext) || /^#{1,4}\s+/.test(L)) {
+        const hm = L.match(/^(#{1,4})\s+(.+)/);
+        if (hm) {
+          push(n, 'h', hm[2].trim(), hm[1].length - 1);
+          continue;
+        }
       }
-      if (/^(export\s+)?class\s+([A-Za-z0-9_$]+)/.test(L)) {
-        push(n, 'cls', L.match(/class\s+([A-Za-z0-9_$]+)/)?.[1]);
-        continue;
+
+      // JS / TS / JSX / Vue script-like
+      if (/^(js|jsx|mjs|cjs|ts|tsx|vue|svelte)$/.test(ext) || !ext) {
+        if (/^(export\s+)?(default\s+)?(async\s+)?function\s*\*?\s*([A-Za-z0-9_$]+)/.test(trimmed)) {
+          push(n, 'fn', trimmed.match(/function\s*\*?\s*([A-Za-z0-9_$]+)/)?.[1], 0);
+          continue;
+        }
+        if (/^(export\s+)?(abstract\s+)?class\s+([A-Za-z0-9_$]+)/.test(trimmed)) {
+          push(n, 'cls', trimmed.match(/class\s+([A-Za-z0-9_$]+)/)?.[1], 0);
+          continue;
+        }
+        if (/^(export\s+)?interface\s+([A-Za-z0-9_$]+)/.test(trimmed)) {
+          push(n, 'iface', trimmed.match(/interface\s+([A-Za-z0-9_$]+)/)?.[1], 0);
+          continue;
+        }
+        if (/^(export\s+)?type\s+([A-Za-z0-9_$]+)\s*=/.test(trimmed)) {
+          push(n, 'type', trimmed.match(/type\s+([A-Za-z0-9_$]+)/)?.[1], 0);
+          continue;
+        }
+        if (/^(export\s+)?enum\s+([A-Za-z0-9_$]+)/.test(trimmed)) {
+          push(n, 'enum', trimmed.match(/enum\s+([A-Za-z0-9_$]+)/)?.[1], 0);
+          continue;
+        }
+        if (
+          /^(export\s+)?(const|let|var)\s+([A-Za-z0-9_$]+)\s*=\s*(async\s*)?(\(|function\b)/.test(
+            trimmed
+          )
+        ) {
+          push(n, 'fn', trimmed.match(/(const|let|var)\s+([A-Za-z0-9_$]+)/)?.[2], 0);
+          continue;
+        }
+        // methods inside class (indented)
+        if (/^\s+(async\s+)?([A-Za-z0-9_$]+)\s*\([^)]*\)\s*\{/.test(L) && !/^\s*(if|for|while|switch|catch)\b/.test(trimmed)) {
+          const m = L.match(/^\s+(async\s+)?([A-Za-z0-9_$]+)\s*\(/);
+          if (m && m[2] !== 'if' && m[2] !== 'for') push(n, 'meth', m[2], 1);
+          continue;
+        }
       }
-      if (/^(export\s+)?(const|let|var)\s+([A-Za-z0-9_$]+)\s*=\s*(async\s*)?\(/.test(L)) {
-        push(n, 'fn', L.match(/(const|let|var)\s+([A-Za-z0-9_$]+)/)?.[2]);
-        continue;
-      }
-      // python
+
+      // Python
       if (ext === 'py') {
-        if (/^def\s+([A-Za-z0-9_]+)/.test(L)) {
-          push(n, 'fn', L.match(/^def\s+([A-Za-z0-9_]+)/)?.[1]);
+        const ind = L.match(/^(\s*)/)?.[1].length || 0;
+        if (/^def\s+([A-Za-z0-9_]+)/.test(trimmed)) {
+          push(n, 'fn', trimmed.match(/^def\s+([A-Za-z0-9_]+)/)?.[1], Math.min(2, Math.floor(ind / 4)));
           continue;
         }
-        if (/^class\s+([A-Za-z0-9_]+)/.test(L)) {
-          push(n, 'cls', L.match(/^class\s+([A-Za-z0-9_]+)/)?.[1]);
+        if (/^class\s+([A-Za-z0-9_]+)/.test(trimmed)) {
+          push(n, 'cls', trimmed.match(/^class\s+([A-Za-z0-9_]+)/)?.[1], Math.min(1, Math.floor(ind / 4)));
+          continue;
+        }
+        if (/^async\s+def\s+([A-Za-z0-9_]+)/.test(trimmed)) {
+          push(n, 'fn', trimmed.match(/^async\s+def\s+([A-Za-z0-9_]+)/)?.[1], Math.min(2, Math.floor(ind / 4)));
           continue;
         }
       }
-      // go
-      if (ext === 'go' && /^func\s+/.test(L)) {
-        const m = L.match(/^func\s+(?:\([^)]+\)\s*)?([A-Za-z0-9_]+)/);
-        if (m) push(n, 'fn', m[1]);
+
+      // Go
+      if (ext === 'go') {
+        if (/^func\s+/.test(trimmed)) {
+          const m = trimmed.match(/^func\s+(?:\([^)]+\)\s*)?([A-Za-z0-9_]+)/);
+          if (m) push(n, 'fn', m[1], 0);
+          continue;
+        }
+        if (/^type\s+([A-Za-z0-9_]+)\s+struct/.test(trimmed)) {
+          push(n, 'cls', trimmed.match(/^type\s+([A-Za-z0-9_]+)/)?.[1], 0);
+          continue;
+        }
+        if (/^type\s+([A-Za-z0-9_]+)\s+interface/.test(trimmed)) {
+          push(n, 'iface', trimmed.match(/^type\s+([A-Za-z0-9_]+)/)?.[1], 0);
+          continue;
+        }
+      }
+
+      // Rust
+      if (ext === 'rs') {
+        if (/^(pub\s+)?(async\s+)?fn\s+([A-Za-z0-9_]+)/.test(trimmed)) {
+          push(n, 'fn', trimmed.match(/fn\s+([A-Za-z0-9_]+)/)?.[1], 0);
+          continue;
+        }
+        if (/^(pub\s+)?struct\s+([A-Za-z0-9_]+)/.test(trimmed)) {
+          push(n, 'cls', trimmed.match(/struct\s+([A-Za-z0-9_]+)/)?.[1], 0);
+          continue;
+        }
+        if (/^(pub\s+)?enum\s+([A-Za-z0-9_]+)/.test(trimmed)) {
+          push(n, 'enum', trimmed.match(/enum\s+([A-Za-z0-9_]+)/)?.[1], 0);
+          continue;
+        }
+        if (/^(pub\s+)?trait\s+([A-Za-z0-9_]+)/.test(trimmed)) {
+          push(n, 'iface', trimmed.match(/trait\s+([A-Za-z0-9_]+)/)?.[1], 0);
+          continue;
+        }
+        if (/^impl\b/.test(trimmed)) {
+          push(n, 'impl', trimmed.replace(/\{.*$/, '').trim().slice(0, 40), 0);
+          continue;
+        }
+      }
+
+      // Java / Kotlin / C#
+      if (/^(java|kt|kts|cs)$/.test(ext)) {
+        if (/\b(class|interface|enum|record)\s+([A-Za-z0-9_]+)/.test(trimmed)) {
+          const m = trimmed.match(/\b(class|interface|enum|record)\s+([A-Za-z0-9_]+)/);
+          push(n, m[1] === 'class' || m[1] === 'record' ? 'cls' : m[1] === 'enum' ? 'enum' : 'iface', m[2], 0);
+          continue;
+        }
+        if (
+          /^\s*(public|private|protected|internal|static|async|override|fun)\b.+\s+([A-Za-z0-9_]+)\s*\(/.test(
+            L
+          )
+        ) {
+          const m = L.match(/\s([A-Za-z0-9_]+)\s*\([^;]*\)\s*(\{|=>)?\s*$/);
+          if (m && !/^(if|for|while|switch|catch)$/.test(m[1])) push(n, 'meth', m[1], 1);
+          continue;
+        }
+      }
+
+      // Ruby
+      if (ext === 'rb') {
+        if (/^def\s+([A-Za-z0-9_?!]+)/.test(trimmed)) {
+          push(n, 'fn', trimmed.match(/^def\s+([A-Za-z0-9_?!]+)/)?.[1], 0);
+          continue;
+        }
+        if (/^class\s+([A-Za-z0-9_:]+)/.test(trimmed)) {
+          push(n, 'cls', trimmed.match(/^class\s+([A-Za-z0-9_:]+)/)?.[1], 0);
+          continue;
+        }
+        if (/^module\s+([A-Za-z0-9_:]+)/.test(trimmed)) {
+          push(n, 'mod', trimmed.match(/^module\s+([A-Za-z0-9_:]+)/)?.[1], 0);
+          continue;
+        }
+      }
+
+      // CSS / SCSS — selectors
+      if (/^(css|scss|less)$/.test(ext)) {
+        if (/^[\.\#@a-zA-Z][^{]+\{/.test(trimmed) || /^[\.\#][a-zA-Z0-9_-]+/.test(trimmed)) {
+          const name = trimmed.replace(/\s*\{.*$/, '').trim();
+          if (name && !name.startsWith('/*')) push(n, 'sel', name.slice(0, 60), 0);
+          continue;
+        }
+      }
+
+      // HTML / Vue template — tags with id
+      if (/^(html|htm|vue)$/.test(ext)) {
+        if (/^<\/?[a-zA-Z]/.test(trimmed) && /id=["'][^"']+["']/.test(trimmed)) {
+          const id = trimmed.match(/id=["']([^"']+)["']/)?.[1];
+          if (id) push(n, 'id', '#' + id, 0);
+          continue;
+        }
+        if (/^<(section|article|main|header|nav|footer|h[1-3])\b/i.test(trimmed)) {
+          push(n, 'tag', trimmed.match(/^<\/?([a-zA-Z0-9-]+)/)?.[1], 0);
+        }
+      }
+
+      // JSON top-level keys
+      if (ext === 'json' && /^ {2}"([^"]+)"\s*:/.test(L)) {
+        push(n, 'key', L.match(/^ {2}"([^"]+)"/)?.[1], 0);
       }
     }
     return items;
@@ -107,7 +240,7 @@
     list.innerHTML = items
       .map(
         (it) =>
-          `<button type="button" class="outline-item kind-${it.kind}" data-line="${it.line}">
+          `<button type="button" class="outline-item kind-${it.kind}" data-line="${it.line}" style="padding-left:${6 + (it.depth || 0) * 10}px">
             <span class="ol-kind">${it.kind}</span>
             <span class="ol-name">${escapeHtml(it.name)}</span>
             <span class="ol-line">${it.line}</span>
@@ -136,10 +269,11 @@
     ensurePanel();
     const ed = document.getElementById('editor');
     ed?.addEventListener('input', schedule);
-    // refresh when file opens
-    const obs = new MutationObserver(schedule);
     const pathEl = document.getElementById('currentPath');
-    if (pathEl) obs.observe(pathEl, { childList: true, characterData: true, subtree: true });
+    if (pathEl) {
+      const obs = new MutationObserver(schedule);
+      obs.observe(pathEl, { childList: true, characterData: true, subtree: true });
+    }
     document.querySelector('.tab[data-tab="editor"]')?.addEventListener('click', () => setTimeout(refresh, 50));
   }
 
