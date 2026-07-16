@@ -398,9 +398,10 @@ body {
   flex-shrink: 0;
 }
 .topbar.titlebar {
-  /* 整条可作为拖拽区；交互控件单独 no-drag */
+  /* 整条可作为拖拽区；交互控件单独 no-drag（必须写在子节点上，否则 Windows 吞点击） */
   -webkit-app-region: drag;
   app-region: drag;
+  z-index: 50;
 }
 .topbar::after {
   content: "";
@@ -416,11 +417,15 @@ body {
   app-region: drag;
 }
 .topbar .no-drag,
+.topbar .top-actions,
+.topbar .top-actions *,
 .topbar button,
 .topbar .pill,
-.topbar .win-controls {
-  -webkit-app-region: no-drag;
-  app-region: no-drag;
+.topbar .win-controls,
+.topbar .win-controls *,
+.topbar .win-btn {
+  -webkit-app-region: no-drag !important;
+  app-region: no-drag !important;
 }
 
 /* Windows 风格窗口按钮 */
@@ -431,6 +436,11 @@ body {
   height: 36px;
   border-left: 1px solid var(--border-soft);
   padding-left: 4px;
+  position: relative;
+  z-index: 60;
+  -webkit-app-region: no-drag !important;
+  app-region: no-drag !important;
+  pointer-events: auto;
 }
 .win-btn {
   width: 42px;
@@ -445,6 +455,11 @@ body {
   transition: background 0.12s, color 0.12s;
   border-radius: 0;
   line-height: 1;
+  position: relative;
+  z-index: 61;
+  -webkit-app-region: no-drag !important;
+  app-region: no-drag !important;
+  pointer-events: auto;
 }
 .win-btn:hover {
   background: rgba(255, 255, 255, 0.08);
@@ -586,7 +601,17 @@ button.pill:hover {
   border-color: rgba(125, 211, 252, 0.22);
 }
 
-.top-actions { margin-left: auto; display: flex; gap: 8px; flex-shrink: 0; }
+.top-actions {
+  margin-left: auto;
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+  position: relative;
+  z-index: 60;
+  -webkit-app-region: no-drag !important;
+  app-region: no-drag !important;
+  pointer-events: auto;
+}
 
 /* ── Layout ──────────────────────────────────────────── */
 .main {

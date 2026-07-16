@@ -11,6 +11,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 - See [ROADMAP.md](ROADMAP.md)
 
+## [1.4.11] — 2026-07-16
+
+### Fixes
+
+- **Enter to send**: composer **Enter** sends (Shift+Enter newline); Ctrl+Enter still works; Ctrl+Shift+Enter = one-shot Craft
+- **Window controls**: frameless min/max/close clicks restored (force `-webkit-app-region: no-drag` + capture handlers; IPC window resolve fallback)
+
 ## [1.4.10] — 2026-07-16
 
 ### HTML pack compare · encrypted storyboard

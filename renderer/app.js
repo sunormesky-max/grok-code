@@ -1053,16 +1053,49 @@ function syncComposerToTask(t) {
 
 // ── 无边框窗口控制 ──────────────────────────────────────
 function bindWindowControls() {
-  $('#btnWinMin')?.addEventListener('click', () => window.grok.windowMinimize?.());
-  $('#btnWinMax')?.addEventListener('click', async () => {
+  // Electron drag regions swallow clicks unless no-drag is forced on controls
+  const forceNoDrag = (el) => {
+    if (!el) return;
+    el.style.webkitAppRegion = 'no-drag';
+    el.style.appRegion = 'no-drag';
+  };
+  forceNoDrag(document.querySelector('.top-actions'));
+  forceNoDrag(document.querySelector('.win-controls'));
+  document.querySelectorAll('.topbar button, .topbar .no-drag, .win-btn').forEach(forceNoDrag);
+
+  const bindWinBtn = (id, fn) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    forceNoDrag(el);
+    // mousedown must not start window drag
+    el.addEventListener(
+      'mousedown',
+      (e) => {
+        e.stopPropagation();
+      },
+      true
+    );
+    el.addEventListener(
+      'click',
+      (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        Promise.resolve(fn(e)).catch((err) => console.warn('window control', err));
+      },
+      true
+    );
+  };
+
+  bindWinBtn('btnWinMin', () => window.grok.windowMinimize?.());
+  bindWinBtn('btnWinMax', async () => {
     const max = await window.grok.windowMaximize?.();
     syncMaxBtn(max);
   });
-  $('#btnWinClose')?.addEventListener('click', () => window.grok.windowClose?.());
+  bindWinBtn('btnWinClose', () => window.grok.windowClose?.());
 
-  // 双击标题栏区域最大化
+  // 双击标题栏区域最大化（避开按钮 / 可交互区）
   $('#titlebar')?.addEventListener('dblclick', async (e) => {
-    if (e.target.closest('button, input, a, .pill, .win-controls, .no-drag')) return;
+    if (e.target.closest('button, input, a, .pill, .win-controls, .no-drag, .top-actions')) return;
     const max = await window.grok.windowMaximize?.();
     syncMaxBtn(max);
   });
@@ -1768,7 +1801,7 @@ async function showWelcome(box) {
       <ol>
         <li>${en ? 'Open a project workspace' : '打开项目，给 Grok 一块能「理解」的代码宇宙'}</li>
         <li>${en ? 'CLI green in title bar = online (else <code>grok login</code>)' : '顶栏 CLI 亮绿 = 已上线（否则 <code>grok login</code>）'}</li>
-        <li>${en ? '<kbd>Ctrl</kbd>+<kbd>Enter</kbd> send · <kbd>/</kbd> commands · ★ favorites first below' : '当前任务 <kbd>Ctrl</kbd>+<kbd>Enter</kbd> · <kbd>/</kbd> 命令 · 下方 ★ 收藏优先'}</li>
+        <li>${en ? '<kbd>Enter</kbd> send · <kbd>Shift</kbd>+<kbd>Enter</kbd> newline · <kbd>/</kbd> commands · ★ favorites first below' : '当前任务 <kbd>Enter</kbd> 发送 · <kbd>Shift</kbd>+<kbd>Enter</kbd> 换行 · <kbd>/</kbd> 命令 · 下方 ★ 收藏优先'}</li>
       </ol>
       ${
         favs.length
@@ -1960,12 +1993,13 @@ function bindUi() {
   $('#prompt').addEventListener('keydown', (e) => {
     if (handleAtKeydown(e)) return;
     if (handleSlashKeydown(e)) return;
-    if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
-      e.preventDefault();
-      // Ctrl+Shift+Enter → one-shot Craft without leaving current mode UI
-      if (e.shiftKey) sendPrompt({ forceCraft: true });
-      else sendPrompt();
-    }
+    if (e.key !== 'Enter') return;
+    // Shift+Enter → newline in textarea
+    if (e.shiftKey && !(e.ctrlKey || e.metaKey)) return;
+    e.preventDefault();
+    // Ctrl/Cmd+Shift+Enter → one-shot Craft; plain Enter or Ctrl+Enter → send
+    if ((e.ctrlKey || e.metaKey) && e.shiftKey) sendPrompt({ forceCraft: true });
+    else sendPrompt();
   });
   $('#prompt').addEventListener('input', () => {
     autoResizePrompt();
@@ -2598,8 +2632,8 @@ const MODE_SEND = {
 
 const MODE_PLACEHOLDER = {
   craft: {
-    zh: 'Craft · 告诉 Grok 要改什么… Ctrl+Enter 起飞',
-    en: 'Craft · what should we ship? Ctrl+Enter',
+    zh: 'Craft · 告诉 Grok 要改什么… Enter 发送 · Shift+Enter 换行',
+    en: 'Craft · what should we ship? Enter send · Shift+Enter newline',
   },
   plan: {
     zh: 'Plan · 描述目标，先拿方案…',

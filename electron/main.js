@@ -1415,25 +1415,34 @@ function osHomedir() {
 
 // ── 无边框窗口控制 ──────────────────────────────────────
 function winFromEvent(e) {
-  return BrowserWindow.fromWebContents(e.sender);
+  return (
+    BrowserWindow.fromWebContents(e.sender) ||
+    BrowserWindow.getFocusedWindow() ||
+    mainWindow ||
+    null
+  );
 }
 
 ipcMain.handle('window:minimize', (e) => {
-  winFromEvent(e)?.minimize();
+  const win = winFromEvent(e);
+  if (!win || win.isDestroyed()) return false;
+  win.minimize();
   return true;
 });
 ipcMain.handle('window:maximize', (e) => {
   const win = winFromEvent(e);
-  if (!win) return false;
+  if (!win || win.isDestroyed()) return false;
   if (win.isMaximized()) win.unmaximize();
   else win.maximize();
   return win.isMaximized();
 });
 ipcMain.handle('window:close', (e) => {
-  winFromEvent(e)?.close();
+  const win = winFromEvent(e);
+  if (!win || win.isDestroyed()) return false;
+  win.close();
   return true;
 });
 ipcMain.handle('window:isMaximized', (e) => {
   const win = winFromEvent(e);
-  return Boolean(win && win.isMaximized());
+  return Boolean(win && !win.isDestroyed() && win.isMaximized());
 });
