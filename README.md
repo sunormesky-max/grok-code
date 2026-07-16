@@ -93,6 +93,8 @@ When reduced motion is on, boot rings, send pulse, Live timeline entrance, scrub
 
 **Visual FX intensity** (Settings → Appearance): **Normal** (default) or **High** (stronger nebula / Agent edge). Use Normal on low-end GPUs. Toggle via **Ctrl+K** → “切换视觉强度 FX”.
 
+**Force reduce motion** (Settings → Appearance checkbox, or **Ctrl+K** → “切换强制减少动效”): applies `body.force-reduced-motion` even if the OS setting is off — useful for demos or low-end machines.
+
 ---
 
 ## Repo layout

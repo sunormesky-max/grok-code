@@ -370,6 +370,19 @@
         }),
       },
       {
+        id: 'motion.toggle',
+        title: t('cmd.motion.toggle', '切换强制减少动效'),
+        keywords: 'motion reduce accessibility a11y 动效 无障碍',
+        group: 'actions',
+        run: run(() => {
+          const on = global.GrokFx?.toggleReduceMotion?.();
+          global.toast?.(
+            t('toast.motion', '减少动效：{mode}', { mode: on ? 'on' : 'off' }),
+            'ok'
+          );
+        }),
+      },
+      {
         id: 'search.files',
         title: t('cmd.search.files', '搜索文件'),
         hint: 'Ctrl+P',

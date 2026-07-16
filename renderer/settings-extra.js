@@ -32,6 +32,8 @@
     if (dens) dens.value = window.GrokDensity?.getDensity?.() || 'comfortable';
     const fx = $('#cfgFx');
     if (fx) fx.value = window.GrokFx?.getFx?.() || 'normal';
+    const rm = $('#cfgReduceMotion');
+    if (rm) rm.checked = Boolean(window.GrokFx?.getReduceMotion?.());
     const st = $('#cfgStylePack');
     if (st) st.value = cfg.stylePack || 'default';
     const pp = $('#cfgPersonalProtect');
@@ -156,6 +158,8 @@
     if (dens) window.GrokDensity?.setDensity?.(dens);
     const fx = $('#cfgFx')?.value;
     if (fx) window.GrokFx?.setFx?.(fx);
+    const rm = $('#cfgReduceMotion');
+    if (rm) window.GrokFx?.setReduceMotion?.(rm.checked);
     await window.grok.setConfig({
       locale: partial.locale,
       theme: partial.theme,
@@ -198,6 +202,15 @@
       const mode = window.GrokFx?.setFx?.(e.target.value) || e.target.value;
       window.toast?.(
         window.GrokI18n?.t?.('toast.fx', null, { mode }) || `FX: ${mode}`,
+        'ok'
+      );
+    });
+    $('#cfgReduceMotion')?.addEventListener('change', (e) => {
+      const on = window.GrokFx?.setReduceMotion?.(e.target.checked);
+      window.toast?.(
+        window.GrokI18n?.t?.('toast.motion', null, {
+          mode: on ? 'on' : 'off',
+        }) || (on ? '减少动效：开' : '减少动效：关'),
         'ok'
       );
     });

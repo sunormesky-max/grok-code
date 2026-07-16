@@ -14,6 +14,7 @@
   <link rel="stylesheet" href="visual-impact-3.css" />
   <link rel="stylesheet" href="visual-impact-4.css" />
   <link rel="stylesheet" href="visual-impact-5.css" />
+  <link rel="stylesheet" href="visual-impact-6.css" />
   <link rel="stylesheet" href="help-overlay.css" />
   <link rel="stylesheet" href="tree-polish.css" />
   <link rel="stylesheet" href="search-ui.css" />
@@ -654,6 +655,13 @@
           </select>
           <small data-i18n="fx.hint">增强光晕、星云与 Agent 边光；低配可关</small>
         </label>
+        <label class="field check fx-motion">
+          <input type="checkbox" id="cfgReduceMotion" />
+          <span>
+            <strong data-i18n="motion.reduce">强制减少动效</strong>
+            <small data-i18n="motion.reduce.hint">关闭扫光、脉冲、入场动画（另尊重系统设置）</small>
+          </span>
+        </label>
         </div>
         <div class="settings-section">
           <div class="settings-section-title mars">Theme · Style</div>
@@ -728,6 +736,9 @@
 
       <!-- MCP -->
       <div class="settings-pane hidden" id="stab-mcp">
+        <div class="settings-section">
+          <div class="settings-section-title">MCP Servers</div>
+        </div>
         <div class="mgmt-toolbar">
           <span class="mgmt-hint">配置写入 <code>~/.grok/config.toml</code> · 与终端 <code>grok mcp</code> 同源</span>
           <div class="mgmt-actions">
@@ -778,6 +789,9 @@
 
       <!-- Skills -->
       <div class="settings-pane hidden" id="stab-skills">
+        <div class="settings-section">
+          <div class="settings-section-title">Skills</div>
+        </div>
         <div class="mgmt-toolbar">
           <span class="mgmt-hint">用户技能目录 <code>~/.grok/skills</code> · 项目技能 <code>.grok/skills</code></span>
           <div class="mgmt-actions">
@@ -831,6 +845,9 @@
 
       <!-- Plugins -->
       <div class="settings-pane hidden" id="stab-plugins">
+        <div class="settings-section">
+          <div class="settings-section-title mars">Plugins · Marketplace</div>
+        </div>
         <div class="mgmt-toolbar">
           <span class="mgmt-hint">对接 <code>grok plugin</code> / marketplace · 与 TUI 同源</span>
           <div class="mgmt-actions">
@@ -867,6 +884,9 @@
 
       <!-- Catalog from examples/ -->
       <div class="settings-pane hidden" id="stab-catalog">
+        <div class="settings-section">
+          <div class="settings-section-title">Community Catalog</div>
+        </div>
         <div class="mgmt-toolbar">
           <span class="mgmt-hint">社区目录 · 源自仓库 <code>examples/</code></span>
           <div class="mgmt-actions">

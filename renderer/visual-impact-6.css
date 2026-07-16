@@ -1,0 +1,246 @@
+/* ═══════════════════════════════════════════════════════
+   GrokCode Visual Impact 6 — mgmt panes · doctor · motion
+   ═══════════════════════════════════════════════════════ */
+
+/* ── MCP / Skills / Plugins / Catalog parity ─────────── */
+body.layout-v15 .mgmt-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin: 4px 0 12px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(125, 211, 252, 0.14);
+  background: linear-gradient(
+    90deg,
+    rgba(125, 211, 252, 0.06),
+    rgba(0, 0, 0, 0.35) 50%,
+    rgba(249, 115, 22, 0.04)
+  );
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
+}
+body.layout-v15 .mgmt-hint {
+  font-size: 11.5px;
+  color: #a1a1aa;
+  line-height: 1.4;
+  max-width: min(420px, 100%);
+}
+body.layout-v15 .mgmt-hint code {
+  font-family: var(--mono, ui-monospace, monospace);
+  font-size: 10.5px;
+  color: #7dd3fc;
+  background: rgba(56, 189, 248, 0.1);
+  border: 1px solid rgba(125, 211, 252, 0.2);
+  border-radius: 4px;
+  padding: 1px 5px;
+}
+body.layout-v15 .mgmt-actions .btn {
+  border-color: rgba(125, 211, 252, 0.25);
+}
+body.layout-v15 .mgmt-actions .btn.primary {
+  /* keep global primary punch */
+}
+body.layout-v15 .mgmt-list {
+  border: 1px solid rgba(125, 211, 252, 0.14);
+  border-radius: 12px;
+  background: rgba(0, 0, 0, 0.32);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
+  max-height: min(42vh, 380px);
+  overflow: auto;
+}
+body.layout-v15 .mgmt-item {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  padding: 10px 12px;
+  transition: background 0.12s, box-shadow 0.12s;
+}
+body.layout-v15 .mgmt-item:last-child {
+  border-bottom: none;
+}
+body.layout-v15 .mgmt-item:hover {
+  background: linear-gradient(90deg, rgba(125, 211, 252, 0.06), transparent 70%);
+}
+body.layout-v15 .mgmt-item .mi-name {
+  color: #e0f2fe;
+  font-weight: 650;
+  letter-spacing: 0.02em;
+}
+body.layout-v15 .mgmt-item .mi-meta {
+  color: #71717a;
+  font-family: var(--mono, ui-monospace, monospace);
+  font-size: 10.5px;
+}
+body.layout-v15 .mgmt-item .mi-scope {
+  border-color: rgba(125, 211, 252, 0.25);
+  background: rgba(56, 189, 248, 0.08);
+  color: #7dd3fc;
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+body.layout-v15 .mgmt-item .toggle {
+  border-color: rgba(125, 211, 252, 0.3);
+  background: rgba(0, 0, 0, 0.4);
+}
+body.layout-v15 .mgmt-item .toggle.on {
+  background: linear-gradient(90deg, rgba(52, 211, 153, 0.35), rgba(56, 189, 248, 0.25));
+  border-color: rgba(52, 211, 153, 0.5);
+  box-shadow: 0 0 12px rgba(52, 211, 153, 0.2);
+}
+body.layout-v15 .mgmt-item.off {
+  opacity: 0.5;
+}
+body.layout-v15 .mgmt-form {
+  margin-top: 12px;
+  padding: 14px;
+  border-radius: 12px;
+  border: 1px solid rgba(125, 211, 252, 0.2);
+  background:
+    radial-gradient(ellipse 70% 40% at 0% 0%, rgba(125, 211, 252, 0.08), transparent 50%),
+    rgba(0, 0, 0, 0.4);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  animation: viewIn 0.25s var(--ease);
+}
+body.layout-v15 .mgmt-form-title {
+  font-family: var(--mono, ui-monospace, monospace);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #7dd3fc;
+  text-shadow: 0 0 10px rgba(125, 211, 252, 0.25);
+  margin: 0 0 12px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid rgba(125, 211, 252, 0.12);
+}
+body.layout-v15 .mgmt-log {
+  margin-top: 10px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(125, 211, 252, 0.15);
+  background: rgba(0, 0, 0, 0.5);
+  color: #67e8f9;
+  font-family: var(--mono, ui-monospace, monospace);
+  font-size: 11px;
+  max-height: 120px;
+  overflow: auto;
+  box-shadow: inset 0 0 20px rgba(125, 211, 252, 0.04);
+}
+body.layout-v15 .skill-editor {
+  font-family: var(--mono, ui-monospace, monospace) !important;
+  font-size: 12px !important;
+  line-height: 1.45;
+  border-color: rgba(125, 211, 252, 0.2) !important;
+  background: rgba(0, 0, 0, 0.5) !important;
+}
+
+/* Catalog list share same list chrome */
+body.layout-v15 #catalogList.mgmt-list,
+body.layout-v15 #pluginList.mgmt-list {
+  border-color: rgba(125, 211, 252, 0.14);
+}
+
+/* ── Doctor results flight deck ──────────────────────── */
+body.layout-v15 .doctor-results {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+body.layout-v15 .doctor-summary {
+  font-family: var(--mono, ui-monospace, monospace);
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  border-radius: 10px;
+  padding: 10px 12px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+body.layout-v15 .doctor-summary.ok {
+  background: linear-gradient(90deg, rgba(52, 211, 153, 0.12), rgba(0, 0, 0, 0.25));
+  border-color: rgba(52, 211, 153, 0.4);
+  color: #6ee7b7;
+  text-shadow: 0 0 10px rgba(52, 211, 153, 0.25);
+}
+body.layout-v15 .doctor-summary.bad {
+  background: linear-gradient(90deg, rgba(251, 113, 133, 0.12), rgba(0, 0, 0, 0.25));
+  border-color: rgba(251, 113, 133, 0.4);
+  color: #fda4af;
+  text-shadow: 0 0 10px rgba(251, 113, 133, 0.2);
+}
+body.layout-v15 .doctor-item {
+  border-radius: 10px;
+  border: 1px solid rgba(125, 211, 252, 0.12);
+  background: linear-gradient(145deg, rgba(8, 12, 20, 0.85), rgba(0, 0, 0, 0.4));
+  padding: 10px 12px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+  transition: border-color 0.12s, box-shadow 0.15s;
+}
+body.layout-v15 .doctor-item:hover {
+  border-color: rgba(125, 211, 252, 0.28);
+  box-shadow: 0 0 16px rgba(125, 211, 252, 0.08);
+}
+body.layout-v15 .doctor-item.ok {
+  border-left: 3px solid #34d399;
+  box-shadow: inset 3px 0 12px rgba(52, 211, 153, 0.06);
+}
+body.layout-v15 .doctor-item.warn {
+  border-left: 3px solid #fbbf24;
+  box-shadow: inset 3px 0 12px rgba(251, 191, 36, 0.06);
+}
+body.layout-v15 .doctor-item.bad {
+  border-left: 3px solid #fb7185;
+  box-shadow: inset 3px 0 12px rgba(251, 113, 133, 0.08);
+}
+body.layout-v15 .doctor-item .di-head {
+  font-size: 12.5px;
+  color: #e4e4e7;
+  margin-bottom: 4px;
+}
+body.layout-v15 .doctor-item .di-head strong {
+  color: #e0f2fe;
+}
+body.layout-v15 .doctor-item .di-detail {
+  font-size: 11.5px;
+  color: #a1a1aa;
+  line-height: 1.45;
+  font-family: var(--mono, ui-monospace, monospace);
+}
+body.layout-v15 .doctor-item .di-fix {
+  margin-top: 6px;
+  font-size: 11.5px;
+  color: #7dd3fc;
+  font-family: var(--mono, ui-monospace, monospace);
+}
+
+/* ── Reduced motion force (settings) ─────────────────── */
+body.force-reduced-motion .holo-beam,
+body.force-reduced-motion .logo-mark,
+body.force-reduced-motion .logo-pulse,
+body.force-reduced-motion .live-badge,
+body.force-reduced-motion .boot-rings i,
+body.force-reduced-motion .boot-scan,
+body.force-reduced-motion .boot-grid,
+body.force-reduced-motion .grok-sigil span,
+body.force-reduced-motion .empty-ico.grok-eye,
+body.force-reduced-motion .welcome-hero::before {
+  animation: none !important;
+}
+body.force-reduced-motion .msg,
+body.force-reduced-motion .live-event,
+body.force-reduced-motion .btn.primary.send-pulse,
+body.force-reduced-motion .task-tab.active,
+body.force-reduced-motion .haptic-tap,
+body.force-reduced-motion .haptic-flash {
+  animation: none !important;
+}
+body.force-reduced-motion .btn.primary:active,
+body.force-reduced-motion .mode-chip:active,
+body.force-reduced-motion .layout-preset:active,
+body.force-reduced-motion .task-tab:active {
+  transform: none !important;
+}
+
+/* Settings checkbox row for motion */
+body.layout-v15 .field.check.fx-motion strong {
+  letter-spacing: 0.02em;
+}

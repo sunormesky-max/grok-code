@@ -48,12 +48,13 @@ Living plan for the GrokCode open-source ecosystem. Order may change based on co
 - [x] FX toggle · boot refresh · Diff filmstrip HUD parity (v1.5.6)
 - [x] Welcome/empty · toast/modal glass · haptic CSS (v1.5.7)
 - [x] Onboarding · settings sections · a11y motion docs (v1.5.8)
+- [x] MCP/Skills/Plugins panes · doctor cards · force reduce motion (v1.5.9)
 
 ## Now (UI / experience)
 
-- [ ] MCP / Skills / Plugins settings panes visual parity
-- [ ] Doctor results cards flight-deck polish
-- [ ] Optional “force reduced motion” settings toggle
+- [ ] Command palette flight-deck item rows
+- [ ] Global search overlay visual parity
+- [ ] Final visual QA pass / screenshot checklist
 
 ## Deferred (services — not now)
 

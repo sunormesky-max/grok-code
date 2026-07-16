@@ -11,6 +11,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 - See [ROADMAP.md](ROADMAP.md)
 
+## [1.5.9] — 2026-07-16
+
+### Visual impact 6 — mgmt panes · doctor · reduce motion
+
+- **MCP / Skills / Plugins / Catalog**: flight-deck toolbar, list, form, log chrome
+- **Doctor cards**: summary + item glow by ok/warn/bad
+- **Force reduce motion** in Appearance + Ctrl+K; `body.force-reduced-motion`
+- New `visual-impact-6.css`
+
 ## [1.5.8] — 2026-07-16
 
 ### Visual impact 5 — onboarding · settings · a11y docs
