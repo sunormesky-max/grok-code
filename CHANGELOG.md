@@ -11,6 +11,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 - See [ROADMAP.md](ROADMAP.md)
 
+## [1.9.2] — 2026-07-16
+
+### Core — multi-task stream fairness
+
+- **StreamFair scheduler**: active task ~60fps paint; background ~7fps; max 2 paints/frame; oldest-waiting fair order
+- **Focus catch-up**: switching tasks immediately flushes that task's stream/thought
+- **Tabs throttle** (~280ms) under multi-run; project strip rebuild only when ≥2 running
+- **Live noise control**: background tool events batched; tree refresh only for active writes
+- Task queue hint shows `N 并行 · 公平流` when multi-running
+
 ## [1.9.1] — 2026-07-16
 
 ### Core — stop / resume + turn markers

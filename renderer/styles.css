@@ -3881,6 +3881,11 @@ button.pill:hover {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+#taskQueueHint.multi-run {
+  color: #7dd3fc;
+  text-shadow: 0 0 10px rgba(125, 211, 252, 0.35);
+  letter-spacing: 0.04em;
+}
 .task-tab.phase-thinking .task-dot {
   background: #a78bfa;
   box-shadow: 0 0 8px rgba(167, 139, 250, 0.55);

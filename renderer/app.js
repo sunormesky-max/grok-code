@@ -1027,15 +1027,30 @@ function beginTaskRename(taskId) {
 function refreshTaskQueueHint() {
   const n = window.TaskStore.list().length;
   const r = window.TaskStore.countRunning();
+  const rAll = window.TaskStore.countRunningAll
+    ? window.TaskStore.countRunningAll()
+    : r;
   const pc = window.ProjectStore.count();
   const el = $('#taskQueueHint');
   if (el) {
-    el.textContent =
-      pc > 1
-        ? `${pc} projects · ${n} tasks`
-        : r > 0
-          ? `${n} tasks · ${r} running`
-          : `${n} tasks · multi`;
+    if (rAll > 1) {
+      el.textContent = localeIsEn()
+        ? `${rAll} running · fair stream`
+        : `${rAll} 并行 · 公平流`;
+      el.classList.add('multi-run');
+      el.title = localeIsEn()
+        ? 'Active task paints first; background streams throttled'
+        : '前台任务优先刷新；后台流降频，避免互相抢帧';
+    } else {
+      el.classList.remove('multi-run');
+      el.title = '';
+      el.textContent =
+        pc > 1
+          ? `${pc} projects · ${n} tasks`
+          : r > 0
+            ? `${n} tasks · ${r} running`
+            : `${n} tasks · multi`;
+    }
   }
 }
 
@@ -1048,15 +1063,20 @@ function switchTask(id) {
   syncComposerToTask(t);
   loadPromptDraft(t);
   renderContextTiers(t);
+  // Fairness: immediately catch up stream paint for focused task
+  if (t.running) StreamFair.flushTask(t);
   // 状态条反映当前任务
   if (t.running) {
-    setAgentStatus('grokking…', true);
+    const phase = taskPhaseLabel(t) || 'grokking…';
+    setAgentStatus(t.phaseDetail || phase, true);
+    setLivePhase(t.phaseDetail || phase, t.title);
     $('#elapsedTimer')?.classList.remove('hidden');
   } else {
     setAgentStatus('待命', false);
     $('#elapsedTimer')?.classList.add('hidden');
   }
   setRunningUi(t.running);
+  refreshTaskQueueHint();
   schedulePersist();
 }
 
@@ -7904,6 +7924,192 @@ function isActiveProjectId(projectId) {
   return Boolean(P() && P().id === projectId);
 }
 
+/** Multi-task fairness: active paints fast; background streams throttle */
+const StreamFair = {
+  ACTIVE_MS: 16,
+  BG_MS: 140,
+  TAB_MS: 280,
+  LIVE_BG_MS: 400,
+  MAX_PAINT_PER_TICK: 2,
+  /** @type {Map<string, { task: object, streamDirty: boolean, thoughtDirty: boolean, lastStream: number, lastThought: number }>} */
+  q: new Map(),
+  raf: 0,
+  lastTab: 0,
+  lastLiveBg: 0,
+  tabTimer: 0,
+
+  ensure(task) {
+    if (!task?.id) return null;
+    let e = this.q.get(task.id);
+    if (!e) {
+      e = {
+        task,
+        streamDirty: false,
+        thoughtDirty: false,
+        lastStream: 0,
+        lastThought: 0,
+      };
+      this.q.set(task.id, e);
+    } else {
+      e.task = task;
+    }
+    return e;
+  },
+
+  markStream(task) {
+    const e = this.ensure(task);
+    if (!e) return;
+    e.streamDirty = true;
+    this.kick();
+  },
+
+  markThought(task) {
+    const e = this.ensure(task);
+    if (!e) return;
+    e.thoughtDirty = true;
+    this.kick();
+  },
+
+  kick() {
+    if (this.raf) return;
+    this.raf = requestAnimationFrame(() => this.tick());
+  },
+
+  tick() {
+    this.raf = 0;
+    const now = performance.now();
+    const activeId = window.TaskStore?.activeId || null;
+    let painted = 0;
+
+    const entries = [...this.q.values()].sort((a, b) => {
+      const aA = a.task.id === activeId ? 0 : 1;
+      const bA = b.task.id === activeId ? 0 : 1;
+      if (aA !== bA) return aA - bA;
+      // Fair: longest-waiting first among same priority
+      const aWait = Math.min(
+        a.streamDirty ? a.lastStream : Infinity,
+        a.thoughtDirty ? a.lastThought : Infinity
+      );
+      const bWait = Math.min(
+        b.streamDirty ? b.lastStream : Infinity,
+        b.thoughtDirty ? b.lastThought : Infinity
+      );
+      return aWait - bWait;
+    });
+
+    let needMore = false;
+    for (const e of entries) {
+      if (!e.streamDirty && !e.thoughtDirty) continue;
+      if (!e.task.running && !e.streamDirty && !e.thoughtDirty) {
+        this.q.delete(e.task.id);
+        continue;
+      }
+      const active = e.task.id === activeId;
+      const minMs = active ? this.ACTIVE_MS : this.BG_MS;
+
+      if (e.streamDirty) {
+        if (now - e.lastStream < minMs) {
+          needMore = true;
+        } else if (painted < this.MAX_PAINT_PER_TICK || active) {
+          e.streamDirty = false;
+          e.lastStream = now;
+          if (e.task.streamRaf) {
+            cancelAnimationFrame(e.task.streamRaf);
+            e.task.streamRaf = null;
+          }
+          upsertAssistant(e.task.streamBuf, true, e.task);
+          painted += 1;
+        } else {
+          needMore = true;
+        }
+      }
+
+      if (e.thoughtDirty) {
+        if (now - e.lastThought < minMs) {
+          needMore = true;
+        } else if (painted < this.MAX_PAINT_PER_TICK + (active ? 1 : 0) || active) {
+          e.thoughtDirty = false;
+          e.lastThought = now;
+          if (e.task.thoughtRaf) {
+            cancelAnimationFrame(e.task.thoughtRaf);
+            e.task.thoughtRaf = null;
+          }
+          upsertThought(e.task.thoughtBuf, true, e.task);
+          painted += 1;
+        } else {
+          needMore = true;
+        }
+      }
+    }
+
+    // Drop idle entries
+    for (const [id, e] of this.q) {
+      if (!e.streamDirty && !e.thoughtDirty && !e.task.running) this.q.delete(id);
+    }
+
+    if (needMore || [...this.q.values()].some((e) => e.streamDirty || e.thoughtDirty)) {
+      this.kick();
+    }
+  },
+
+  /** Force immediate paint when user focuses a task */
+  flushTask(task) {
+    if (!task) return;
+    const e = this.q.get(task.id);
+    if (e) {
+      e.streamDirty = false;
+      e.thoughtDirty = false;
+      e.lastStream = 0;
+      e.lastThought = 0;
+    }
+    if (task.streamRaf) {
+      cancelAnimationFrame(task.streamRaf);
+      task.streamRaf = null;
+    }
+    if (task.thoughtRaf) {
+      cancelAnimationFrame(task.thoughtRaf);
+      task.thoughtRaf = null;
+    }
+    if (task.streamBuf) upsertAssistant(task.streamBuf, true, task);
+    if (task.thoughtBuf) upsertThought(task.thoughtBuf, true, task);
+  },
+
+  scheduleTabs() {
+    const now = performance.now();
+    const delay = Math.max(0, this.TAB_MS - (now - this.lastTab));
+    if (this.tabTimer) return;
+    this.tabTimer = setTimeout(() => {
+      this.tabTimer = 0;
+      this.lastTab = performance.now();
+      renderTaskTabs();
+      // Project strip only when multi-running (avoid constant rebuild)
+      if (window.TaskStore.countRunningAll() > 1) renderProjectTabs();
+    }, delay);
+  },
+
+  /** Background live events: batch into occasional summary */
+  pushLiveBg(kind, title, sub, projectId) {
+    const now = performance.now();
+    if (!this._bgLive) this._bgLive = [];
+    this._bgLive.push({ kind, title, sub, projectId, ts: now });
+    if (this._bgLive.length > 40) this._bgLive = this._bgLive.slice(-40);
+    if (now - this.lastLiveBg < this.LIVE_BG_MS) return;
+    this.lastLiveBg = now;
+    const batch = this._bgLive.splice(0, this._bgLive.length);
+    if (!batch.length) return;
+    const last = batch[batch.length - 1];
+    pushLiveEvent({
+      kind: last.kind || 'tool',
+      title:
+        batch.length > 1
+          ? `${batch.length} bg events · ${last.title}`
+          : last.title,
+      sub: last.sub,
+      projectId: last.projectId,
+    });
+  },
+};
+
 function setTaskPhase(task, phase, detail) {
   if (!task) return;
   const next = phase || 'running';
@@ -7911,12 +8117,7 @@ function setTaskPhase(task, phase, detail) {
   if (task.phase === next && task.phaseDetail === det) return;
   task.phase = next;
   task.phaseDetail = det;
-  // Coalesce tab re-renders during token flood
-  if (task._phaseTabRaf) return;
-  task._phaseTabRaf = requestAnimationFrame(() => {
-    task._phaseTabRaf = null;
-    renderTaskTabs();
-  });
+  StreamFair.scheduleTabs();
 }
 
 function formatUsageBrief(usage) {
@@ -7968,11 +8169,7 @@ function bindAgentEvents() {
       if (typeof d.text === 'string') task.thoughtBuf = d.text;
       else if (d.delta) task.thoughtBuf = (task.thoughtBuf || '') + d.delta;
       if (task.running) setTaskPhase(task, 'thinking', 'thinking…');
-      if (task.thoughtRaf) return;
-      task.thoughtRaf = requestAnimationFrame(() => {
-        task.thoughtRaf = null;
-        upsertThought(task.thoughtBuf, true, task);
-      });
+      scheduleThoughtPaint(task);
       if (isActiveTask(task) && task.running) {
         setLivePhase('thinking…', task.title);
       }
@@ -7980,58 +8177,76 @@ function bindAgentEvents() {
     window.grok.on('agent:tool_start', (d) => {
       const task = taskFromEvent(d);
       if (!task) return;
+      const active = isActiveTask(task);
       appendToolStart(d, task);
       task.toolCount += 1;
       setTaskPhase(task, 'tool', `${d.name || 'tool'}…`);
       const fpath = window.DiffUtil.extractPathFromTool(d.name, d.args || {});
       const write = window.DiffUtil.isWriteTool(d.name);
       if (write) task.writeCount = (task.writeCount || 0) + 1;
-      if (fpath && isActiveTask(task)) cacheFileBefore(fpath);
-      pushLiveEvent({
-        kind: write ? 'write' : 'tool',
-        title: `[${task.title}] ${d.name || 'tool'}`,
-        sub: fpath || summarizeToolSub(d.name, d.args),
-        running: true,
-        projectId: task.projectId,
-      });
-      if (isActiveTask(task)) {
+      if (fpath && active) cacheFileBefore(fpath);
+      const liveTitle = `[${task.title}] ${d.name || 'tool'}`;
+      const liveSub = fpath || summarizeToolSub(d.name, d.args);
+      if (active) {
+        pushLiveEvent({
+          kind: write ? 'write' : 'tool',
+          title: liveTitle,
+          sub: liveSub,
+          running: true,
+          projectId: task.projectId,
+        });
         setLivePhase(write ? 'writing…' : `${d.name || 'tool'}…`, fpath || task.title);
         if (fpath && state.followAgent) {
           setLiveFocus(fpath, contentCacheMap().get(fpath) || '');
         }
+        updateLiveStats();
+      } else {
+        // Background tasks: batch Live noise so active stream stays smooth
+        StreamFair.pushLiveBg(write ? 'write' : 'tool', liveTitle, liveSub, task.projectId);
       }
-      updateLiveStats();
-      renderTaskTabs();
-      renderProjectTabs();
+      StreamFair.scheduleTabs();
     }),
     window.grok.on('agent:tool_end', (d) => {
       const task = taskFromEvent(d);
       appendToolEnd(d, task);
+      const active = isActiveTask(task);
       const fpath = window.DiffUtil.extractPathFromTool(d.name, d.args || {});
       const proj = task ? window.ProjectStore.get(task.projectId) : null;
       if (fpath && window.DiffUtil.isWriteTool(d.name) && proj) {
         recordFileChangeForProject(proj, fpath, { reason: 'write' });
       } else if (fpath && window.DiffUtil.isReadTool(d.name)) {
-        if (isActiveTask(task)) {
+        if (active) {
           cacheFileBefore(fpath).then(() => {
             if (state.followAgent) openFile(fpath, { fromAgent: true, switchToCode: false });
           });
         }
-        pushLiveEvent({
-          kind: 'tool',
-          title: `已读 ${fpath}`,
-          sub: task ? task.title : d.name,
-          projectId: task?.projectId,
-        });
-      } else {
+        if (active) {
+          pushLiveEvent({
+            kind: 'tool',
+            title: `已读 ${fpath}`,
+            sub: task ? task.title : d.name,
+            projectId: task?.projectId,
+          });
+        } else {
+          StreamFair.pushLiveBg('tool', `已读 ${fpath}`, task?.title || d.name, task?.projectId);
+        }
+      } else if (active) {
         pushLiveEvent({
           kind: 'tool',
           title: `${d.name || 'tool'} 完成`,
           sub: fpath || (d.ok === false ? '可能失败' : 'ok'),
           projectId: task?.projectId,
         });
+      } else {
+        StreamFair.pushLiveBg(
+          'tool',
+          `${d.name || 'tool'} 完成`,
+          fpath || (d.ok === false ? '可能失败' : 'ok'),
+          task?.projectId
+        );
       }
-      if (isActiveTask(task)) scheduleTreeRefresh();
+      // Tree refresh only for active writes — bg writes still update Diff maps
+      if (active && window.DiffUtil.isWriteTool(d.name)) scheduleTreeRefresh();
     }),
     window.grok.on('agent:usage', (d) => {
       const task = taskFromEvent(d);
@@ -8145,30 +8360,25 @@ function summarizeToolSub(name, args = {}) {
 function scheduleStreamPaint(task) {
   task = task || T();
   if (!task) return;
-  if (task.streamRaf) return;
-  task.streamRaf = requestAnimationFrame(() => {
-    task.streamRaf = null;
-    upsertAssistant(task.streamBuf, true, task);
-  });
+  // Fair multi-task scheduler (active ~60fps, bg ~7fps, max 2 paints/frame)
+  StreamFair.markStream(task);
+}
+
+function scheduleThoughtPaint(task) {
+  task = task || T();
+  if (!task) return;
+  StreamFair.markThought(task);
 }
 
 function flushStreamPaint(task) {
   task = task || T();
   if (!task) return;
-  if (task.streamRaf) {
-    cancelAnimationFrame(task.streamRaf);
-    task.streamRaf = null;
-  }
-  if (task.thoughtRaf) {
-    cancelAnimationFrame(task.thoughtRaf);
-    task.thoughtRaf = null;
-  }
+  StreamFair.flushTask(task);
+  if (task.thoughtBuf) upsertThought(task.thoughtBuf, false, task);
   if (task._phaseTabRaf) {
     cancelAnimationFrame(task._phaseTabRaf);
     task._phaseTabRaf = null;
   }
-  if (task.streamBuf) upsertAssistant(task.streamBuf, true, task);
-  if (task.thoughtBuf) upsertThought(task.thoughtBuf, false, task);
 }
 
 let treeRefreshTimer = null;
