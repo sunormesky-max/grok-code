@@ -17,6 +17,7 @@
     { keys: ['Ctrl', 'F'], desc: t('help.chat.search', '搜索本任务消息') },
     { keys: ['j', 'k'], desc: t('help.diff.nav', 'Diff 下一切文件 / 上一切文件') },
     { keys: ['[', ']'], desc: t('help.diff.scrub', 'Diff 上一 / 下一 turn') },
+    { keys: ['Space'], desc: t('help.diff.play', 'Diff 播放 / 暂停 turn 时间轴') },
     { keys: ['a'], desc: t('help.diff.review', 'Diff 标记已审阅') },
     { keys: ['s'], desc: t('help.diff.sbs', 'Diff 切换并排视图') },
     { keys: ['Ctrl', 'P'], desc: t('help.files', '搜索文件') },

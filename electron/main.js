@@ -480,6 +480,57 @@ ipcMain.handle('projectRules:set', (_e, payload = {}) => {
   return modes.writeProjectRulesFile(projectPath, payload.content ?? '');
 });
 
+/** Project-scoped session templates: `.grok/templates.json` */
+function resolveProjectPath(payload = {}) {
+  let projectPath = payload.projectPath || null;
+  if (!projectPath && payload.projectId) {
+    const p = projects.get(payload.projectId);
+    projectPath = p?.path || null;
+  }
+  return projectPath;
+}
+
+ipcMain.handle('projectTemplates:get', (_e, payload = {}) => {
+  const projectPath = resolveProjectPath(payload);
+  if (!projectPath) return { templates: [], file: null, exists: false };
+  const file = path.join(projectPath, '.grok', 'templates.json');
+  if (!fs.existsSync(file)) return { templates: [], file, exists: false };
+  try {
+    const data = JSON.parse(fs.readFileSync(file, 'utf8'));
+    const list = Array.isArray(data) ? data : data.templates || [];
+    const templates = list
+      .filter((t) => t && (t.prompt || t.promptZh || t.promptEn))
+      .map((t, i) => ({
+        id: String(t.id || `proj-${i}`).slice(0, 64),
+        labelZh: t.labelZh || t.label || t.labelEn || t.id || `项目模板 ${i + 1}`,
+        labelEn: t.labelEn || t.label || t.labelZh || t.id || `Project ${i + 1}`,
+        promptZh: t.promptZh || t.prompt || t.promptEn || '',
+        promptEn: t.promptEn || t.prompt || t.promptZh || '',
+        tags: Array.isArray(t.tags) ? t.tags : [],
+      }));
+    return { templates, file, exists: true };
+  } catch (err) {
+    return { templates: [], file, exists: true, error: err.message };
+  }
+});
+
+ipcMain.handle('projectTemplates:set', (_e, payload = {}) => {
+  const projectPath = resolveProjectPath(payload);
+  if (!projectPath) throw new Error('需要打开项目');
+  const dir = path.join(projectPath, '.grok');
+  fs.mkdirSync(dir, { recursive: true });
+  const file = path.join(dir, 'templates.json');
+  const templates = Array.isArray(payload.templates) ? payload.templates : [];
+  const pack = {
+    format: 'grokcode-templates-v1',
+    scope: 'project',
+    updatedAt: new Date().toISOString(),
+    templates,
+  };
+  fs.writeFileSync(file, JSON.stringify(pack, null, 2), 'utf8');
+  return { ok: true, file };
+});
+
 /** Save base64 image into workspace `.grok/paste/` */
 ipcMain.handle('paste:saveImage', (_e, payload = {}) => {
   const p = payload.projectId ? projects.get(payload.projectId) : null;

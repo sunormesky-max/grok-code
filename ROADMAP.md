@@ -29,12 +29,13 @@ Living plan for the GrokCode open-source ecosystem. Order may change based on co
 - [x] Template import/export + local sync · blame heat · whole-turn restore
 - [x] Turn scrubber · template tags/search · heat legend · encrypted packs (v1.4.0)
 - [x] Scrub persist · [ ] keys · template favorites (v1.4.1)
+- [x] Diff play scrub · welcome ★ · `.grok/templates.json` (v1.4.2)
 
 ## Next
 
-- [ ] Diff “play” auto-scrub through turns
-- [ ] Favorite templates on welcome row first
-- [ ] Project-scoped template overrides (`.grok/templates.json`)
+- [ ] Scrub playback speed control (0.5x–2x)
+- [ ] Open/edit project templates.json in Code
+- [ ] Template “apply & send” one-click from welcome
 - [ ] Optional true cloud template vault (accounted service)
 
 ## Later

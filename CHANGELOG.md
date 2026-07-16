@@ -11,6 +11,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 - See [ROADMAP.md](ROADMAP.md)
 
+## [1.4.2] — 2026-07-16
+
+### Play scrub · project templates
+
+- **Diff play**: ▶ / Space auto-scrubs through agent turns (ends on Live)
+- **Welcome favorites**: ★ section first on empty task
+- **Project templates**: load/merge `.grok/templates.json`; save current prompt into project pack
+
 ## [1.4.1] — 2026-07-16
 
 ### Scrub persistence · favorites
