@@ -11,6 +11,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 - See [ROADMAP.md](ROADMAP.md)
 
+## [1.4.0] — 2026-07-16
+
+### Review cockpit
+
+- **Turn timeline scrubber**: scrub across all Diff files by agent turn; dim untouched files; range + ticks
+- **Template tags + search**: tags on starters; search box + #tag chips in template menu
+- **Heat legend toggle**: Diff toolbar show/hide heat 0–4 legend
+- **Encrypted template pack**: AES-GCM + PBKDF2 passphrase export/import (portable “remote-ready” sealed pack)
+
 ## [1.3.9] — 2026-07-16
 
 ### Templates marketplace-lite · heat · whole-turn

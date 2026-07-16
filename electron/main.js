@@ -1167,6 +1167,14 @@ ipcMain.handle('template:importPack', async (e) => {
   try {
     const raw = fs.readFileSync(open.filePaths[0], 'utf8');
     const data = JSON.parse(raw);
+    if (data?.format === 'grokcode-templates-aes-v1') {
+      return {
+        ok: false,
+        error: '这是加密包，请用「导入加密包」',
+        encrypted: true,
+        file: open.filePaths[0],
+      };
+    }
     const list = Array.isArray(data) ? data : Array.isArray(data.templates) ? data.templates : null;
     if (!list) return { ok: false, error: 'JSON 需为数组或 { templates: [] }' };
     const normalized = list
@@ -1177,8 +1185,26 @@ ipcMain.handle('template:importPack', async (e) => {
         labelEn: t.labelEn || t.label || t.labelZh || t.id || `Template ${i + 1}`,
         promptZh: t.promptZh || t.prompt || t.promptEn || '',
         promptEn: t.promptEn || t.prompt || t.promptZh || '',
+        tags: Array.isArray(t.tags) ? t.tags : [],
       }));
     return { ok: true, templates: normalized, file: open.filePaths[0] };
+  } catch (err) {
+    return { ok: false, error: err.message || String(err) };
+  }
+});
+
+ipcMain.handle('template:importRaw', async (e) => {
+  const win = BrowserWindow.fromWebContents(e.sender);
+  const open = await dialog.showOpenDialog(win, {
+    title: '导入 GrokCode 模板包（支持加密）',
+    properties: ['openFile'],
+    filters: [{ name: 'JSON', extensions: ['json'] }],
+  });
+  if (open.canceled || !open.filePaths[0]) return { ok: false, canceled: true };
+  try {
+    const raw = fs.readFileSync(open.filePaths[0], 'utf8');
+    const data = JSON.parse(raw);
+    return { ok: true, data, file: open.filePaths[0] };
   } catch (err) {
     return { ok: false, error: err.message || String(err) };
   }

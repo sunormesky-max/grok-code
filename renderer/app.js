@@ -66,6 +66,10 @@ const state = {
   attachments: [],
   /** play chime when background task finishes */
   notifySound: loadJson('grokcode-notify-sound', true) !== false,
+  /** show blame heat legend in Diff */
+  diffHeatLegend: loadJson('grokcode-diff-heat-legend', true) !== false,
+  /** global turn scrubber key (turnId or ts-*) or null */
+  diffScrubTurn: null,
 };
 
 /** 当前激活任务 */
@@ -1142,6 +1146,18 @@ function setUserTemplates(list) {
   saveJson(USER_TEMPLATES_KEY, (list || []).slice(-80));
 }
 
+function normalizeTags(tags) {
+  if (Array.isArray(tags)) return tags.map((x) => String(x).trim().toLowerCase()).filter(Boolean).slice(0, 12);
+  if (typeof tags === 'string') {
+    return tags
+      .split(/[,，\s]+/)
+      .map((x) => x.trim().toLowerCase())
+      .filter(Boolean)
+      .slice(0, 12);
+  }
+  return [];
+}
+
 function mergeImportedTemplates(incoming, { replace = false } = {}) {
   const custom = replace ? [] : getUserTemplates();
   const map = new Map(custom.map((t) => [t.id, t]));
@@ -1154,11 +1170,17 @@ function mergeImportedTemplates(incoming, { replace = false } = {}) {
       labelEn: t.labelEn || t.labelZh || t.id,
       promptZh: t.promptZh || t.prompt || t.promptEn || '',
       promptEn: t.promptEn || t.prompt || t.promptZh || '',
+      tags: normalizeTags(t.tags),
     });
     n += 1;
   }
   setUserTemplates([...map.values()]);
   return n;
+}
+
+function templateSearchHay(t, en) {
+  const tags = normalizeTags(t.tags).join(' ');
+  return `${t.id} ${t.labelZh || ''} ${t.labelEn || ''} ${tags} ${templatePrompt(t, en)}`.toLowerCase();
 }
 
 async function exportTemplatesPack() {
@@ -1231,6 +1253,34 @@ async function pullTemplatesSync() {
   }
 }
 
+function renderTemplateListItems(list, en, query) {
+  const q = String(query || '')
+    .trim()
+    .toLowerCase();
+  const filtered = !q
+    ? list
+    : list.filter((t) => templateSearchHay(t, en).includes(q) || normalizeTags(t.tags).some((tag) => tag.includes(q)));
+  if (!filtered.length) {
+    return `<div class="slash-desc" style="padding:10px">${en ? 'No matches' : '无匹配模板'}</div>`;
+  }
+  return filtered
+    .map((t) => {
+      const tags = normalizeTags(t.tags);
+      return `<button type="button" class="slash-item" data-id="${esc(t.id)}">
+        <span class="slash-label">${esc(en ? t.labelEn || t.id : t.labelZh || t.id)}${
+          t.source === 'user' ? ' · user' : ''
+        }</span>
+        ${
+          tags.length
+            ? `<span class="tpl-tags">${tags.map((tag) => `<em class="tpl-tag">${esc(tag)}</em>`).join('')}</span>`
+            : ''
+        }
+        <span class="slash-desc">${esc(templatePrompt(t, en).slice(0, 90))}</span>
+      </button>`;
+    })
+    .join('');
+}
+
 async function openTemplatesMenu() {
   const list = await loadSessionTemplates();
   const en = localeIsEn();
@@ -1247,43 +1297,73 @@ async function openTemplatesMenu() {
     menu.className = 'slash-menu templates-menu';
     document.body.appendChild(menu);
   }
-  menu.innerHTML =
-    `<div class="slash-head">${en ? 'Session templates' : '会话模板'}</div>` +
-    list
-      .map(
-        (t) =>
-          `<button type="button" class="slash-item" data-id="${esc(t.id)}">
-            <span class="slash-label">${esc(en ? t.labelEn || t.id : t.labelZh || t.id)}${
-              t.source === 'user' ? ' · user' : ''
-            }</span>
-            <span class="slash-desc">${esc(templatePrompt(t, en).slice(0, 90))}</span>
-          </button>`
-      )
-      .join('') +
-    `<div class="slash-head">${en ? 'Pack / sync' : '包 / 同步'}</div>` +
-    `<button type="button" class="slash-item" data-act="custom"><span class="slash-label">${en ? '+ Save current as template' : '+ 将当前输入存为模板'}</span></button>` +
-    `<button type="button" class="slash-item" data-act="export"><span class="slash-label">${en ? 'Export JSON pack' : '导出 JSON 包'}</span></button>` +
-    `<button type="button" class="slash-item" data-act="import"><span class="slash-label">${en ? 'Import JSON pack' : '导入 JSON 包'}</span></button>` +
-    `<button type="button" class="slash-item" data-act="sync-dir"><span class="slash-label">${en ? 'Set sync folder…' : '设置同步目录…'}</span><span class="slash-desc">${esc(syncDir || (en ? 'OneDrive / Dropbox / local' : '网盘或本地文件夹'))}</span></button>` +
-    `<button type="button" class="slash-item" data-act="sync-push"><span class="slash-label">${en ? 'Push to sync folder' : '推送到同步目录'}</span></button>` +
-    `<button type="button" class="slash-item" data-act="sync-pull"><span class="slash-label">${en ? 'Pull from sync folder' : '从同步目录拉取'}</span></button>`;
+  const allTags = [
+    ...new Set(list.flatMap((t) => normalizeTags(t.tags))),
+  ].sort();
+  menu.innerHTML = `
+    <div class="slash-head">${en ? 'Session templates' : '会话模板'}</div>
+    <div class="tpl-search-row">
+      <input type="search" id="tplSearch" class="tpl-search" placeholder="${en ? 'Search name / tag / prompt…' : '搜索 名称 / 标签 / 内容…'}" autocomplete="off" />
+    </div>
+    ${
+      allTags.length
+        ? `<div class="tpl-tag-bar">${allTags
+            .map((tag) => `<button type="button" class="tpl-tag-btn" data-tag="${esc(tag)}">#${esc(tag)}</button>`)
+            .join('')}</div>`
+        : ''
+    }
+    <div id="tplListHost">${renderTemplateListItems(list, en, '')}</div>
+    <div class="slash-head">${en ? 'Pack / sync' : '包 / 同步'}</div>
+    <button type="button" class="slash-item" data-act="custom"><span class="slash-label">${en ? '+ Save current as template' : '+ 将当前输入存为模板'}</span></button>
+    <button type="button" class="slash-item" data-act="export"><span class="slash-label">${en ? 'Export JSON pack' : '导出 JSON 包'}</span></button>
+    <button type="button" class="slash-item" data-act="import"><span class="slash-label">${en ? 'Import JSON pack' : '导入 JSON 包'}</span></button>
+    <button type="button" class="slash-item" data-act="export-enc"><span class="slash-label">${en ? 'Export encrypted pack…' : '导出加密包…'}</span><span class="slash-desc">${en ? 'AES-GCM + passphrase' : 'AES-GCM 口令加密'}</span></button>
+    <button type="button" class="slash-item" data-act="import-enc"><span class="slash-label">${en ? 'Import encrypted pack…' : '导入加密包…'}</span></button>
+    <button type="button" class="slash-item" data-act="sync-dir"><span class="slash-label">${en ? 'Set sync folder…' : '设置同步目录…'}</span><span class="slash-desc">${esc(syncDir || (en ? 'OneDrive / Dropbox / local' : '网盘或本地文件夹'))}</span></button>
+    <button type="button" class="slash-item" data-act="sync-push"><span class="slash-label">${en ? 'Push to sync folder' : '推送到同步目录'}</span></button>
+    <button type="button" class="slash-item" data-act="sync-pull"><span class="slash-label">${en ? 'Pull from sync folder' : '从同步目录拉取'}</span></button>`;
   const ta = document.getElementById('prompt');
   const rect = ta?.getBoundingClientRect() || { left: 40, top: window.innerHeight - 120, width: 360 };
   menu.style.left = `${Math.max(8, rect.left)}px`;
   menu.style.bottom = `${window.innerHeight - rect.top + 6}px`;
-  menu.style.width = `${Math.min(440, Math.max(320, rect.width || 360))}px`;
+  menu.style.width = `${Math.min(460, Math.max(340, rect.width || 360))}px`;
   menu.classList.remove('hidden');
-  menu.querySelectorAll('.slash-item[data-id]').forEach((btn) => {
-    btn.onclick = () => {
-      const t = list.find((x) => x.id === btn.dataset.id);
-      menu.classList.add('hidden');
-      applySessionTemplate(t);
+
+  const host = menu.querySelector('#tplListHost');
+  const search = menu.querySelector('#tplSearch');
+  const bindListClicks = () => {
+    host.querySelectorAll('.slash-item[data-id]').forEach((btn) => {
+      btn.onclick = () => {
+        const t = list.find((x) => x.id === btn.dataset.id);
+        menu.classList.add('hidden');
+        applySessionTemplate(t);
+      };
+    });
+  };
+  const refreshList = (q) => {
+    host.innerHTML = renderTemplateListItems(list, en, q);
+    bindListClicks();
+  };
+  bindListClicks();
+  search?.addEventListener('input', () => refreshList(search.value));
+  search?.addEventListener('keydown', (e) => e.stopPropagation());
+  menu.querySelectorAll('.tpl-tag-btn').forEach((btn) => {
+    btn.onclick = (e) => {
+      e.stopPropagation();
+      if (search) {
+        search.value = btn.dataset.tag || '';
+        refreshList(search.value);
+        search.focus();
+      }
     };
   });
+
   const acts = {
     custom: () => saveCurrentAsTemplate(),
     export: () => exportTemplatesPack(),
     import: () => importTemplatesPack(),
+    'export-enc': () => exportTemplatesEncrypted(),
+    'import-enc': () => importTemplatesEncrypted(),
     'sync-dir': async () => {
       const r = await window.grok.templatePickSyncDir();
       if (r?.ok) toast((en ? 'Sync dir: ' : '同步目录：') + r.dir, 'ok');
@@ -1305,6 +1385,7 @@ async function openTemplatesMenu() {
     }
   };
   setTimeout(() => document.addEventListener('click', onDoc), 0);
+  search?.focus();
 }
 
 function saveCurrentAsTemplate() {
@@ -1316,6 +1397,7 @@ function saveCurrentAsTemplate() {
   const en = localeIsEn();
   const label = prompt(en ? 'Template name' : '模板名称', text.slice(0, 16));
   if (!label) return;
+  const tagsRaw = prompt(en ? 'Tags (comma-separated, optional)' : '标签（逗号分隔，可选）', '');
   const id =
     'user-' +
     String(label)
@@ -1331,14 +1413,127 @@ function saveCurrentAsTemplate() {
     labelEn: label,
     promptZh: text,
     promptEn: text,
+    tags: normalizeTags(tagsRaw || ''),
   });
   setUserTemplates(custom);
   toast(en ? `Saved template: ${label}` : `已保存模板：${label}`, 'ok');
+}
+
+// ── Encrypted template pack (AES-GCM + PBKDF2) ──────────
+function b64FromBytes(buf) {
+  let s = '';
+  const bytes = new Uint8Array(buf);
+  for (let i = 0; i < bytes.length; i++) s += String.fromCharCode(bytes[i]);
+  return btoa(s);
+}
+function bytesFromB64(b64) {
+  const s = atob(b64);
+  const out = new Uint8Array(s.length);
+  for (let i = 0; i < s.length; i++) out[i] = s.charCodeAt(i);
+  return out;
+}
+
+async function deriveTemplateKey(passphrase, salt) {
+  const enc = new TextEncoder();
+  const base = await crypto.subtle.importKey('raw', enc.encode(passphrase), 'PBKDF2', false, [
+    'deriveKey',
+  ]);
+  return crypto.subtle.deriveKey(
+    { name: 'PBKDF2', salt, iterations: 120000, hash: 'SHA-256' },
+    base,
+    { name: 'AES-GCM', length: 256 },
+    false,
+    ['encrypt', 'decrypt']
+  );
+}
+
+async function encryptTemplatesPayload(jsonStr, passphrase) {
+  const salt = crypto.getRandomValues(new Uint8Array(16));
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const key = await deriveTemplateKey(passphrase, salt);
+  const ct = await crypto.subtle.encrypt(
+    { name: 'AES-GCM', iv },
+    key,
+    new TextEncoder().encode(jsonStr)
+  );
+  return {
+    format: 'grokcode-templates-aes-v1',
+    kdf: 'PBKDF2-SHA256-120k',
+    cipher: 'AES-256-GCM',
+    salt: b64FromBytes(salt),
+    iv: b64FromBytes(iv),
+    data: b64FromBytes(ct),
+    exportedAt: new Date().toISOString(),
+  };
+}
+
+async function decryptTemplatesPayload(pack, passphrase) {
+  if (!pack || pack.format !== 'grokcode-templates-aes-v1') {
+    throw new Error('Not an encrypted GrokCode template pack');
+  }
+  const salt = bytesFromB64(pack.salt);
+  const iv = bytesFromB64(pack.iv);
+  const key = await deriveTemplateKey(passphrase, salt);
+  const pt = await crypto.subtle.decrypt(
+    { name: 'AES-GCM', iv },
+    key,
+    bytesFromB64(pack.data)
+  );
+  return new TextDecoder().decode(pt);
+}
+
+async function exportTemplatesEncrypted() {
+  const en = localeIsEn();
+  const pass = prompt(en ? 'Passphrase for encrypted pack' : '加密包口令');
+  if (!pass) return;
+  const user = getUserTemplates();
+  const packPlain = {
+    format: 'grokcode-templates-v1',
+    exportedAt: new Date().toISOString(),
+    templates: user,
+  };
+  try {
+    const sealed = await encryptTemplatesPayload(JSON.stringify(packPlain), pass);
+    const r = await window.grok.templateExportPack({
+      json: JSON.stringify(sealed, null, 2),
+    });
+    if (r?.canceled) return;
+    if (r?.ok) toast((en ? 'Encrypted export: ' : '已加密导出：') + (r.file || ''), 'ok');
+    else toast(r?.error || 'export failed', 'err');
+  } catch (e) {
+    toast(e.message || 'encrypt failed', 'err');
+  }
+}
+
+async function importTemplatesEncrypted() {
+  const en = localeIsEn();
+  try {
+    const raw = await window.grok.templateImportRaw();
+    if (raw?.canceled) return;
+    if (!raw?.ok) {
+      toast(raw?.error || 'import failed', 'err');
+      return;
+    }
+    let data = raw.data;
+    if (data?.format === 'grokcode-templates-aes-v1') {
+      const pass = prompt(en ? 'Passphrase' : '口令');
+      if (!pass) return;
+      const json = await decryptTemplatesPayload(data, pass);
+      data = JSON.parse(json);
+    }
+    const list = Array.isArray(data) ? data : data.templates || [];
+    const n = mergeImportedTemplates(list);
+    toast(en ? `Imported ${n} templates` : `已导入 ${n} 个模板`, 'ok');
+  } catch (e) {
+    toast(e.message || 'decrypt/import failed', 'err');
+  }
 }
 window.openTemplatesMenu = openTemplatesMenu;
 window.applySessionTemplate = applySessionTemplate;
 window.exportTemplatesPack = exportTemplatesPack;
 window.importTemplatesPack = importTemplatesPack;
+window.exportTemplatesEncrypted = exportTemplatesEncrypted;
+window.importTemplatesEncrypted = importTemplatesEncrypted;
 
 // ── Welcome ─────────────────────────────────────────────
 async function showWelcome(box) {
@@ -3649,6 +3844,110 @@ function sortedDiffItems() {
   return [...changesMap().entries()].sort((a, b) => (b[1].ts || 0) - (a[1].ts || 0));
 }
 
+/** Collect agent turns across all Diff files for the scrubber */
+function collectGlobalTurns() {
+  const map = new Map();
+  for (const [filePath, e] of changesMap()) {
+    const cps = e.checkpoints || [];
+    for (let i = 0; i < cps.length; i++) {
+      const cp = cps[i];
+      const key = cp.turnId || `ts-${cp.ts || i}`;
+      if (!map.has(key)) {
+        map.set(key, {
+          key,
+          turnId: cp.turnId || null,
+          ts: cp.ts || 0,
+          taskTitle: cp.taskTitle || '',
+          prompt: cp.prompt || '',
+          files: new Set(),
+        });
+      }
+      const g = map.get(key);
+      g.files.add(filePath);
+      if ((cp.ts || 0) > (g.ts || 0)) {
+        g.ts = cp.ts;
+        g.taskTitle = cp.taskTitle || g.taskTitle;
+        g.prompt = cp.prompt || g.prompt;
+      }
+    }
+  }
+  return [...map.values()].sort((a, b) => (a.ts || 0) - (b.ts || 0));
+}
+
+function turnKeyOfCheckpoint(cp, fallbackIdx = 0) {
+  if (!cp) return null;
+  return cp.turnId || `ts-${cp.ts || fallbackIdx}`;
+}
+
+/** Scrub all files to checkpoints matching turn key */
+function scrubToTurn(turnKey) {
+  state.diffScrubTurn = turnKey || null;
+  if (!turnKey) {
+    for (const [, e] of changesMap()) {
+      e.viewCheckpoint = -1;
+      e.compareA = null;
+      e.compareB = null;
+    }
+    renderDiffPane();
+    return;
+  }
+  let firstPath = null;
+  for (const [filePath, e] of changesMap()) {
+    const cps = e.checkpoints || [];
+    const idx = cps.findIndex((c, i) => turnKeyOfCheckpoint(c, i) === turnKey);
+    if (idx >= 0) {
+      e.viewCheckpoint = idx;
+      e.compareA = null;
+      e.compareB = null;
+      if (!firstPath) firstPath = filePath;
+    }
+  }
+  if (firstPath && (!P()?.selectedDiffPath || !fileHasTurn(P().selectedDiffPath, turnKey))) {
+    requireProject().selectedDiffPath = firstPath;
+  }
+  renderDiffPane();
+}
+
+function fileHasTurn(filePath, turnKey) {
+  if (!turnKey || !filePath) return true;
+  const e = changesMap().get(filePath);
+  if (!e) return false;
+  return (e.checkpoints || []).some((c, i) => turnKeyOfCheckpoint(c, i) === turnKey);
+}
+
+function scrubberHtml(turns) {
+  if (!turns.length) return '';
+  const en = localeIsEn();
+  const cur = state.diffScrubTurn;
+  const idx = cur ? turns.findIndex((t) => t.key === cur) : -1;
+  return `<div class="diff-scrub-bar" id="diffScrubBar">
+    <span class="diff-scrub-label">Turn timeline</span>
+    <button type="button" class="diff-cp-chip${!cur ? ' active' : ''}" data-scrub="">${en ? 'All / Live' : '全部 / Live'}</button>
+    <input type="range" id="diffScrubRange" min="0" max="${Math.max(0, turns.length - 1)}" value="${idx >= 0 ? idx : turns.length - 1}" ${turns.length < 2 ? 'disabled' : ''} />
+    <div class="diff-scrub-ticks">
+      ${turns
+        .map((t, i) => {
+          const label = t.ts ? new Date(t.ts).toLocaleTimeString() : `#${i + 1}`;
+          const n = t.files?.size || 0;
+          return `<button type="button" class="diff-scrub-tick${cur === t.key ? ' active' : ''}" data-scrub="${esc(t.key)}" title="${esc(t.taskTitle || '')} · ${n} files · ${esc(String(t.prompt || '').slice(0, 80))}">${esc(label)}<small>${n}f</small></button>`;
+        })
+        .join('')}
+    </div>
+  </div>`;
+}
+
+function heatLegendHtml() {
+  if (!state.diffHeatLegend) return '';
+  return `<div class="diff-heat-legend" id="diffHeatLegend">
+    <span class="dhl-label">Heat</span>
+    <span class="dhl-swatch heat-0" title="old">0</span>
+    <span class="dhl-swatch heat-1">1</span>
+    <span class="dhl-swatch heat-2">2</span>
+    <span class="dhl-swatch heat-3">3</span>
+    <span class="dhl-swatch heat-4" title="fresh">&lt;2m</span>
+  </div>`;
+}
+
 /** Keep last N content snapshots for Diff turn replay */
 function pushFileCheckpoint(entry, meta = {}) {
   if (!entry) return;
@@ -3897,24 +4196,29 @@ function renderDiffPane() {
   multiBar?.classList.remove('hidden');
   updateDiffMultiBar();
 
+  const scrubTurn = state.diffScrubTurn;
   body.innerHTML = items
     .map(([p, c]) => {
       const active = p === (P() && P().selectedDiffPath) ? ' active' : '';
       const restored = c.restored ? ' restored' : '';
       const reviewed = c.reviewed && !c.restored ? ' reviewed' : '';
       const checked = state.diffSelected.has(p) ? ' checked' : '';
+      const inScrub = scrubTurn ? fileHasTurn(p, scrubTurn) : true;
+      const dim = scrubTurn && !inScrub ? ' dim' : '';
       const name = p.split('/').pop();
       const meta = c.restored
         ? '已还原'
         : c.reviewed
           ? '已审阅'
           : `<span class="a">+${c.stats?.adds ?? 0}</span> <span class="d">-${c.stats?.dels ?? 0}</span>`;
-      return `<div class="diff-file${active}${restored}${reviewed}" data-path="${esc(p)}">
+      return `<div class="diff-file${active}${restored}${reviewed}${dim}" data-path="${esc(p)}">
         <label class="df-check" title="多选">
           <input type="checkbox" data-path="${esc(p)}"${checked} />
         </label>
         <button type="button" class="df-main" data-path="${esc(p)}" title="${esc(p)}">
-          <span class="df-path">${esc(name)}${c.reviewed && !c.restored ? ' <em class="df-badge">OK</em>' : ''}</span>
+          <span class="df-path">${esc(name)}${c.reviewed && !c.restored ? ' <em class="df-badge">OK</em>' : ''}${
+            inScrub && scrubTurn ? ' <em class="df-badge turn">T</em>' : ''
+          }</span>
           <span class="df-meta">${meta}</span>
         </button>
       </div>`;
@@ -4067,7 +4371,9 @@ function renderDiffPane() {
     $('#diffStats').innerHTML = bits2.join(' ');
   }
 
+  const globalTurns = collectGlobalTurns();
   content.innerHTML =
+    scrubberHtml(globalTurns) +
     banner +
     cpBar +
     `<div class="diff-hunk-toolbar">
@@ -4079,11 +4385,31 @@ function renderDiffPane() {
       <button type="button" class="link-btn" data-diff-act="collapse">全部折叠</button>`
           : ''
       }
+      <button type="button" class="link-btn${state.diffHeatLegend ? ' active-view' : ''}" data-diff-act="heat-legend">${localeIsEn() ? 'Heat legend' : '热力图例'}</button>
       <span class="muted" style="font-size:11px"><kbd>j</kbd>/<kbd>k</kbd> 文件 · <kbd>a</kbd> 审阅 · <kbd>s</kbd> 切换视图</span>
     </div>` +
+    heatLegendHtml() +
     bodyHtml;
 
   bindDiffBlameTooltips(content, blame);
+
+  // turn scrubber
+  content.querySelectorAll('[data-scrub]').forEach((btn) => {
+    btn.onclick = () => scrubToTurn(btn.dataset.scrub || null);
+  });
+  const range = content.querySelector('#diffScrubRange');
+  if (range && globalTurns.length) {
+    range.oninput = () => {
+      const i = Number(range.value);
+      const t = globalTurns[i];
+      if (t) scrubToTurn(t.key);
+    };
+  }
+  content.querySelector('[data-diff-act="heat-legend"]')?.addEventListener('click', () => {
+    state.diffHeatLegend = !state.diffHeatLegend;
+    saveJson('grokcode-diff-heat-legend', state.diffHeatLegend);
+    renderDiffPane();
+  });
 
   // init compare selects
   const selA = content.querySelector('#cpCompareA');

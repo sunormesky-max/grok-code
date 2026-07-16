@@ -3,6 +3,7 @@
     "id": "scout",
     "labelZh": "洞察项目",
     "labelEn": "Scout",
+    "tags": ["explore", "overview", "onboarding"],
     "promptZh": "用中文、带点锐气地总结这个项目：结构、技术栈、槽点与优先改进方向。",
     "promptEn": "Summarize this project: structure, stack, rough edges, and top improvements — be sharp."
   },
@@ -10,6 +11,7 @@
     "id": "review",
     "labelZh": "挑刺",
     "labelEn": "Review",
+    "tags": ["quality", "security", "review"],
     "promptZh": "像 code review 一样找明显 bug、边界问题和安全隐患，直接说人话，按严重度排序。",
     "promptEn": "Code-review for bugs, edge cases, and security issues. Straight talk, severity ordered."
   },
@@ -17,6 +19,7 @@
     "id": "readme",
     "labelZh": "写 README",
     "labelEn": "README",
+    "tags": ["docs", "write"],
     "promptZh": "为项目写一份简洁有态度的 README.md（中文），含：它是什么、怎么跑、关键目录。",
     "promptEn": "Write a concise, opinionated README.md: what it is, how to run, key directories."
   },
@@ -24,6 +27,7 @@
     "id": "green",
     "labelZh": "修到绿",
     "labelEn": "Go green",
+    "tags": ["test", "fix", "ci"],
     "promptZh": "运行测试或构建，修掉失败项，别废话，改完做必要自检。",
     "promptEn": "Run tests or build, fix failures, no fluff, then self-check."
   },
@@ -31,6 +35,7 @@
     "id": "ship",
     "labelZh": "落地一改",
     "labelEn": "Ship one",
+    "tags": ["implement", "craft", "feature"],
     "promptZh": "选一个高收益改进点，端到端实现它，保持 diff 聚焦。",
     "promptEn": "Pick one high-impact improvement and implement it end-to-end with a focused diff."
   },
@@ -38,6 +43,7 @@
     "id": "explain",
     "labelZh": "讲清楚",
     "labelEn": "Explain",
+    "tags": ["docs", "explore", "architecture"],
     "promptZh": "用简洁中文解释当前仓库的核心数据流与模块边界，配一张文字 mermaid 也可。",
     "promptEn": "Explain core data flow and module boundaries; a small mermaid diagram is fine."
   },
@@ -45,6 +51,7 @@
     "id": "debt",
     "labelZh": "技术债",
     "labelEn": "Debt map",
+    "tags": ["plan", "quality", "refactor"],
     "promptZh": "列出 Top 5 技术债与对应最小修复 PR 切法（文件范围 + 验收）。",
     "promptEn": "List top 5 tech debts with minimal PR slices (files + acceptance)."
   },
@@ -52,6 +59,7 @@
     "id": "tests",
     "labelZh": "补测试",
     "labelEn": "Add tests",
+    "tags": ["test", "quality"],
     "promptZh": "为最关键路径补关键测试（单元或 smoke），先找现有测试风格再动手。",
     "promptEn": "Add critical-path tests matching existing style (unit or smoke)."
   }

@@ -12,6 +12,7 @@ contextBridge.exposeInMainWorld('grok', {
 
   templateExportPack: (payload) => ipcRenderer.invoke('template:exportPack', payload || {}),
   templateImportPack: () => ipcRenderer.invoke('template:importPack'),
+  templateImportRaw: () => ipcRenderer.invoke('template:importRaw'),
   templatePickSyncDir: () => ipcRenderer.invoke('template:pickSyncDir'),
   templateGetSyncDir: () => ipcRenderer.invoke('template:getSyncDir'),
   templateSyncPush: (payload) => ipcRenderer.invoke('template:syncPush', payload || {}),

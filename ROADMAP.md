@@ -27,13 +27,14 @@ Living plan for the GrokCode open-source ecosystem. Order may change based on co
 - [x] Diff checkpoints · drag-drop attach · .grok/rules.md · quiet hours
 - [x] Rules open in Code · A→B checkpoint compare · paste→.grok/paste · templates pack
 - [x] Template import/export + local sync · blame heat · whole-turn restore
+- [x] Turn scrubber · template tags/search · heat legend · encrypted packs (v1.4.0)
 
 ## Next
 
-- [ ] Timeline scrubber across all Diff files for one turn
-- [ ] Template tags / search in menu
-- [ ] Heat legend toggle in Diff toolbar
-- [ ] Optional encrypted remote template sync (true cloud)
+- [ ] Persist Diff scrub selection per project session
+- [ ] Keyboard [ ] for previous/next turn on scrubber
+- [ ] Template favorites / pin
+- [ ] Optional true cloud template vault (accounted service)
 
 ## Later
 
