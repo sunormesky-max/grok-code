@@ -403,6 +403,10 @@ body {
 /* Windows 系统 titleBarOverlay 占右上角，给工具按钮留空 */
 body.plat-win .topbar {
   padding-right: 146px;
+  /* 与系统透明 overlay 融合：顶栏略透一点 */
+  background:
+    linear-gradient(90deg, rgba(125, 211, 252, 0.05), transparent 28%, transparent 72%, rgba(249, 115, 22, 0.04)),
+    linear-gradient(180deg, rgba(8, 10, 14, 0.55), rgba(0, 0, 0, 0.35));
 }
 body.plat-mac .topbar {
   padding-left: 78px; /* 交通灯 */
@@ -996,13 +1000,17 @@ button.pill:hover {
   margin: 0;
 }
 
-/* Live mission control */
+/* Live mission control — 默认隐藏右侧详情，主时间线更干净 */
 .live-layout {
   flex: 1;
   min-height: 0;
   display: grid;
   grid-template-columns: 1fr 220px;
   gap: 0;
+  transition: grid-template-columns 0.22s var(--ease);
+}
+.live-layout.side-collapsed {
+  grid-template-columns: 1fr 0;
 }
 .live-main {
   display: flex;
@@ -1011,13 +1019,39 @@ button.pill:hover {
   min-height: 0;
   border-right: 1px solid var(--border-soft);
 }
+.live-layout.side-collapsed .live-main {
+  border-right: none;
+}
 .live-status-bar {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 12px 14px;
+  gap: 10px;
+  padding: 10px 12px;
   border-bottom: 1px solid var(--border-soft);
-  background: linear-gradient(90deg, rgba(125, 211, 252, 0.05), rgba(249, 115, 22, 0.04));
+  background: linear-gradient(90deg, rgba(125, 211, 252, 0.04), transparent 60%);
+}
+.live-side-toggle {
+  flex-shrink: 0;
+  appearance: none;
+  border: 1px solid rgba(125, 211, 252, 0.22);
+  background: rgba(0, 0, 0, 0.28);
+  color: var(--muted);
+  font-size: 11px;
+  font-family: var(--mono, ui-monospace, monospace);
+  padding: 4px 10px;
+  border-radius: 999px;
+  cursor: pointer;
+  letter-spacing: 0.02em;
+  transition: border-color 0.12s, color 0.12s, background 0.12s;
+}
+.live-side-toggle:hover {
+  border-color: rgba(125, 211, 252, 0.45);
+  color: #e0f2fe;
+  background: rgba(56, 189, 248, 0.08);
+}
+.live-side-toggle[aria-expanded="true"] {
+  border-color: rgba(56, 189, 248, 0.4);
+  color: #7dd3fc;
 }
 .live-pulse-ring {
   width: 12px; height: 12px;
@@ -1070,15 +1104,25 @@ button.pill:hover {
   margin: auto;
   text-align: center;
   color: var(--muted);
-  max-width: 320px;
-  padding: 24px;
+  max-width: 280px;
+  padding: 20px 16px;
 }
 .live-empty h3 {
-  margin: 12px 0 8px;
+  margin: 0 0 8px;
   color: var(--text);
-  font-size: 16px;
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
 }
-.live-empty p { margin: 0; font-size: 12.5px; line-height: 1.55; color: var(--faint); }
+.live-empty p {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--faint);
+}
+.live-empty .grok-sigil {
+  display: none; /* 默认空态更克制 */
+}
 
 .live-event {
   display: grid;
@@ -1148,7 +1192,16 @@ button.pill:hover {
   display: flex;
   flex-direction: column;
   min-height: 0;
-  background: rgba(0,0,0,0.25);
+  min-width: 0;
+  overflow: hidden;
+  background: rgba(0, 0, 0, 0.22);
+  border-left: 1px solid var(--border-soft);
+  transition: opacity 0.18s ease;
+}
+.live-side.collapsed {
+  opacity: 0;
+  pointer-events: none;
+  border-left: none;
 }
 .live-side-head {
   padding: 8px 12px;
@@ -1711,15 +1764,26 @@ button.pill:hover {
   margin-left: 4px;
 }
 
-/* ── Terminal ────────────────────────────────────────── */
+/* ── Terminal（默认折叠，需要再展开） ───────────────── */
 .terminal-wrap {
   height: var(--term-h);
   flex-shrink: 0;
   transition: height 0.25s var(--ease);
 }
-.terminal-wrap.collapsed { height: 40px !important; }
+.terminal-wrap.collapsed {
+  height: 36px !important;
+  opacity: 0.92;
+}
+.terminal-wrap.collapsed .panel-head {
+  cursor: pointer;
+  min-height: 36px;
+}
 .terminal-wrap.collapsed .term-out,
 .terminal-wrap.collapsed .term-in-row { display: none; }
+.terminal-wrap.collapsed .panel-sub {
+  opacity: 0.55;
+  font-size: 10px;
+}
 
 .term-out {
   flex: 1;

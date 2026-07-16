@@ -38,6 +38,7 @@ Living plan for the GrokCode open-source ecosystem. Order may change based on co
 - [x] Storyboard notes · pack A|B compare · budget compress (v1.4.8)
 - [x] Pack compare polish · progressive compress modes (v1.4.9)
 - [x] HTML pack compare · encrypted storyboard export (v1.4.10)
+- [x] Native Windows titleBarOverlay · calmer collapsible chrome (v1.4.13–1.4.14)
 
 ## Next
 

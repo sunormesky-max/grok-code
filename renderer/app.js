@@ -53,7 +53,9 @@ const state = {
   termHistory: loadJson(TERM_HIST_KEY, []),
   termHistIdx: -1,
   filesCollapsed: false,
-  termCollapsed: false,
+  termCollapsed: true,
+  /** Live 右侧详情（焦点/变更/上下文）默认折叠，界面更干净 */
+  liveSideCollapsed: loadJson('grokcode-live-side-collapsed', true) !== false,
   filter: '',
   /** Live / Diff（工作区级共享） */
   activeTab: 'live',
@@ -1143,17 +1145,36 @@ function syncMaxBtn(maximized) {
 
 function restoreLayout() {
   const L = loadJson(LAYOUT_KEY, null);
-  if (!L) return;
+  if (!L) {
+    // 首次：终端收起，Live 侧栏收起
+    state.termCollapsed = true;
+    state.liveSideCollapsed = true;
+    applyChromeCollapse();
+    return;
+  }
   if (L.filesW) document.documentElement.style.setProperty('--files-w', L.filesW + 'px');
   if (L.chatW) document.documentElement.style.setProperty('--chat-w', L.chatW + 'px');
   if (L.termH) document.documentElement.style.setProperty('--term-h', L.termH + 'px');
-  if (L.filesCollapsed) {
-    state.filesCollapsed = true;
-    $('#filesPanel')?.classList.add('collapsed');
-  }
-  if (L.termCollapsed) {
-    state.termCollapsed = true;
-    $('.terminal-wrap')?.classList.add('collapsed');
+  if (L.filesCollapsed) state.filesCollapsed = true;
+  // 有布局记录时尊重用户；缺省仍收起终端
+  if (typeof L.termCollapsed === 'boolean') state.termCollapsed = L.termCollapsed;
+  else state.termCollapsed = true;
+  if (typeof L.liveSideCollapsed === 'boolean') state.liveSideCollapsed = L.liveSideCollapsed;
+  applyChromeCollapse();
+}
+
+function applyChromeCollapse() {
+  $('#filesPanel')?.classList.toggle('collapsed', state.filesCollapsed);
+  const term = $('.terminal-wrap') || $('#terminalWrap');
+  term?.classList.toggle('collapsed', state.termCollapsed);
+  const termSub = term?.querySelector('.panel-sub');
+  if (termSub) termSub.textContent = state.termCollapsed ? '点击 ↕ 展开' : 'workspace shell';
+  $('#liveSide')?.classList.toggle('collapsed', state.liveSideCollapsed);
+  $('#liveLayout')?.classList.toggle('side-collapsed', state.liveSideCollapsed);
+  const sideBtn = $('#btnToggleLiveSide');
+  if (sideBtn) {
+    sideBtn.setAttribute('aria-expanded', state.liveSideCollapsed ? 'false' : 'true');
+    sideBtn.textContent = state.liveSideCollapsed ? '详情 ▹' : '详情 ▿';
   }
   syncFilesRail();
 }
@@ -1166,7 +1187,9 @@ function persistLayout() {
     termH: parseInt(cs.getPropertyValue('--term-h'), 10),
     filesCollapsed: state.filesCollapsed,
     termCollapsed: state.termCollapsed,
+    liveSideCollapsed: state.liveSideCollapsed,
   });
+  saveJson('grokcode-live-side-collapsed', state.liveSideCollapsed);
 }
 
 // ── Session templates (starters pack) ───────────────────
@@ -2017,6 +2040,12 @@ function bindUi() {
     if (state.filesCollapsed) toggleFiles();
   });
   $('#btnToggleTerm').onclick = toggleTerm;
+  $('#btnToggleLiveSide')?.addEventListener('click', () => toggleLiveSide());
+  // 点终端标题条也可展开/收起
+  document.querySelector('.terminal-wrap .panel-head')?.addEventListener('click', (e) => {
+    if (e.target.closest('button')) return;
+    if (state.termCollapsed) toggleTerm();
+  });
 
 
   $('#prompt').addEventListener('keydown', (e) => {
@@ -2276,8 +2305,7 @@ function bindResizers() {
 
 function toggleFiles() {
   state.filesCollapsed = !state.filesCollapsed;
-  $('#filesPanel')?.classList.toggle('collapsed', state.filesCollapsed);
-  syncFilesRail();
+  applyChromeCollapse();
   persistLayout();
   if (!state.filesCollapsed) {
     toast(t('toast.explorerOpen', '资源管理器已展开'), 'ok');
@@ -2299,13 +2327,23 @@ function syncFilesRail() {
   // 折叠时隐藏对应 resize 条，避免误触
   const rz = document.querySelector('.resize-v[data-resize="files"]');
   if (rz) rz.style.display = state.filesCollapsed ? 'none' : '';
+  const termRz = document.querySelector('.resize-h[data-resize="term"]');
+  if (termRz) termRz.style.display = state.termCollapsed ? 'none' : '';
 }
 
 function toggleTerm() {
   state.termCollapsed = !state.termCollapsed;
-  $('.terminal-wrap').classList.toggle('collapsed', state.termCollapsed);
+  applyChromeCollapse();
   persistLayout();
 }
+
+function toggleLiveSide(force) {
+  if (typeof force === 'boolean') state.liveSideCollapsed = !force;
+  else state.liveSideCollapsed = !state.liveSideCollapsed;
+  applyChromeCollapse();
+  persistLayout();
+}
+window.toggleLiveSide = toggleLiveSide;
 
 function autoResizePrompt() {
   const el = $('#prompt');

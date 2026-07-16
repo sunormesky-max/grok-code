@@ -11,6 +11,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 - See [ROADMAP.md](ROADMAP.md)
 
+## [1.4.14] — 2026-07-16
+
+### Calmer UI · collapsible middle chrome
+
+- **Windows title bar**: transparent overlay (`#00000000`) so min/max/close blend with the glass topbar
+- **Live detail side**: focus / changes / context collapsed by default; toggle **详情** (or Ctrl+K)
+- **Terminal**: collapsed by default; click bar or ↕ to expand
+- Slimmer Live empty state (less visual noise)
+
 ## [1.4.13] — 2026-07-16
 
 ### Window controls + titlebar cleanup

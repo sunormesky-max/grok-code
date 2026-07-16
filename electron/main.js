@@ -290,9 +290,10 @@ function createWindow(opts = {}) {
   if (isWin) {
     winOpts.frame = false;
     winOpts.titleBarStyle = 'hidden';
+    // 半透明叠在暗色 topbar 上，避免一块实心黑条违和
     winOpts.titleBarOverlay = {
-      color: '#050506',
-      symbolColor: '#d4d4d8',
+      color: '#00000000',
+      symbolColor: '#a8b0bc',
       height: 52,
     };
   } else if (isMac) {

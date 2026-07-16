@@ -172,6 +172,20 @@
         run: run(() => document.getElementById('btnCollapseFiles')?.click()),
       },
       {
+        id: 'live.side.toggle',
+        title: t('cmd.live.side', '折叠/展开 Live 详情侧栏'),
+        keywords: 'live side detail focus context 详情 侧栏',
+        group: 'actions',
+        run: run(() => global.toggleLiveSide?.()),
+      },
+      {
+        id: 'term.toggle',
+        title: t('cmd.term.toggle', '折叠/展开终端'),
+        keywords: 'terminal shell 终端 折叠',
+        group: 'actions',
+        run: run(() => document.getElementById('btnToggleTerm')?.click()),
+      },
+      {
         id: 'tree.refresh',
         title: t('cmd.tree.refresh', '刷新文件树'),
         keywords: 'refresh tree 刷新',

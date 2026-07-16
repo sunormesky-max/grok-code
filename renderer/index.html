@@ -198,29 +198,29 @@
 
           <!-- Live：任务实时动态（真正价值区） -->
           <div class="view-pane" id="livePane">
-            <div class="live-layout">
+            <div class="live-layout" id="liveLayout">
               <div class="live-main">
                 <div class="live-status-bar" id="liveStatusBar">
                   <div class="live-pulse-ring" id="livePulse"></div>
                   <div class="live-status-text">
                     <strong id="livePhase" data-i18n="live.idle">待命</strong>
-                    <span id="liveDetail" data-i18n="live.hint">丢一个任务给 Grok，这里会变成任务驾驶舱</span>
+                    <span id="liveDetail" data-i18n="live.hint">在右侧对话框发任务，这里显示实时动态</span>
                   </div>
                   <div class="live-stats">
                     <span class="stat" id="statTools">0 tools</span>
                     <span class="stat" id="statFiles">0 files</span>
                     <span class="stat" id="statElapsed">—</span>
                   </div>
+                  <button type="button" class="live-side-toggle" id="btnToggleLiveSide" title="展开/折叠侧栏（焦点·变更·上下文）" aria-expanded="false">详情 ▹</button>
                 </div>
                 <div class="live-timeline" id="liveTimeline">
                   <div class="live-empty" id="liveEmpty">
-                    <div class="grok-sigil" aria-hidden="true"><span></span><span></span><span></span></div>
-                    <h3>Mission Control</h3>
-                    <p>实时显示：思考 → 读文件 → 改代码 → 跑命令。<br>这是 GrokCode 相对「纯聊天框」的真正价值。</p>
+                    <h3>Live</h3>
+                    <p>任务运行时显示思考、读写与命令。<br><span class="muted">需要时点右上「详情」展开焦点文件与上下文</span></p>
                   </div>
                 </div>
               </div>
-              <aside class="live-side">
+              <aside class="live-side collapsed" id="liveSide">
                 <div class="live-side-head" data-i18n="live.focus">焦点文件</div>
                 <div class="live-focus" id="liveFocus">
                   <div class="muted">Agent 读/写文件时出现在这里</div>
@@ -302,11 +302,11 @@
 
         <div class="resize-h" data-resize="term"></div>
 
-        <div class="panel terminal-wrap glass">
+        <div class="panel terminal-wrap glass collapsed" id="terminalWrap">
           <div class="panel-head">
-            <div class="panel-title">
+            <div class="panel-title titlebar-drag-term">
               <span class="panel-label" data-i18n="term.label">Terminal</span>
-              <span class="panel-sub">workspace shell</span>
+              <span class="panel-sub">点击 ↕ 展开</span>
             </div>
             <div class="panel-actions">
               <button class="icon-btn" id="btnToggleTerm" title="展开/收起终端">↕</button>
