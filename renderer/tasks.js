@@ -46,7 +46,8 @@
       elapsedStart: 0,
       elapsedTimer: null,
       pane,
-      createdAt: Date.now(),
+      createdAt: opts.createdAt || Date.now(),
+      pinned: Boolean(opts.pinned),
       /** 完整对话日志（持久化 / 压缩用） */
       messages: Array.isArray(opts.messages) ? opts.messages.slice() : [],
       /** 四档上下文 */
@@ -59,7 +60,32 @@
 
   function list() {
     const p = project();
-    return p ? ensureProjectTasks(p).slice() : [];
+    if (!p) return [];
+    // pinned first, preserve relative order within each group
+    const tasks = ensureProjectTasks(p).slice();
+    const pinned = tasks.filter((t) => t.pinned);
+    const rest = tasks.filter((t) => !t.pinned);
+    return pinned.concat(rest);
+  }
+
+  function togglePin(id) {
+    const t = get(id);
+    if (!t) return null;
+    t.pinned = !t.pinned;
+    return t;
+  }
+
+  /** Reorder within project tasks array (0-based target index in full array) */
+  function move(id, toIndex) {
+    const p = project();
+    if (!p) return false;
+    const tasks = ensureProjectTasks(p);
+    const from = tasks.findIndex((t) => t.id === id);
+    if (from < 0) return false;
+    const [item] = tasks.splice(from, 1);
+    const idx = Math.max(0, Math.min(Number(toIndex) || 0, tasks.length));
+    tasks.splice(idx, 0, item);
+    return true;
   }
 
   function get(id) {
@@ -158,6 +184,8 @@
     list,
     setActive,
     remove,
+    move,
+    togglePin,
     countRunning,
     countRunningAll,
     titleFromPrompt,

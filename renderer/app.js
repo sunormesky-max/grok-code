@@ -60,6 +60,8 @@ const state = {
   diffHunkCollapsed: new Set(),
   /** multi-select paths in Diff list */
   diffSelected: new Set(),
+  /** unified | split */
+  diffViewMode: loadJson('grokcode-diff-view', 'unified') || 'unified',
 };
 
 /** 当前激活任务 */
@@ -252,6 +254,7 @@ function buildProjectSnapshot(proj) {
     contextTiers: t.contextTiers || null,
     toolCount: t.toolCount || 0,
     createdAt: t.createdAt,
+    pinned: Boolean(t.pinned),
   }));
   return {
     path: proj.path,
@@ -356,9 +359,12 @@ async function restoreProjectFromDisk(proj) {
       messages: td.messages || [],
       context: td.context || null,
       contextTiers: td.contextTiers || null,
+      pinned: Boolean(td.pinned),
+      createdAt: td.createdAt,
     });
     t.toolCount = td.toolCount || 0;
     t.createdAt = td.createdAt || t.createdAt;
+    t.pinned = Boolean(td.pinned);
     // 重绘消息
     rebuildTaskMessages(t);
   }
@@ -818,7 +824,9 @@ function renderTaskTabs() {
     .map((t) => {
       const act = t.id === activeId ? ' active' : '';
       const run = t.running ? ' running' : '';
-      return `<div class="task-tab${act}${run}" data-id="${t.id}" title="${esc(t.title)} · 双击重命名">
+      const pin = t.pinned ? ' pinned' : '';
+      return `<div class="task-tab${act}${run}${pin}" data-id="${t.id}" draggable="true" title="${esc(t.title)} · 双击重命名 · 拖拽排序">
+        <button type="button" class="task-pin" data-pin="${t.id}" title="${t.pinned ? '取消固定' : '固定'}">${t.pinned ? '📌' : '📍'}</button>
         <span class="task-dot"></span>
         <span class="task-name" data-rename="${t.id}">${esc(t.title)}</span>
         <button type="button" class="task-x" data-close="${t.id}" title="关闭任务">×</button>
@@ -828,20 +836,64 @@ function renderTaskTabs() {
 
   host.querySelectorAll('.task-tab').forEach((el) => {
     el.onclick = (e) => {
-      if (e.target.closest('.task-x') || e.target.closest('input.task-rename')) return;
+      if (e.target.closest('.task-x') || e.target.closest('.task-pin') || e.target.closest('input.task-rename')) return;
       switchTask(el.dataset.id);
     };
     el.ondblclick = (e) => {
-      if (e.target.closest('.task-x')) return;
+      if (e.target.closest('.task-x') || e.target.closest('.task-pin')) return;
       e.preventDefault();
       e.stopPropagation();
       beginTaskRename(el.dataset.id);
     };
+    el.addEventListener('dragstart', (e) => {
+      e.dataTransfer.setData('text/task-id', el.dataset.id);
+      e.dataTransfer.effectAllowed = 'move';
+      el.classList.add('dragging');
+    });
+    el.addEventListener('dragend', () => el.classList.remove('dragging'));
+    el.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      el.classList.add('drag-over');
+    });
+    el.addEventListener('dragleave', () => el.classList.remove('drag-over'));
+    el.addEventListener('drop', (e) => {
+      e.preventDefault();
+      el.classList.remove('drag-over');
+      const fromId = e.dataTransfer.getData('text/task-id');
+      const toId = el.dataset.id;
+      if (!fromId || fromId === toId) return;
+      const p = P();
+      if (!p?.tasks) return;
+      const toIdx = p.tasks.findIndex((t) => t.id === toId);
+      if (toIdx < 0) return;
+      window.TaskStore.move(fromId, toIdx);
+      renderTaskTabs();
+      schedulePersist(true);
+    });
   });
   host.querySelectorAll('.task-x').forEach((btn) => {
     btn.onclick = (e) => {
       e.stopPropagation();
       closeTask(btn.dataset.close);
+    };
+  });
+  host.querySelectorAll('.task-pin').forEach((btn) => {
+    btn.onclick = (e) => {
+      e.stopPropagation();
+      window.TaskStore.togglePin(btn.dataset.pin);
+      renderTaskTabs();
+      schedulePersist(true);
+      toast(
+        window.TaskStore.get(btn.dataset.pin)?.pinned
+          ? localeIsEn()
+            ? 'Pinned'
+            : '已固定'
+          : localeIsEn()
+            ? 'Unpinned'
+            : '已取消固定',
+        'ok'
+      );
     };
   });
   refreshTaskQueueHint();
@@ -910,10 +962,13 @@ function refreshTaskQueueHint() {
 }
 
 function switchTask(id) {
+  // save draft of previous task before switch
+  savePromptDraft();
   const t = window.TaskStore.setActive(id);
   if (!t) return;
   renderTaskTabs();
   syncComposerToTask(t);
+  loadPromptDraft(t);
   renderContextTiers(t);
   // 状态条反映当前任务
   if (t.running) {
@@ -1107,6 +1162,7 @@ function bindUi() {
 
 
   $('#prompt').addEventListener('keydown', (e) => {
+    if (handleAtKeydown(e)) return;
     if (handleSlashKeydown(e)) return;
     if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
       e.preventDefault();
@@ -1119,6 +1175,8 @@ function bindUi() {
     autoResizePrompt();
     updateCharCount();
     updateSlashMenu();
+    scheduleAtMenu();
+    schedulePromptDraftSave();
   });
 
   $('#termInput').addEventListener('keydown', onTermKey);
@@ -1190,6 +1248,9 @@ function bindUi() {
   });
   bindSlashCommands();
   bindChatSearch();
+  bindAtMentions();
+  // restore draft for active task after UI ready
+  setTimeout(() => loadPromptDraft(T()), 0);
 
   $('#linkConsole').onclick = (e) => {
     e.preventDefault();
@@ -1264,9 +1325,15 @@ function bindShortcuts() {
         if (cur && !cur.restored) markDiffReviewed(path, !cur.reviewed);
         return;
       }
+      if (e.key === 's' || e.key === 'S') {
+        e.preventDefault();
+        toggleDiffViewMode();
+        return;
+      }
     }
     if (e.key === 'Escape') {
       hideSlashMenu();
+      hideAtMenu();
       if (document.getElementById('chatSearchBar') && !document.getElementById('chatSearchBar').classList.contains('hidden')) {
         closeChatSearch();
         return;
@@ -2006,6 +2073,15 @@ const SLASH_COMMANDS = () => [
     desc: localeIsEn() ? 'Keyboard shortcuts' : '快捷键速查',
     run: () => window.GrokHelp?.open?.(),
   },
+  {
+    id: 'sbs',
+    label: '/sbs',
+    desc: localeIsEn() ? 'Toggle Diff side-by-side' : '切换 Diff 并排视图',
+    run: () => {
+      switchTab('diff');
+      toggleDiffViewMode();
+    },
+  },
 ];
 
 let slashIndex = 0;
@@ -2287,6 +2363,238 @@ function bindChatSearch() {
   document.getElementById('btnChatSearch')?.addEventListener('click', () => openChatSearch());
 }
 window.openChatSearch = openChatSearch;
+window.toggleDiffViewMode = toggleDiffViewMode;
+
+// ── @file mentions ──────────────────────────────────────
+let atIndex = 0;
+let atHits = [];
+let atMeta = null; // { start, query }
+let atTimer = null;
+
+function ensureAtMenu() {
+  let menu = document.getElementById('atMenu');
+  if (menu) return menu;
+  menu = document.createElement('div');
+  menu.id = 'atMenu';
+  menu.className = 'slash-menu at-menu hidden';
+  menu.setAttribute('role', 'listbox');
+  document.body.appendChild(menu);
+  return menu;
+}
+
+function hideAtMenu() {
+  document.getElementById('atMenu')?.classList.add('hidden');
+  atHits = [];
+  atMeta = null;
+}
+
+function getAtContext() {
+  const ta = document.getElementById('prompt');
+  if (!ta) return null;
+  const pos = ta.selectionStart ?? ta.value.length;
+  const before = ta.value.slice(0, pos);
+  // @query at end of typed text before cursor (no spaces in query)
+  const m = before.match(/(^|[\s([{])@([^\s@]*)$/);
+  if (!m) return null;
+  const query = m[2] || '';
+  const start = before.length - query.length - 1; // index of @
+  return { start, query, pos };
+}
+
+function scheduleAtMenu() {
+  clearTimeout(atTimer);
+  atTimer = setTimeout(() => updateAtMenu().catch(() => hideAtMenu()), 120);
+}
+
+async function updateAtMenu() {
+  const ctx = getAtContext();
+  const menu = ensureAtMenu();
+  if (!ctx || !P()) {
+    hideAtMenu();
+    return;
+  }
+  // if slash menu owns the input, skip
+  if (getSlashQuery() != null) {
+    hideAtMenu();
+    return;
+  }
+  atMeta = ctx;
+  let hits = [];
+  try {
+    const res = await window.grok.searchPaths(pid(), ctx.query || '', { maxHits: 24 });
+    hits = (res?.hits || res || []).map((h) => (typeof h === 'string' ? h : h.path || h.rel || '')).filter(Boolean);
+  } catch {
+    hits = [];
+  }
+  // also include open / changed files when query empty
+  if (!ctx.query) {
+    const extra = [];
+    if (P()?.currentFile) extra.push(P().currentFile);
+    for (const p of changesMap().keys()) extra.push(p);
+    hits = [...new Set([...extra, ...hits])].slice(0, 24);
+  }
+  atHits = hits;
+  if (!atHits.length) {
+    menu.innerHTML = `<div class="slash-head">@ files</div><div class="slash-desc" style="padding:8px 10px">${localeIsEn() ? 'No matches' : '无匹配文件'}</div>`;
+    positionMentionMenu(menu);
+    menu.classList.remove('hidden');
+    return;
+  }
+  if (atIndex >= atHits.length) atIndex = 0;
+  menu.innerHTML =
+    `<div class="slash-head">@ ${localeIsEn() ? 'insert path' : '插入路径'}</div>` +
+    atHits
+      .map(
+        (p, i) =>
+          `<button type="button" class="slash-item${i === atIndex ? ' active' : ''}" data-idx="${i}" role="option">
+            <span class="slash-label">${esc(p.split(/[/\\]/).pop())}</span>
+            <span class="slash-desc">${esc(p)}</span>
+          </button>`
+      )
+      .join('');
+  positionMentionMenu(menu);
+  menu.classList.remove('hidden');
+  menu.querySelectorAll('.slash-item').forEach((btn) => {
+    btn.onmousedown = (e) => {
+      e.preventDefault();
+      insertAtPath(Number(btn.dataset.idx));
+    };
+  });
+}
+
+function positionMentionMenu(menu) {
+  const ta = document.getElementById('prompt');
+  if (!ta) return;
+  const rect = ta.getBoundingClientRect();
+  menu.style.left = `${Math.max(8, rect.left)}px`;
+  menu.style.bottom = `${window.innerHeight - rect.top + 6}px`;
+  menu.style.width = `${Math.min(420, rect.width)}px`;
+}
+
+function insertAtPath(idx) {
+  const path = atHits[idx];
+  const ta = document.getElementById('prompt');
+  if (!path || !ta || !atMeta) return;
+  const val = ta.value;
+  const before = val.slice(0, atMeta.start);
+  const after = val.slice(atMeta.pos ?? ta.selectionStart);
+  const insert = `\`${path.replace(/\\/g, '/')}\``;
+  ta.value = before + insert + after;
+  const caret = (before + insert).length;
+  ta.setSelectionRange(caret, caret);
+  ta.focus();
+  hideAtMenu();
+  autoResizePrompt();
+  updateCharCount();
+  schedulePromptDraftSave();
+}
+
+function handleAtKeydown(e) {
+  const menu = document.getElementById('atMenu');
+  const open = menu && !menu.classList.contains('hidden') && atHits.length;
+  if (!open) return false;
+  if (e.key === 'ArrowDown') {
+    e.preventDefault();
+    atIndex = (atIndex + 1) % atHits.length;
+    updateAtMenu();
+    return true;
+  }
+  if (e.key === 'ArrowUp') {
+    e.preventDefault();
+    atIndex = (atIndex - 1 + atHits.length) % atHits.length;
+    updateAtMenu();
+    return true;
+  }
+  if (e.key === 'Enter' && !e.ctrlKey && !e.metaKey) {
+    e.preventDefault();
+    insertAtPath(atIndex);
+    return true;
+  }
+  if (e.key === 'Tab') {
+    e.preventDefault();
+    insertAtPath(atIndex);
+    return true;
+  }
+  if (e.key === 'Escape') {
+    e.preventDefault();
+    hideAtMenu();
+    return true;
+  }
+  return false;
+}
+
+function bindAtMentions() {
+  ensureAtMenu();
+  document.addEventListener('click', (e) => {
+    if (!e.target.closest?.('#atMenu') && e.target?.id !== 'prompt') hideAtMenu();
+  });
+}
+
+// ── Prompt draft auto-backup ────────────────────────────
+const DRAFT_KEY = 'grokcode-prompt-drafts-v1';
+let draftTimer = null;
+
+function draftStorageKey(task) {
+  task = task || T();
+  const proj = task ? window.ProjectStore.get(task.projectId) : P();
+  if (!task || !proj) return null;
+  return `${proj.path || proj.id}::${task.id}`;
+}
+
+function schedulePromptDraftSave() {
+  clearTimeout(draftTimer);
+  draftTimer = setTimeout(() => savePromptDraft(), 400);
+}
+
+function savePromptDraft(task) {
+  task = task || T();
+  const key = draftStorageKey(task);
+  if (!key) return;
+  const text = document.getElementById('prompt')?.value || '';
+  const all = loadJson(DRAFT_KEY, {}) || {};
+  if (!text.trim()) {
+    if (all[key]) {
+      delete all[key];
+      saveJson(DRAFT_KEY, all);
+    }
+    return;
+  }
+  all[key] = { text, ts: Date.now() };
+  // prune old drafts (> 50)
+  const keys = Object.keys(all);
+  if (keys.length > 50) {
+    keys
+      .sort((a, b) => (all[a].ts || 0) - (all[b].ts || 0))
+      .slice(0, keys.length - 50)
+      .forEach((k) => delete all[k]);
+  }
+  saveJson(DRAFT_KEY, all);
+}
+
+function loadPromptDraft(task) {
+  task = task || T();
+  const key = draftStorageKey(task);
+  const ta = document.getElementById('prompt');
+  if (!key || !ta) return;
+  const all = loadJson(DRAFT_KEY, {}) || {};
+  const d = all[key];
+  ta.value = d?.text || '';
+  autoResizePrompt();
+  updateCharCount();
+}
+
+function clearPromptDraft(task) {
+  task = task || T();
+  const key = draftStorageKey(task);
+  if (!key) return;
+  const all = loadJson(DRAFT_KEY, {}) || {};
+  if (all[key]) {
+    delete all[key];
+    saveJson(DRAFT_KEY, all);
+  }
+}
+
+
 
 // ── Live / Diff mission control ─────────────────────────
 function pushLiveEvent({ kind, title, sub, running = false, projectId = null }) {
@@ -2778,18 +3086,40 @@ function renderDiffPane() {
     content.dataset.diffPath = (P() && P().selectedDiffPath) || '';
   }
 
+  const viewMode = state.diffViewMode === 'split' ? 'split' : 'unified';
+  const bodyHtml =
+    viewMode === 'split'
+      ? window.DiffUtil.toSideBySideHtml(cur.ops, { context: 3 })
+      : window.DiffUtil.toUnifiedHtml(cur.ops, {
+          context: 3,
+          collapsed: state.diffHunkCollapsed,
+        });
+
   content.innerHTML =
     banner +
     `<div class="diff-hunk-toolbar">
-      <button type="button" class="link-btn" data-diff-act="expand">全部展开</button>
-      <button type="button" class="link-btn" data-diff-act="collapse">全部折叠</button>
-      <span class="muted" style="font-size:11px">hunk 折叠 · <kbd>j</kbd>/<kbd>k</kbd> 文件 · <kbd>a</kbd> 审阅</span>
+      <button type="button" class="link-btn${viewMode === 'unified' ? ' active-view' : ''}" data-diff-act="unified">Unified</button>
+      <button type="button" class="link-btn${viewMode === 'split' ? ' active-view' : ''}" data-diff-act="split">Side-by-side</button>
+      ${
+        viewMode === 'unified'
+          ? `<button type="button" class="link-btn" data-diff-act="expand">全部展开</button>
+      <button type="button" class="link-btn" data-diff-act="collapse">全部折叠</button>`
+          : ''
+      }
+      <span class="muted" style="font-size:11px"><kbd>j</kbd>/<kbd>k</kbd> 文件 · <kbd>a</kbd> 审阅 · <kbd>s</kbd> 切换视图</span>
     </div>` +
-    window.DiffUtil.toUnifiedHtml(cur.ops, {
-      context: 3,
-      collapsed: state.diffHunkCollapsed,
-    });
+    bodyHtml;
 
+  content.querySelector('[data-diff-act="unified"]')?.addEventListener('click', () => {
+    state.diffViewMode = 'unified';
+    saveJson('grokcode-diff-view', 'unified');
+    renderDiffPane();
+  });
+  content.querySelector('[data-diff-act="split"]')?.addEventListener('click', () => {
+    state.diffViewMode = 'split';
+    saveJson('grokcode-diff-view', 'split');
+    renderDiffPane();
+  });
   content.querySelectorAll('.diff-hunk-head').forEach((btn) => {
     btn.onclick = () => {
       const hi = Number(btn.dataset.hunk);
@@ -2807,6 +3137,13 @@ function renderDiffPane() {
     state.diffHunkCollapsed = new Set([...heads].map((h) => Number(h.dataset.hunk)));
     renderDiffPane();
   });
+}
+
+function toggleDiffViewMode() {
+  state.diffViewMode = state.diffViewMode === 'split' ? 'unified' : 'split';
+  saveJson('grokcode-diff-view', state.diffViewMode);
+  if (state.activeTab === 'diff') renderDiffPane();
+  toast(state.diffViewMode === 'split' ? 'Side-by-side' : 'Unified', 'ok');
 }
 
 function ensureDiffMultiBar() {
@@ -3404,6 +3741,7 @@ async function runTaskPrompt(task, text, opts = {}) {
     $('#prompt').value = '';
     autoResizePrompt();
     updateCharCount();
+    clearPromptDraft(task);
   }
 
   const modeUsed =

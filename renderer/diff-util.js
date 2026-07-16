@@ -202,6 +202,70 @@
     return html;
   }
 
+  /**
+   * Side-by-side diff HTML from the same ops (context-windowed like unified).
+   */
+  function toSideBySideHtml(ops, { context = 3, maxRows = 800 } = {}) {
+    const show = new Array(ops.length).fill(false);
+    for (let i = 0; i < ops.length; i++) {
+      if (ops[i].type !== 'same') {
+        for (let k = Math.max(0, i - context); k <= Math.min(ops.length - 1, i + context); k++) {
+          show[k] = true;
+        }
+      }
+    }
+    let lineA = 0;
+    let lineB = 0;
+    let rows = 0;
+    let gap = false;
+    let html =
+      '<div class="diff-sbs-head"><span>Before</span><span>After</span></div><div class="diff-sbs">';
+    for (let i = 0; i < ops.length; i++) {
+      const o = ops[i];
+      if (o.type === 'same') {
+        lineA++;
+        lineB++;
+      } else if (o.type === 'del') lineA++;
+      else if (o.type === 'add') lineB++;
+
+      if (!show[i]) {
+        gap = true;
+        continue;
+      }
+      if (gap) {
+        html += `<div class="diff-sbs-row meta"><div class="sbs-cell">···</div><div class="sbs-cell">···</div></div>`;
+        gap = false;
+      }
+      if (rows >= maxRows) {
+        html += `<div class="diff-sbs-row meta"><div class="sbs-cell">…</div><div class="sbs-cell">…</div></div>`;
+        break;
+      }
+      const text = escapeHtml(o.text);
+      if (o.type === 'same') {
+        html += `<div class="diff-sbs-row same">
+          <div class="sbs-cell"><span class="ln">${lineA}</span><span class="tx">${text}</span></div>
+          <div class="sbs-cell"><span class="ln">${lineB}</span><span class="tx">${text}</span></div>
+        </div>`;
+      } else if (o.type === 'del') {
+        html += `<div class="diff-sbs-row del">
+          <div class="sbs-cell del"><span class="ln">${lineA}</span><span class="sign">-</span><span class="tx">${text}</span></div>
+          <div class="sbs-cell empty"></div>
+        </div>`;
+      } else {
+        html += `<div class="diff-sbs-row add">
+          <div class="sbs-cell empty"></div>
+          <div class="sbs-cell add"><span class="ln">${lineB}</span><span class="sign">+</span><span class="tx">${text}</span></div>
+        </div>`;
+      }
+      rows++;
+    }
+    html += '</div>';
+    if (rows === 0) {
+      return `<div class="diff-row meta">无行级差异（可能只是空白/换行）</div>`;
+    }
+    return html;
+  }
+
   function escapeHtml(s) {
     return String(s)
       .replace(/&/g, '&amp;')
@@ -242,6 +306,7 @@
   global.DiffUtil = {
     computeLineDiff,
     toUnifiedHtml,
+    toSideBySideHtml,
     extractPathFromTool,
     isWriteTool,
     isReadTool,

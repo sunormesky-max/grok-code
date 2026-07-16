@@ -162,6 +162,8 @@ function testDiffHunks() {
   const src = fs.readFileSync(path.join(root, 'renderer', 'diff-util.js'), 'utf8');
   assert.ok(src.includes('diff-hunk'), 'foldable hunk markup');
   assert.ok(src.includes('toUnifiedHtml'), 'toUnifiedHtml present');
+  assert.ok(src.includes('toSideBySideHtml'), 'side-by-side present');
+  assert.ok(src.includes('diff-sbs'), 'sbs markup');
   console.log('ok  diff hunk fold smoke');
 }
 

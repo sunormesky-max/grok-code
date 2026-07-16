@@ -388,6 +388,29 @@
         keywords: 'diff review accept 审阅',
         group: 'actions',
         run: run(() => global.markDiffReviewed?.(undefined, true)),
+      },
+      {
+        id: 'diff.sbs',
+        title: t('cmd.diff.sbs', 'Diff 并排 / Unified 切换'),
+        keywords: 'diff side by side split 并排',
+        group: 'actions',
+        run: run(() => {
+          global.switchTab?.('diff');
+          global.toggleDiffViewMode?.();
+        }),
+      },
+      {
+        id: 'task.pin',
+        title: t('cmd.task.pin', '固定/取消固定当前任务'),
+        keywords: 'pin task 固定',
+        group: 'actions',
+        run: run(() => {
+          const id = global.TaskStore?.activeId;
+          if (id) {
+            global.TaskStore.togglePin(id);
+            global.renderTaskTabs?.();
+          }
+        }),
       }
     );
   }

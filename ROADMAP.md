@@ -22,13 +22,14 @@ Living plan for the GrokCode open-source ecosystem. Order may change based on co
 - [x] Skill preview modal · outline sticky · plan auto-detect · session share card
 - [x] Task rename · Live filters · Diff hunk fold · Composer model chip
 - [x] Diff review/j-k/multi-select · slash cmds · chat message search
+- [x] @file mentions · Diff side-by-side · task pin/reorder · prompt drafts
 
 ## Next
 
-- [ ] Composer @-file mention insert paths from workspace
-- [ ] Diff side-by-side view toggle
-- [ ] Task pin / reorder tabs
-- [ ] Crash-safe auto-backup of in-flight prompt drafts
+- [ ] Inline blame-style hover on Diff changed lines (author = agent turn)
+- [ ] Composer image/file paste attach as context note
+- [ ] Project-level “rules” quick edit from status bar
+- [ ] Optional sound/toast when Craft flight completes in background
 
 ## Later
 

@@ -1913,6 +1913,31 @@ button.pill:hover {
   white-space: nowrap;
   min-width: 0;
 }
+.task-pin {
+  appearance: none;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font-size: 10px;
+  padding: 0 2px;
+  opacity: 0.45;
+  line-height: 1;
+}
+.task-tab:hover .task-pin,
+.task-tab.pinned .task-pin {
+  opacity: 1;
+}
+.task-tab.pinned {
+  border-color: rgba(251, 191, 36, 0.45);
+  box-shadow: 0 0 12px rgba(251, 191, 36, 0.12);
+}
+.task-tab.dragging {
+  opacity: 0.5;
+}
+.task-tab.drag-over {
+  border-color: rgba(56, 189, 248, 0.7);
+  background: rgba(56, 189, 248, 0.12);
+}
 .task-rename {
   width: 100px;
   max-width: 120px;
@@ -2157,6 +2182,70 @@ button.pill:hover {
 .msg.chat-hit-active {
   outline: 2px solid rgba(56, 189, 248, 0.75);
   box-shadow: 0 0 20px rgba(56, 189, 248, 0.15);
+}
+
+/* Diff side-by-side */
+.diff-hunk-toolbar .link-btn.active-view {
+  color: #7dd3fc;
+  text-decoration: underline;
+}
+.diff-sbs-head {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1px;
+  padding: 6px 10px;
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--faint);
+  background: rgba(0, 0, 0, 0.3);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+.diff-sbs {
+  font-family: var(--mono);
+  font-size: 12px;
+  line-height: 1.45;
+}
+.diff-sbs-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+}
+.diff-sbs-row .sbs-cell {
+  padding: 1px 8px;
+  min-width: 0;
+  overflow: hidden;
+  white-space: pre-wrap;
+  word-break: break-all;
+  background: rgba(0, 0, 0, 0.15);
+}
+.diff-sbs-row .sbs-cell .ln {
+  display: inline-block;
+  width: 36px;
+  color: var(--faint);
+  user-select: none;
+}
+.diff-sbs-row .sbs-cell .sign {
+  display: inline-block;
+  width: 12px;
+  color: var(--faint);
+}
+.diff-sbs-row .sbs-cell.del {
+  background: rgba(248, 113, 113, 0.12);
+  color: #fecaca;
+}
+.diff-sbs-row .sbs-cell.add {
+  background: rgba(52, 211, 153, 0.1);
+  color: #bbf7d0;
+}
+.diff-sbs-row .sbs-cell.empty {
+  background: rgba(0, 0, 0, 0.25);
+}
+.diff-sbs-row.meta .sbs-cell {
+  color: var(--faint);
+  text-align: center;
 }
   animation: liveBlink 1s ease infinite;
 }

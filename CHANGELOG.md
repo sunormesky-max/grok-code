@@ -11,6 +11,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 - See [ROADMAP.md](ROADMAP.md)
 
+## [1.3.5] — 2026-07-16
+
+### Composer & task polish
+
+- **@file mentions**: type `@` in composer to pick workspace paths (insert as `` `path` ``)
+- **Diff side-by-side**: Unified / Side-by-side toggle · shortcut `s` on Diff tab · `/sbs`
+- **Task pin + drag reorder**: 📌 pin · drag tabs to reorder · persisted
+- **Prompt draft backup**: auto-save unsent text per project+task; restore on switch; clear on send
+
 ## [1.3.4] — 2026-07-16
 
 ### Review & composer power tools
