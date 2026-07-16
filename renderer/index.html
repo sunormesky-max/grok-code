@@ -9,6 +9,7 @@
   <link rel="stylesheet" href="ui-polish.css" />
   <link rel="stylesheet" href="density.css" />
   <link rel="stylesheet" href="layout-agent.css" />
+  <link rel="stylesheet" href="layout-simple.css" />
   <link rel="stylesheet" href="visual-impact.css" />
   <link rel="stylesheet" href="visual-impact-2.css" />
   <link rel="stylesheet" href="visual-impact-3.css" />
@@ -26,7 +27,7 @@
   <link rel="stylesheet" href="work-mode.css" />
   <link rel="stylesheet" href="outline.css" />
 </head>
-<body class="theme-grok booting layout-v15 layout-mode-agent">
+<body class="theme-grok booting layout-v15 layout-mode-agent center-tab-live">
   <a class="skip-link" href="#app" data-i18n="a11y.skip">跳到主内容</a>
   <!-- ═══ BOOT SEQUENCE ═══ -->
   <div id="bootScreen" class="boot-screen" role="dialog" aria-label="GrokCode 启动">
@@ -134,13 +135,31 @@
         </div>
       </div>
 
-      <!-- 布局预设：Agent · Pilot(居中) · Review · Full · Auto-Pilot -->
-      <div class="layout-presets" id="layoutPresets" role="group" aria-label="布局预设">
-        <button type="button" class="layout-preset active" data-layout="agent" title="Agent · 对话在右（默认）">Agent</button>
-        <button type="button" class="layout-preset" data-layout="pilot" title="Pilot · 对话居中（超宽屏）">Pilot</button>
-        <button type="button" class="layout-preset" data-layout="review" title="Review · 资源树 + Diff 审阅">Review</button>
-        <button type="button" class="layout-preset" data-layout="full" title="Full · 全面板">Full</button>
-        <button type="button" class="layout-preset auto-pilot" id="btnAutoPilot" title="超宽自动 Pilot（≥1600px）" aria-pressed="true">Auto</button>
+      <!-- 布局：默认 Work + Review；Pilot/Full/Auto 收进「更多」 -->
+      <div class="layout-presets simplified" id="layoutPresets" role="group" aria-label="布局预设">
+        <button type="button" class="layout-preset active" data-layout="agent" data-i18n-title="layout.work.tip" title="Work · 对话指挥 + Live（默认）">
+          <span data-i18n="layout.work">Work</span>
+        </button>
+        <button type="button" class="layout-preset" data-layout="review" data-i18n-title="layout.review.tip" title="Review · 资源树 + Diff 审阅">
+          <span data-i18n="layout.review">Review</span>
+        </button>
+        <div class="layout-more" id="layoutMore">
+          <button type="button" class="layout-preset layout-more-btn" id="btnLayoutMore" aria-expanded="false" aria-haspopup="true" data-i18n-title="layout.more.tip" title="更多布局 · Pilot / Full / Auto">···</button>
+          <div class="layout-more-menu hidden" id="layoutMoreMenu" role="menu">
+            <button type="button" class="layout-more-item" data-layout="pilot" role="menuitem" title="Pilot · 对话居中（超宽屏）">
+              <span class="lm-name">Pilot</span>
+              <span class="lm-desc" data-i18n="layout.pilot.desc">对话居中 · 超宽</span>
+            </button>
+            <button type="button" class="layout-more-item" data-layout="full" role="menuitem" title="Full · 全面板">
+              <span class="lm-name">Full</span>
+              <span class="lm-desc" data-i18n="layout.full.desc">树 · 终端 · 全开</span>
+            </button>
+            <button type="button" class="layout-more-item auto-pilot" id="btnAutoPilot" role="menuitem" title="超宽自动 Pilot（≥1600px）" aria-pressed="false">
+              <span class="lm-name">Auto</span>
+              <span class="lm-desc" data-i18n="layout.auto.desc">≥1600 自动 Pilot</span>
+            </button>
+          </div>
+        </div>
       </div>
 
       <div class="titlebar-spacer titlebar-drag" aria-hidden="true"></div>
@@ -209,17 +228,21 @@
       <section class="center">
         <div class="panel editor-wrap glass">
           <div class="panel-head tabs" id="editorTabs">
-            <button type="button" class="tab active" data-tab="live" title="任务实时动态" data-i18n="tab.live">Live</button>
-            <button type="button" class="tab" data-tab="editor" title="代码" data-i18n="tab.code">Code</button>
-            <button type="button" class="tab" data-tab="diff" title="变更 diff" data-i18n="tab.diff">Diff <span class="tab-badge hidden" id="diffTabBadge">0</span></button>
-            <button type="button" class="btn small ghost" id="btnSplitLayout" title="Code | Diff 并排" data-i18n-title="split.title" aria-pressed="false">⧉ Split</button>
-            <span class="live-badge hidden" id="liveBadge">● LIVE</span>
-            <span class="file-path" id="currentPath">—</span>
-            <span class="dirty-badge hidden" id="dirtyBadge">未保存</span>
-            <label class="follow-toggle" title="跟随 Agent 焦点文件">
-              <input type="checkbox" id="followAgent" checked />
-              <span data-i18n="follow">跟随</span>
-            </label>
+            <div class="center-tabs-primary">
+              <button type="button" class="tab active" data-tab="live" title="任务实时动态" data-i18n="tab.live">Live</button>
+              <button type="button" class="tab tab-secondary" data-tab="editor" title="代码" data-i18n="tab.code">Code</button>
+              <button type="button" class="tab tab-secondary" data-tab="diff" title="变更 diff" data-i18n="tab.diff">Diff <span class="tab-badge hidden" id="diffTabBadge">0</span></button>
+            </div>
+            <div class="center-tabs-tools" id="centerTabsTools">
+              <button type="button" class="btn small ghost" id="btnSplitLayout" title="Code | Diff 并排" data-i18n-title="split.title" aria-pressed="false">⧉ Split</button>
+              <span class="live-badge hidden" id="liveBadge">● LIVE</span>
+              <span class="file-path" id="currentPath">—</span>
+              <span class="dirty-badge hidden" id="dirtyBadge">未保存</span>
+              <label class="follow-toggle" title="跟随 Agent 焦点文件">
+                <input type="checkbox" id="followAgent" checked />
+                <span data-i18n="follow">跟随</span>
+              </label>
+            </div>
           </div>
 
           <!-- Live：任务实时动态（真正价值区） -->

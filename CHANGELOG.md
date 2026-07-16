@@ -11,6 +11,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 - See [ROADMAP.md](ROADMAP.md)
 
+## [1.8.0] — 2026-07-16
+
+### Layout simplify — default shell converge
+
+- **Presets**: primary **Work** + **Review** only; Pilot / Full / Auto under **···** menu
+- **Auto-Pilot default off** (no surprise ultra-wide flip)
+- **Center tabs**: Live primary; Split / follow / path hidden on Live (shown on Code/Diff)
+- Quieter project strip, calmer chat head icons, softer Agent chrome
+- New `layout-simple.css` · Ctrl+K labels: Work first, advanced last
+
 ## [1.7.1] — 2026-07-16
 
 ### Plugin marketplace — TUI flag parity

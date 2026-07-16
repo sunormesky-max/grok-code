@@ -1,0 +1,218 @@
+/* ═══════════════════════════════════════════════════════
+   GrokCode Layout Simple v1.8 — converge the default shell
+   Primary path: Work (Agent) + Live · Review on demand
+   Advanced layouts / Code tools tucked away
+   ═══════════════════════════════════════════════════════ */
+
+/* ── Layout presets: Work · Review · ··· ─────────────── */
+body.layout-v15 .layout-presets.simplified {
+  gap: 0;
+  padding: 2px;
+}
+body.layout-v15 .layout-presets.simplified > .layout-preset {
+  padding: 5px 12px;
+  font-size: 10.5px;
+  letter-spacing: 0.08em;
+}
+body.layout-v15 .layout-presets.simplified > .layout-preset.active {
+  box-shadow: 0 0 12px rgba(125, 211, 252, 0.28);
+}
+
+.layout-more {
+  position: relative;
+  display: inline-flex;
+  margin-left: 2px;
+  border-left: 1px solid rgba(125, 211, 252, 0.12);
+  padding-left: 2px;
+}
+.layout-more-btn {
+  min-width: 32px;
+  letter-spacing: 0.12em !important;
+  font-weight: 700;
+}
+.layout-more-btn.has-advanced {
+  color: #bae6fd !important;
+}
+.layout-more-btn.has-advanced.active,
+.layout-more-btn[aria-expanded='true'] {
+  background: rgba(125, 211, 252, 0.12) !important;
+  color: #e0f2fe !important;
+  box-shadow: none !important;
+}
+.layout-more-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 12050;
+  min-width: 200px;
+  padding: 6px;
+  border-radius: 12px;
+  border: 1px solid rgba(125, 211, 252, 0.22);
+  background: linear-gradient(165deg, rgba(10, 14, 22, 0.98), rgba(4, 6, 12, 0.99));
+  box-shadow:
+    0 16px 48px rgba(0, 0, 0, 0.55),
+    0 0 24px rgba(125, 211, 252, 0.08);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.layout-more-menu.hidden {
+  display: none !important;
+}
+.layout-more-item {
+  appearance: none;
+  border: 1px solid transparent;
+  background: transparent;
+  color: #d4d4d8;
+  text-align: left;
+  padding: 8px 10px;
+  border-radius: 9px;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-family: var(--mono, ui-monospace, monospace);
+  transition: background 0.12s, border-color 0.12s;
+}
+.layout-more-item:hover {
+  background: rgba(125, 211, 252, 0.08);
+  border-color: rgba(125, 211, 252, 0.12);
+}
+.layout-more-item.active {
+  background: linear-gradient(90deg, rgba(56, 189, 248, 0.16), transparent);
+  border-color: rgba(125, 211, 252, 0.2);
+  box-shadow: inset 2px 0 0 #38bdf8;
+}
+.layout-more-item .lm-name {
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #f4f4f5;
+}
+.layout-more-item .lm-desc {
+  font-size: 10.5px;
+  color: #71717a;
+  letter-spacing: 0.02em;
+  text-transform: none;
+  font-weight: 400;
+}
+.layout-more-item.auto-pilot.active .lm-name {
+  color: #c4b5fd;
+}
+
+/* ── Center tabs: Live primary, tools contextual ─────── */
+body.layout-v15 #editorTabs.tabs {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+body.layout-v15 .center-tabs-primary {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px;
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.28);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+}
+body.layout-v15 .center-tabs-primary .tab {
+  border-radius: 8px;
+  padding: 5px 12px;
+  font-size: 12px;
+}
+body.layout-v15 .center-tabs-primary .tab[data-tab='live'].active {
+  background: linear-gradient(135deg, rgba(125, 211, 252, 0.2), rgba(56, 189, 248, 0.08));
+  color: #e0f2fe;
+  box-shadow: inset 0 0 0 1px rgba(125, 211, 252, 0.25);
+}
+body.layout-v15 .center-tabs-primary .tab-secondary {
+  opacity: 0.72;
+  font-size: 11.5px;
+}
+body.layout-v15 .center-tabs-primary .tab-secondary.active {
+  opacity: 1;
+}
+body.layout-v15 .center-tabs-tools {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+  margin-left: 4px;
+}
+
+/* Live: hide Code/Diff tooling noise */
+body.center-tab-live .center-tabs-tools #btnSplitLayout,
+body.center-tab-live .center-tabs-tools .follow-toggle,
+body.center-tab-live .center-tabs-tools #currentPath,
+body.center-tab-live .center-tabs-tools #dirtyBadge {
+  display: none !important;
+}
+
+/* Code: path + follow + dirty; split optional */
+body.center-tab-editor .center-tabs-tools #btnSplitLayout {
+  display: inline-flex;
+}
+
+/* Diff: split useful; path less critical */
+body.center-tab-diff .center-tabs-tools .follow-toggle {
+  display: none !important;
+}
+
+/* Quiet project strip */
+body.layout-v15 .project-bar-label {
+  display: none;
+}
+
+/* Agent chat head: slightly calmer secondary actions until hover */
+body.layout-v15 .chat-head-actions .icon-btn {
+  opacity: 0.55;
+}
+body.layout-v15 .chat-head-actions:hover .icon-btn,
+body.layout-v15 .chat-head-actions .icon-btn:focus-visible {
+  opacity: 1;
+}
+body.layout-v15 .chat-head-actions .review-bridge-chip {
+  opacity: 1;
+}
+body.layout-v15 .chat-head-actions .status-chip {
+  opacity: 1;
+}
+
+/* Mode bar: slightly denser, less “dashboard” */
+body.layout-v15 .mode-bar {
+  gap: 3px;
+  padding: 2px;
+}
+body.layout-v15 .mode-chip {
+  padding: 4px 10px;
+  font-size: 11.5px;
+}
+
+/* Softer secondary panel edges (less flight-deck chrome in default work) */
+body.layout-mode-agent.layout-v15 .files.glass,
+body.layout-mode-agent.layout-v15 .editor-wrap.glass,
+body.layout-mode-agent.layout-v15 .terminal-wrap.glass {
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.03),
+    0 6px 20px rgba(0, 0, 0, 0.3) !important;
+}
+
+/* Compact density: tighter simplified presets */
+body.density-compact.layout-v15 .layout-presets.simplified > .layout-preset {
+  padding: 3px 8px;
+  font-size: 9.5px;
+}
+body.density-compact.layout-v15 .center-tabs-primary .tab {
+  padding: 3px 8px;
+  font-size: 11px;
+}
+
+@media (max-width: 1100px) {
+  body.layout-v15 .layout-more-menu {
+    right: auto;
+    left: 0;
+  }
+}

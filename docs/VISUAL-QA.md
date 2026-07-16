@@ -6,7 +6,7 @@ Use after UI/visual changes. Prefer a **wide window (≥1600px)** and **Normal F
 
 - [ ] `npm start` on a clean build (`git pull` + install if needed)
 - [ ] Theme: **Grok** (default), then spot **Ice / Mars / Void**
-- [ ] Layout: **Agent** → **Pilot** (if wide) → **Review** → **Full**
+- [ ] Layout: **Work** (default) → **Review**; **···** → Pilot / Full / Auto (Auto default off)
 - [ ] FX: Settings → Appearance → **标准 / 高强度**
 - [ ] Optional: **强制减少动效** on, then off
 

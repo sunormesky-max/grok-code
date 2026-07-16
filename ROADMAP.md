@@ -55,12 +55,14 @@ Living plan for the GrokCode open-source ecosystem. Order may change based on co
 - [x] Optional cinematic idle ambient (v1.6.3)
 - [x] Storyboard mini-diff → before reconstruct (v1.7.0)
 - [x] Plugin marketplace TUI filter/action parity (v1.7.1)
+- [x] Default shell converge · Work/Review primary (v1.8.0)
 
 ## Now (UI / experience)
 
 - [x] Outline panel / split layout visual pass
 - [x] Tree polish vs flight-deck chrome consistency
 - [x] Optional “cinematic idle” ambient (off by default)
+- [x] Layout simplify — hide advanced presets by default
 
 ## Deferred (services — not now)
 

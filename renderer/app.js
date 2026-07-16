@@ -58,8 +58,8 @@ const state = {
   liveSideCollapsed: loadJson('grokcode-live-side-collapsed', true) !== false,
   /** agent | pilot | review | full — Codex/ZCode 式布局预设 */
   layoutMode: loadJson('grokcode-layout-mode', 'agent') || 'agent',
-  /** 超宽自动 Pilot（≥1600） */
-  autoPilot: loadJson('grokcode-auto-pilot', true) !== false,
+  /** 超宽自动 Pilot（≥1600）— 默认关，避免布局乱跳 */
+  autoPilot: loadJson('grokcode-auto-pilot', false) === true,
   autoPilotApplied: false,
   /** 离线 storyboard 胶片条回灌（JSON/HTML/AES） */
   storyboardOverlay: null,
@@ -1200,6 +1200,48 @@ function syncAutoPilotUi() {
   btn.title = getAutoPilotEnabled()
     ? (localeIsEn() ? 'Auto-Pilot on (≥1600px) — click to disable' : '超宽自动 Pilot 已开（≥1600）· 点击关闭')
     : (localeIsEn() ? 'Auto-Pilot off — click to enable' : '超宽自动 Pilot 已关 · 点击开启');
+  syncLayoutPresetUi();
+}
+
+/** Highlight Work/Review vs advanced (Pilot/Full) in simplified preset strip */
+function syncLayoutPresetUi() {
+  const m = state.layoutMode || 'agent';
+  document.querySelectorAll('#layoutPresets [data-layout]').forEach((btn) => {
+    btn.classList.toggle('active', btn.dataset.layout === m);
+  });
+  const moreBtn = document.getElementById('btnLayoutMore');
+  const advanced = m === 'pilot' || m === 'full';
+  if (moreBtn) {
+    moreBtn.classList.toggle('has-advanced', advanced);
+    moreBtn.classList.toggle('active', advanced);
+    moreBtn.title = advanced
+      ? localeIsEn()
+        ? `More layouts · current: ${m}`
+        : `更多布局 · 当前 ${m === 'pilot' ? 'Pilot' : 'Full'}`
+      : localeIsEn()
+        ? 'More layouts · Pilot / Full / Auto'
+        : '更多布局 · Pilot / Full / Auto';
+  }
+  document.querySelectorAll('#layoutMoreMenu [data-layout]').forEach((btn) => {
+    btn.classList.toggle('active', btn.dataset.layout === m);
+  });
+}
+
+function setLayoutMoreOpen(open) {
+  const menu = document.getElementById('layoutMoreMenu');
+  const btn = document.getElementById('btnLayoutMore');
+  if (!menu || !btn) return;
+  menu.classList.toggle('hidden', !open);
+  btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+}
+
+function syncCenterTabChrome(name) {
+  const tab = name || state.activeTab || 'live';
+  document.body.classList.remove('center-tab-live', 'center-tab-editor', 'center-tab-diff');
+  const cls =
+    tab === 'editor' ? 'center-tab-editor' : tab === 'diff' ? 'center-tab-diff' : 'center-tab-live';
+  document.body.classList.add(cls);
+  document.body.dataset.centerTab = tab === 'editor' ? 'editor' : tab;
 }
 
 /**
@@ -1258,9 +1300,7 @@ function applyLayoutMode(mode, opts = {}) {
   );
   document.body.classList.add(`layout-mode-${m}`);
 
-  document.querySelectorAll('[data-layout]').forEach((btn) => {
-    btn.classList.toggle('active', btn.dataset.layout === m);
-  });
+  syncLayoutPresetUi();
   syncAutoPilotUi();
 
   if (!opts.skipCollapse) {
@@ -1290,11 +1330,12 @@ function applyLayoutMode(mode, opts = {}) {
   saveJson('grokcode-layout-mode', m);
   if (opts.persist !== false) persistLayout();
   if (opts.toast) {
+    const en = localeIsEn();
     const labels = {
-      agent: 'Agent · 对话在右',
-      pilot: 'Pilot · 对话居中',
-      review: 'Review · 审阅台',
-      full: 'Full · 全面板',
+      agent: en ? 'Work · chat + Live' : 'Work · 对话 + Live',
+      pilot: en ? 'Pilot · chat center' : 'Pilot · 对话居中',
+      review: en ? 'Review · Diff desk' : 'Review · 审阅台',
+      full: en ? 'Full · all panes' : 'Full · 全面板',
     };
     toast(labels[m] || m, 'ok');
   }
@@ -2284,14 +2325,28 @@ function bindUi() {
     if (e.target.closest('button')) return;
     if (state.termCollapsed) toggleTerm();
   });
-  // 布局预设 Agent / Pilot / Review / Full
-  document.querySelectorAll('[data-layout]').forEach((btn) => {
+  // 布局：Work / Review 主按钮；Pilot / Full 在「更多」菜单
+  document.querySelectorAll('#layoutPresets [data-layout]').forEach((btn) => {
     btn.addEventListener('click', () => {
       haptic(btn);
       applyLayoutMode(btn.dataset.layout, { toast: true });
+      setLayoutMoreOpen(false);
     });
   });
-  document.getElementById('btnAutoPilot')?.addEventListener('click', () => {
+  document.getElementById('btnLayoutMore')?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const menu = document.getElementById('layoutMoreMenu');
+    const open = menu && menu.classList.contains('hidden');
+    setLayoutMoreOpen(Boolean(open));
+  });
+  document.addEventListener('click', (e) => {
+    if (!e.target.closest?.('#layoutMore')) setLayoutMoreOpen(false);
+  });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') setLayoutMoreOpen(false);
+  });
+  document.getElementById('btnAutoPilot')?.addEventListener('click', (e) => {
+    e.stopPropagation();
     const b = document.getElementById('btnAutoPilot');
     haptic(b);
     setAutoPilotEnabled(!getAutoPilotEnabled());
@@ -2307,6 +2362,8 @@ function bindUi() {
     );
   });
   syncAutoPilotUi();
+  syncLayoutPresetUi();
+  syncCenterTabChrome(state.activeTab || 'live');
   // resize → auto pilot with hysteresis
   let _apResizeT = null;
   window.addEventListener('resize', () => {
@@ -2921,7 +2978,8 @@ function switchTab(name, opts = {}) {
   if (!opts.skipProjectWrite && P()) {
     P().activeTab = name;
   }
-  $$('.tab').forEach((t) => t.classList.toggle('active', t.dataset.tab === name));
+  $$('#editorTabs .tab').forEach((t) => t.classList.toggle('active', t.dataset.tab === name));
+  syncCenterTabChrome(name);
 
   const split = window.GrokSplit?.isSplit?.();
   if (split && name !== 'live') {
