@@ -11,6 +11,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 - See [ROADMAP.md](ROADMAP.md)
 
+## [1.6.0] — 2026-07-16
+
+### Visual polish milestone — palette · search · QA
+
+- **Command palette**: flight-deck glass, group labels, active ice rail, kbd-style hints
+- **Global search** (Ctrl+P / Ctrl+Shift+F): mode capsules + result rows match palette HUD
+- **docs/VISUAL-QA.md**: regression checklist for themes, layouts, FX, motion
+- Closes the v1.5.x visual-impact arc (`visual-impact` … `visual-impact-7.css`)
+
 ## [1.5.9] — 2026-07-16
 
 ### Visual impact 6 — mgmt panes · doctor · reduce motion

@@ -1,0 +1,266 @@
+/* ═══════════════════════════════════════════════════════
+   GrokCode Visual Impact 7 — palette · search · final HUD
+   ═══════════════════════════════════════════════════════ */
+
+/* ── Command palette flight-deck rows ────────────────── */
+body.layout-v15 .cmd-palette {
+  padding-top: min(16vh, 120px);
+}
+body.layout-v15 .cmd-backdrop {
+  background: rgba(0, 0, 0, 0.62) !important;
+  backdrop-filter: blur(10px) saturate(120%) !important;
+  -webkit-backdrop-filter: blur(10px) saturate(120%);
+}
+body.layout-v15 .cmd-card {
+  width: min(580px, 94vw) !important;
+  border: 1px solid transparent !important;
+  background:
+    linear-gradient(165deg, rgba(10, 16, 28, 0.98), rgba(4, 6, 12, 0.99)) padding-box,
+    linear-gradient(
+      135deg,
+      rgba(125, 211, 252, 0.55) 0%,
+      rgba(255, 255, 255, 0.1) 40%,
+      rgba(249, 115, 22, 0.4) 100%
+    )
+      border-box !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    0 28px 90px rgba(0, 0, 0, 0.7),
+    0 0 50px rgba(125, 211, 252, 0.1) !important;
+  border-radius: 16px !important;
+  overflow: hidden;
+}
+body.layout-v15 .cmd-input {
+  font-size: 15.5px !important;
+  padding: 16px 18px !important;
+  border-bottom: 1px solid rgba(125, 211, 252, 0.18) !important;
+  caret-color: #7dd3fc;
+  background: linear-gradient(180deg, rgba(125, 211, 252, 0.04), transparent) !important;
+}
+body.layout-v15 .cmd-input::placeholder {
+  color: #52525b;
+  letter-spacing: 0.02em;
+}
+body.layout-v15 .cmd-input:focus {
+  box-shadow: inset 0 -1px 0 rgba(56, 189, 248, 0.45);
+}
+body.layout-v15 .cmd-list {
+  padding: 8px !important;
+  max-height: min(52vh, 400px) !important;
+}
+body.layout-v15 .cmd-group {
+  font-family: var(--mono, ui-monospace, monospace);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #7dd3fc;
+  text-shadow: 0 0 10px rgba(125, 211, 252, 0.3);
+  padding: 10px 12px 6px;
+  margin-top: 4px;
+}
+body.layout-v15 .cmd-group:first-child {
+  margin-top: 0;
+  padding-top: 4px;
+}
+body.layout-v15 .cmd-item {
+  border: 1px solid transparent;
+  border-radius: 11px !important;
+  padding: 11px 12px !important;
+  margin-bottom: 2px;
+  transition: background 0.12s, border-color 0.12s, box-shadow 0.15s, transform 0.1s;
+}
+body.layout-v15 .cmd-item:hover {
+  background: linear-gradient(90deg, rgba(125, 211, 252, 0.08), transparent 80%) !important;
+  border-color: rgba(125, 211, 252, 0.12);
+}
+body.layout-v15 .cmd-item.active {
+  background: linear-gradient(
+    90deg,
+    rgba(56, 189, 248, 0.16),
+    rgba(249, 115, 22, 0.06) 70%,
+    transparent
+  ) !important;
+  border-color: rgba(56, 189, 248, 0.3);
+  box-shadow:
+    inset 3px 0 0 #7dd3fc,
+    0 0 20px rgba(56, 189, 248, 0.1);
+}
+body.layout-v15 .cmd-item:active {
+  transform: scale(0.99);
+}
+body.layout-v15 .cmd-title {
+  font-weight: 650;
+  letter-spacing: 0.01em;
+  color: #f4f4f5;
+}
+body.layout-v15 .cmd-item.active .cmd-title {
+  color: #e0f2fe;
+  text-shadow: 0 0 12px rgba(125, 211, 252, 0.2);
+}
+body.layout-v15 .cmd-hint {
+  font-family: var(--mono, ui-monospace, monospace) !important;
+  font-size: 10.5px !important;
+  color: #7dd3fc !important;
+  opacity: 0.9 !important;
+  border: 1px solid rgba(125, 211, 252, 0.22);
+  background: rgba(0, 0, 0, 0.35);
+  padding: 2px 7px;
+  border-radius: 6px;
+  letter-spacing: 0.04em;
+}
+body.layout-v15 .cmd-item.active .cmd-hint {
+  border-color: rgba(56, 189, 248, 0.4);
+  box-shadow: 0 0 10px rgba(56, 189, 248, 0.15);
+}
+body.layout-v15 .cmd-empty {
+  padding: 28px 20px !important;
+  font-family: var(--mono, ui-monospace, monospace);
+  letter-spacing: 0.04em;
+  color: #71717a !important;
+}
+body.layout-v15 .cmd-foot {
+  padding: 10px 16px 12px !important;
+  border-top: 1px solid rgba(125, 211, 252, 0.1);
+  background: linear-gradient(180deg, transparent, rgba(0, 0, 0, 0.35));
+  font-family: var(--mono, ui-monospace, monospace);
+  font-size: 10.5px !important;
+  letter-spacing: 0.04em;
+  color: #71717a !important;
+}
+body.layout-v15 .cmd-foot kbd {
+  border: 1px solid rgba(125, 211, 252, 0.28);
+  background: rgba(56, 189, 248, 0.1);
+  color: #7dd3fc;
+  border-radius: 4px;
+  padding: 1px 5px;
+  font-size: 10px;
+  box-shadow: 0 0 6px rgba(56, 189, 248, 0.1);
+}
+
+/* ── Global search overlay parity ────────────────────── */
+body.layout-v15 .gsearch {
+  padding-top: min(14vh, 100px);
+}
+body.layout-v15 .gsearch-backdrop {
+  background: rgba(0, 0, 0, 0.62) !important;
+  backdrop-filter: blur(10px) saturate(120%) !important;
+  -webkit-backdrop-filter: blur(10px) saturate(120%);
+}
+body.layout-v15 .gsearch-card {
+  width: min(600px, 94vw) !important;
+  border-radius: 16px !important;
+  border: 1px solid transparent !important;
+  background:
+    linear-gradient(165deg, rgba(10, 16, 28, 0.98), rgba(4, 6, 12, 0.99)) padding-box,
+    linear-gradient(
+      135deg,
+      rgba(125, 211, 252, 0.5) 0%,
+      rgba(255, 255, 255, 0.08) 40%,
+      rgba(249, 115, 22, 0.4) 100%
+    )
+      border-box !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    0 28px 90px rgba(0, 0, 0, 0.7),
+    0 0 48px rgba(125, 211, 252, 0.1) !important;
+}
+body.layout-v15 .gsearch-modes {
+  padding: 12px 14px 0 !important;
+  gap: 8px !important;
+}
+body.layout-v15 .gsearch-mode {
+  font-family: var(--mono, ui-monospace, monospace);
+  font-size: 11px !important;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  border-color: rgba(125, 211, 252, 0.2) !important;
+  transition: border-color 0.12s, background 0.12s, box-shadow 0.15s, color 0.12s;
+}
+body.layout-v15 .gsearch-mode:hover {
+  border-color: rgba(125, 211, 252, 0.4);
+  color: #e4e4e7;
+}
+body.layout-v15 .gsearch-mode.active {
+  color: #0a0c12 !important;
+  border-color: transparent !important;
+  background: linear-gradient(105deg, #7dd3fc, #e0f2fe 50%, #fb923c) !important;
+  box-shadow: 0 0 16px rgba(125, 211, 252, 0.35);
+  font-weight: 750 !important;
+}
+body.layout-v15 .gsearch-hint {
+  font-family: var(--mono, ui-monospace, monospace) !important;
+  color: #7dd3fc !important;
+  opacity: 0.75;
+  letter-spacing: 0.06em;
+}
+body.layout-v15 .gsearch-input {
+  font-size: 15.5px !important;
+  padding: 14px 16px !important;
+  border-bottom: 1px solid rgba(125, 211, 252, 0.18) !important;
+  caret-color: #7dd3fc;
+  background: linear-gradient(180deg, rgba(125, 211, 252, 0.03), transparent) !important;
+}
+body.layout-v15 .gsearch-list {
+  padding: 8px !important;
+  max-height: min(52vh, 400px) !important;
+}
+body.layout-v15 .gsearch-item {
+  border: 1px solid transparent;
+  border-radius: 11px !important;
+  margin-bottom: 2px;
+  padding: 11px 12px !important;
+  transition: background 0.12s, border-color 0.12s, box-shadow 0.15s;
+}
+body.layout-v15 .gsearch-item:hover {
+  background: linear-gradient(90deg, rgba(125, 211, 252, 0.08), transparent 80%) !important;
+  border-color: rgba(125, 211, 252, 0.12);
+}
+body.layout-v15 .gsearch-item.active {
+  background: linear-gradient(
+    90deg,
+    rgba(56, 189, 248, 0.16),
+    rgba(249, 115, 22, 0.06) 70%,
+    transparent
+  ) !important;
+  box-shadow:
+    inset 3px 0 0 #7dd3fc,
+    0 0 18px rgba(56, 189, 248, 0.1) !important;
+  border-color: rgba(56, 189, 248, 0.25);
+}
+body.layout-v15 .gs-title {
+  font-weight: 650;
+  color: #f4f4f5 !important;
+}
+body.layout-v15 .gsearch-item.active .gs-title {
+  color: #e0f2fe !important;
+  text-shadow: 0 0 10px rgba(125, 211, 252, 0.2);
+}
+body.layout-v15 .gs-sub {
+  color: #71717a !important;
+  font-size: 11px !important;
+}
+body.layout-v15 .gsearch-empty {
+  padding: 28px 20px !important;
+  font-family: var(--mono, ui-monospace, monospace);
+  letter-spacing: 0.04em;
+  color: #71717a !important;
+}
+
+/* Theme intensity on overlays */
+body.theme-mars.layout-v15 .cmd-item.active,
+body.theme-mars.layout-v15 .gsearch-item.active {
+  box-shadow: inset 3px 0 0 #f97316, 0 0 18px rgba(249, 115, 22, 0.12) !important;
+}
+body.theme-ice.layout-v15 .gsearch-mode.active {
+  background: linear-gradient(105deg, #0ea5e9, #38bdf8 50%, #22d3ee) !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body.layout-v15 .gsearch-card {
+    animation: none !important;
+  }
+}
+body.force-reduced-motion .gsearch-card {
+  animation: none !important;
+}

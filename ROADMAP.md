@@ -49,12 +49,13 @@ Living plan for the GrokCode open-source ecosystem. Order may change based on co
 - [x] Welcome/empty · toast/modal glass · haptic CSS (v1.5.7)
 - [x] Onboarding · settings sections · a11y motion docs (v1.5.8)
 - [x] MCP/Skills/Plugins panes · doctor cards · force reduce motion (v1.5.9)
+- [x] Command palette · global search HUD · visual QA checklist (v1.6.0)
 
 ## Now (UI / experience)
 
-- [ ] Command palette flight-deck item rows
-- [ ] Global search overlay visual parity
-- [ ] Final visual QA pass / screenshot checklist
+- [ ] Help / shortcuts overlay flight-deck pass
+- [ ] Density-compact audit of new visual layers
+- [ ] Optional per-theme boot color variants
 
 ## Deferred (services — not now)
 
