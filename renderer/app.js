@@ -1053,55 +1053,81 @@ function syncComposerToTask(t) {
 
 // ── 无边框窗口控制 ──────────────────────────────────────
 function bindWindowControls() {
-  // Electron drag regions swallow clicks unless no-drag is forced on controls
   const forceNoDrag = (el) => {
     if (!el) return;
-    el.style.webkitAppRegion = 'no-drag';
-    el.style.appRegion = 'no-drag';
+    try {
+      el.style.setProperty('-webkit-app-region', 'no-drag');
+      el.style.setProperty('app-region', 'no-drag');
+      el.style.pointerEvents = 'auto';
+    } catch {
+      /* ignore */
+    }
   };
+
+  const host = document.getElementById('winControls');
+  forceNoDrag(host);
   forceNoDrag(document.querySelector('.top-actions'));
-  forceNoDrag(document.querySelector('.win-controls'));
-  document.querySelectorAll('.topbar button, .topbar .no-drag, .win-btn').forEach(forceNoDrag);
+  document.querySelectorAll('#winControls, #winControls *, .top-actions, .top-actions button').forEach(forceNoDrag);
 
-  const bindWinBtn = (id, fn) => {
-    const el = document.getElementById(id);
-    if (!el) return;
-    forceNoDrag(el);
-    // mousedown must not start window drag
-    el.addEventListener(
-      'mousedown',
-      (e) => {
-        e.stopPropagation();
-      },
-      true
-    );
-    el.addEventListener(
-      'click',
-      (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        Promise.resolve(fn(e)).catch((err) => console.warn('window control', err));
-      },
-      true
-    );
+  const runWin = async (action) => {
+    const api = window.grok;
+    if (!api) {
+      console.error('[win] window.grok missing');
+      toast('窗口 API 不可用', 'err');
+      return;
+    }
+    try {
+      if (action === 'min') {
+        await api.windowMinimize();
+      } else if (action === 'max') {
+        const max = await api.windowMaximize();
+        syncMaxBtn(max);
+      } else if (action === 'close') {
+        await api.windowClose();
+      }
+    } catch (err) {
+      console.error('[win]', action, err);
+      toast((err && err.message) || '窗口操作失败', 'err');
+    }
   };
 
-  bindWinBtn('btnWinMin', () => window.grok.windowMinimize?.());
-  bindWinBtn('btnWinMax', async () => {
-    const max = await window.grok.windowMaximize?.();
-    syncMaxBtn(max);
-  });
-  bindWinBtn('btnWinClose', () => window.grok.windowClose?.());
+  const bindWinBtn = (id, action) => {
+    const el = document.getElementById(id);
+    if (!el) {
+      console.error('[win] missing button', id);
+      return;
+    }
+    forceNoDrag(el);
+    let last = 0;
+    const fire = (e) => {
+      if (e.button != null && e.button !== 0) return;
+      e.preventDefault();
+      e.stopPropagation();
+      const now = Date.now();
+      if (now - last < 350) return; // 防 pointerdown+click 双发
+      last = now;
+      runWin(action);
+    };
+    // pointerdown 在 frameless Windows 上比 click 更稳；click 作兜底
+    el.addEventListener('pointerdown', fire, true);
+    el.addEventListener('click', fire, true);
+  };
 
-  // 双击标题栏区域最大化（避开按钮 / 可交互区）
-  $('#titlebar')?.addEventListener('dblclick', async (e) => {
-    if (e.target.closest('button, input, a, .pill, .win-controls, .no-drag, .top-actions')) return;
-    const max = await window.grok.windowMaximize?.();
-    syncMaxBtn(max);
+  bindWinBtn('btnWinMin', 'min');
+  bindWinBtn('btnWinMax', 'max');
+  bindWinBtn('btnWinClose', 'close');
+
+  // 双击可拖区域最大化
+  document.querySelectorAll('.titlebar-drag, #titlebar').forEach((zone) => {
+    zone.addEventListener('dblclick', async (e) => {
+      if (e.target.closest('button, input, a, .pill, .win-controls, .top-actions, #winControls')) return;
+      if (!e.target.closest('.titlebar-drag') && e.currentTarget.id === 'titlebar') return;
+      await runWin('max');
+    });
   });
 
-  window.grok.on?.('window:maximized', (d) => syncMaxBtn(d?.maximized));
-  window.grok.windowIsMaximized?.().then(syncMaxBtn).catch(() => {});
+  window.grok?.on?.('window:maximized', (d) => syncMaxBtn(d?.maximized));
+  window.grok?.windowIsMaximized?.().then(syncMaxBtn).catch(() => {});
 }
 
 function syncMaxBtn(maximized) {

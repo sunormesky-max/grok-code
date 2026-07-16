@@ -73,7 +73,7 @@
       <div class="holo-beam"></div>
     </div>
 
-    <!-- 自定义无边框标题栏 + 工具栏 -->
+    <!-- 自定义无边框标题栏：仅 titlebar-drag 可拖，交互控件绝不放在 drag 祖先下 -->
     <header class="topbar titlebar" id="titlebar">
       <div class="brand titlebar-drag">
         <div class="logo" aria-hidden="true" title="Grok">
@@ -109,25 +109,23 @@
         </div>
       </div>
 
-      <div class="pills titlebar-drag">
-        <div class="pill cli-pill no-drag" id="cliPill" title="Grok CLI 状态">
+      <div class="pills">
+        <div class="pill cli-pill" id="cliPill" title="Grok CLI 状态">
           <span class="pill-ico">⚡</span>
           <span class="pill-text" id="cliLabel" data-i18n="cli.detecting">检测 CLI…</span>
           <span class="dot"></span>
         </div>
       </div>
 
-      <div class="top-actions no-drag">
-        <button class="btn ghost" id="btnOpen" title="添加项目到工作台 (Ctrl+O)">
+      <!-- 中间空白区负责拖窗，避免整条 topbar 设 drag 导致 Windows 吞按钮点击 -->
+      <div class="titlebar-spacer titlebar-drag" aria-hidden="true"></div>
+
+      <div class="top-actions">
+        <button type="button" class="btn ghost" id="btnOpen" title="添加项目到工作台 (Ctrl+O)">
           <span class="btn-ico">＋</span> <span data-i18n="btn.addProject">添加项目</span>
         </button>
-        <button class="btn ghost" id="btnOpenWindow" title="在新窗口打开项目（并排开发）">⧉ <span data-i18n="btn.newWindow">新窗口</span></button>
-        <button class="btn ghost icon-only" id="btnSettings" data-i18n-title="btn.settings" data-i18n-aria="btn.settings" title="设置 (Ctrl+,)">⚙</button>
-        <div class="win-controls" role="group" aria-label="窗口控制">
-          <button type="button" class="win-btn" id="btnWinMin" title="最小化" aria-label="最小化">─</button>
-          <button type="button" class="win-btn" id="btnWinMax" title="最大化" aria-label="最大化">□</button>
-          <button type="button" class="win-btn win-close" id="btnWinClose" title="关闭" aria-label="关闭">✕</button>
-        </div>
+        <button type="button" class="btn ghost" id="btnOpenWindow" title="在新窗口打开项目（并排开发）">⧉ <span data-i18n="btn.newWindow">新窗口</span></button>
+        <button type="button" class="btn ghost icon-only" id="btnSettings" data-i18n-title="btn.settings" data-i18n-aria="btn.settings" title="设置 (Ctrl+,)">⚙</button>
       </div>
     </header>
 
@@ -389,6 +387,13 @@
       <span id="sbAgent">待命</span>
       <span class="ml-auto" id="sbHint">Ctrl+1 Craft · ⌃⇧↵ 单次Craft · Ctrl+2 Plan · Ctrl+3 Ask · Ctrl+K</span>
     </footer>
+  </div>
+
+  <!-- 窗口按钮：在 #app 外，避开 drag / filter / ::after 层叠问题（Electron Windows） -->
+  <div class="win-controls" id="winControls" role="group" aria-label="窗口控制">
+    <button type="button" class="win-btn" id="btnWinMin" title="最小化" aria-label="最小化">─</button>
+    <button type="button" class="win-btn" id="btnWinMax" title="最大化" aria-label="最大化">□</button>
+    <button type="button" class="win-btn win-close" id="btnWinClose" title="关闭" aria-label="关闭">✕</button>
   </div>
 
   <div id="toasts" class="toasts" aria-live="polite"></div>

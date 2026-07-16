@@ -275,7 +275,8 @@ function createWindow(opts = {}) {
     title: 'GrokCode',
     frame: false,
     autoHideMenuBar: true,
-    titleBarStyle: 'hidden',
+    // Windows：不要用 hidden titleBarStyle 叠系统标题栏，纯自定义 + 独立按钮层
+    titleBarStyle: process.platform === 'darwin' ? 'hidden' : undefined,
     icon: fs.existsSync(iconPath) ? iconPath : undefined,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),

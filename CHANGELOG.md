@@ -11,6 +11,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 - See [ROADMAP.md](ROADMAP.md)
 
+## [1.4.12] — 2026-07-16
+
+### Fix window controls (Windows)
+
+- Stop putting `-webkit-app-region: drag` on the whole titlebar (Electron swallows child clicks)
+- Window min/max/close live in a **fixed overlay outside `#app`**, never under a drag ancestor
+- Drag only on brand + middle spacer; IPC + pointer handlers hardened
+
 ## [1.4.11] — 2026-07-16
 
 ### Fixes

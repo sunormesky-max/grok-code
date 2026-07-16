@@ -386,21 +386,22 @@ body {
   display: flex;
   align-items: center;
   gap: 14px;
-  padding: 0 8px 0 14px;
+  /* 右侧留给独立浮层窗口按钮 */
+  padding: 0 138px 0 14px;
   height: var(--topbar-h);
   border-bottom: 1px solid var(--border);
   background:
     linear-gradient(90deg, rgba(125, 211, 252, 0.04), transparent 30%, transparent 70%, rgba(249, 115, 22, 0.04)),
     linear-gradient(180deg, rgba(0, 0, 0, 0.95), rgba(0, 0, 0, 0.65));
   backdrop-filter: blur(18px);
-  z-index: 10;
+  z-index: 50;
   position: relative;
   flex-shrink: 0;
+  /* 关键：不要在 topbar 上设 drag。Windows Electron 会吞掉子按钮点击。 */
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
 }
 .topbar.titlebar {
-  /* 整条可作为拖拽区；交互控件单独 no-drag（必须写在子节点上，否则 Windows 吞点击） */
-  -webkit-app-region: drag;
-  app-region: drag;
   z-index: 50;
 }
 .topbar::after {
@@ -412,39 +413,48 @@ body {
   pointer-events: none;
   box-shadow: 0 0 12px rgba(125, 211, 252, 0.2);
 }
+/* 仅这些节点可拖窗 */
 .titlebar-drag {
   -webkit-app-region: drag;
   app-region: drag;
 }
-.topbar .no-drag,
+.titlebar-spacer {
+  flex: 1 1 auto;
+  min-width: 24px;
+  align-self: stretch;
+  -webkit-app-region: drag;
+  app-region: drag;
+}
 .topbar .top-actions,
 .topbar .top-actions *,
 .topbar button,
 .topbar .pill,
-.topbar .win-controls,
-.topbar .win-controls *,
-.topbar .win-btn {
+.topbar .pills {
   -webkit-app-region: no-drag !important;
   app-region: no-drag !important;
 }
 
-/* Windows 风格窗口按钮 */
+/* Windows 风格窗口按钮 — fixed 浮层，脱离 drag 祖先 */
 .win-controls {
+  position: fixed;
+  top: 0;
+  right: 0;
+  height: var(--topbar-h);
   display: flex;
   align-items: stretch;
-  margin-left: 6px;
-  height: 36px;
+  z-index: 2147483000;
+  margin: 0;
+  padding: 0 2px 0 6px;
   border-left: 1px solid var(--border-soft);
-  padding-left: 4px;
-  position: relative;
-  z-index: 60;
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0.92), rgba(0, 0, 0, 0.72));
   -webkit-app-region: no-drag !important;
   app-region: no-drag !important;
-  pointer-events: auto;
+  pointer-events: auto !important;
 }
 .win-btn {
-  width: 42px;
-  height: 36px;
+  width: 46px;
+  height: 100%;
+  min-height: var(--topbar-h);
   border: 0;
   background: transparent;
   color: var(--muted);
@@ -456,13 +466,14 @@ body {
   border-radius: 0;
   line-height: 1;
   position: relative;
-  z-index: 61;
+  z-index: 2147483001;
   -webkit-app-region: no-drag !important;
   app-region: no-drag !important;
-  pointer-events: auto;
+  pointer-events: auto !important;
+  user-select: none;
 }
 .win-btn:hover {
-  background: rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.1);
   color: var(--text);
 }
 .win-btn.win-close:hover {
@@ -602,12 +613,12 @@ button.pill:hover {
 }
 
 .top-actions {
-  margin-left: auto;
+  margin-left: 0;
   display: flex;
   gap: 8px;
   flex-shrink: 0;
   position: relative;
-  z-index: 60;
+  z-index: 55;
   -webkit-app-region: no-drag !important;
   app-region: no-drag !important;
   pointer-events: auto;
@@ -4325,14 +4336,10 @@ body.booted #app {
   backdrop-filter: blur(8px);
 }
 .win-controls {
-  margin-left: 8px;
   border-left-color: rgba(125, 211, 252, 0.12);
 }
 .win-btn {
-  border-radius: 6px;
-  margin: 2px 1px;
-  height: 32px;
-  width: 40px;
+  border-radius: 0;
 }
 
 /* Project bar �� flight strip */
