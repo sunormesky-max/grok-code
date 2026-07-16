@@ -11,6 +11,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 - See [ROADMAP.md](ROADMAP.md)
 
+## [1.5.8] — 2026-07-16
+
+### Visual impact 5 — onboarding · settings · a11y docs
+
+- **Onboarding**: flight-deck briefing layout (kickers, hero cards, step dots glow)
+- **Settings**: mono section titles (CLI · Context · Diagnostics · Theme · Telemetry), sharper tabs/fields
+- **README**: reduced-motion + FX intensity accessibility notes
+- New `visual-impact-5.css`
+
 ## [1.5.7] — 2026-07-16
 
 ### Visual impact 4 — empty · glass · haptic

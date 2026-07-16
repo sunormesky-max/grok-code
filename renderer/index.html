@@ -13,6 +13,7 @@
   <link rel="stylesheet" href="visual-impact-2.css" />
   <link rel="stylesheet" href="visual-impact-3.css" />
   <link rel="stylesheet" href="visual-impact-4.css" />
+  <link rel="stylesheet" href="visual-impact-5.css" />
   <link rel="stylesheet" href="help-overlay.css" />
   <link rel="stylesheet" href="tree-polish.css" />
   <link rel="stylesheet" href="search-ui.css" />
@@ -416,11 +417,12 @@
 
   <div id="toasts" class="toasts" aria-live="polite"></div>
 
-  <!-- 首启向导 -->
+  <!-- 首启向导 · flight deck briefing -->
   <div class="modal hidden" id="onboardingModal">
     <div class="modal-card glass onboarding-card">
       <div class="modal-head">
         <div>
+          <div class="onb-kicker">xAI · FLIGHT DECK BRIEFING</div>
           <h2>Welcome aboard</h2>
           <p class="modal-desc">GrokCode 首启体检 · 约 30 秒就绪</p>
         </div>
@@ -446,6 +448,11 @@
       </div>
 
       <div class="onb-step hidden" data-step="doctor">
+        <div class="onb-hero" style="padding-bottom:8px;margin-bottom:0">
+          <div class="onb-kicker">SYSTEMS CHECK</div>
+          <h3 style="margin-top:4px">环境体检</h3>
+          <p>确认 CLI · 路径 · 鉴权就绪</p>
+        </div>
         <div id="onbDoctorHost" class="doctor-results"></div>
         <div class="modal-foot">
           <button type="button" class="btn ghost" id="onbRedoDoctor">重新检测</button>
@@ -456,6 +463,7 @@
 
       <div class="onb-step hidden" data-step="project">
         <div class="onb-hero">
+          <div class="onb-kicker">MOUNT WORKSPACE</div>
           <h3>挂载一个项目</h3>
           <p>可稍后添加更多仓库并行开发。建议先选你正在写的代码目录。</p>
         </div>
@@ -467,6 +475,7 @@
 
       <div class="onb-step hidden" data-step="done">
         <div class="onb-hero">
+          <div class="onb-kicker">READY FOR LAUNCH</div>
           <h3>准备起飞</h3>
           <p>Enter 发送 · Shift+Enter 换行 · Ctrl+T 新任务 · Ctrl+O 添加项目<br>
           Diff 里可一键在 VS Code / Cursor 打开文件。</p>
@@ -499,77 +508,85 @@
 
       <!-- 通用 -->
       <div class="settings-pane" id="stab-general">
-        <div class="cli-status-box" id="cliStatusBox">
-          <div class="cli-status-top">
-            <strong>Grok CLI</strong>
-            <span class="badge" id="cliBadge">检测中</span>
+        <div class="settings-section">
+          <div class="settings-section-title">CLI · Runtime</div>
+          <div class="cli-status-box" id="cliStatusBox">
+            <div class="cli-status-top">
+              <strong>Grok CLI</strong>
+              <span class="badge" id="cliBadge">检测中</span>
+            </div>
+            <div id="cliStatusDetail">检测中…</div>
           </div>
-          <div id="cliStatusDetail">检测中…</div>
-        </div>
 
-        <label class="field">
-          <span data-i18n="cfg.grokPath">Grok 可执行文件路径 <em>可留空自动检测</em></span>
-          <input type="text" id="cfgGrokPath" placeholder="C:\Users\你\.grok\bin\grok.exe" />
-        </label>
-
-        <div class="field-row">
           <label class="field">
-            <span data-i18n="cfg.model">模型 <em>留空=CLI 默认</em></span>
-            <input type="text" id="cfgModel" placeholder="grok-build / grok-4.5" />
+            <span data-i18n="cfg.grokPath">Grok 可执行文件路径 <em>可留空自动检测</em></span>
+            <input type="text" id="cfgGrokPath" placeholder="C:\Users\你\.grok\bin\grok.exe" />
           </label>
-          <label class="field">
-            <span data-i18n="cfg.rounds">最大回合</span>
-            <input type="number" id="cfgRounds" min="1" max="100" value="30" />
+
+          <div class="field-row">
+            <label class="field">
+              <span data-i18n="cfg.model">模型 <em>留空=CLI 默认</em></span>
+              <input type="text" id="cfgModel" placeholder="grok-build / grok-4.5" />
+            </label>
+            <label class="field">
+              <span data-i18n="cfg.rounds">最大回合</span>
+              <input type="number" id="cfgRounds" min="1" max="100" value="30" />
+            </label>
+          </div>
+
+          <label class="field check">
+            <input type="checkbox" id="cfgYolo" checked />
+            <span>
+              <strong data-i18n="cfg.yolo">自动批准工具</strong>
+              <small>--always-approve（YOLO）</small>
+            </span>
           </label>
-        </div>
 
-        <label class="field check">
-          <input type="checkbox" id="cfgYolo" checked />
-          <span>
-            <strong data-i18n="cfg.yolo">自动批准工具</strong>
-            <small>--always-approve（YOLO）</small>
-          </span>
-        </label>
-
-        <label class="field">
-          <span data-i18n="cfg.rules">附加规则 <em>--rules</em></span>
-          <textarea id="cfgRules" rows="3" data-i18n-placeholder="cfg.rules.ph" placeholder="例如：优先中文回复；不要 git commit"></textarea>
-        </label>
-
-        <label class="field">
-          <span data-i18n="cfg.apikey">XAI_API_KEY <em>可选</em></span>
-          <input type="password" id="cfgApiKey" placeholder="xai-… 或留空使用 grok login" />
-          <small data-i18n="cfg.apikey.hint">密钥：console.x.ai · 本机：grok login</small>
-        </label>
-
-        <div class="field-row">
           <label class="field">
-            <span data-i18n="cfg.context">上下文压缩 <em>L1/L2</em></span>
-            <select id="cfgContextMode">
-              <option value="heuristic" data-i18n="cfg.context.heuristic">启发式（离线、默认）</option>
-              <option value="llm" data-i18n="cfg.context.llm">LLM 摘要（需 API Key）</option>
-            </select>
-            <small data-i18n="cfg.context.hint">LLM 模式会额外调用 xAI 精炼近端摘要与会话脉络</small>
+            <span data-i18n="cfg.rules">附加规则 <em>--rules</em></span>
+            <textarea id="cfgRules" rows="3" data-i18n-placeholder="cfg.rules.ph" placeholder="例如：优先中文回复；不要 git commit"></textarea>
           </label>
+
           <label class="field">
-            <span data-i18n="cfg.editor">外部编辑器</span>
-            <select id="cfgPreferredEditor">
-              <option value="auto" data-i18n="cfg.editor.auto">自动（Cursor → VS Code）</option>
-              <option value="cursor">Cursor</option>
-              <option value="code">VS Code</option>
-              <option value="system" data-i18n="cfg.editor.system">系统默认</option>
-            </select>
+            <span data-i18n="cfg.apikey">XAI_API_KEY <em>可选</em></span>
+            <input type="password" id="cfgApiKey" placeholder="xai-… 或留空使用 grok login" />
+            <small data-i18n="cfg.apikey.hint">密钥：console.x.ai · 本机：grok login</small>
           </label>
         </div>
 
-        <label class="field check">
-          <input type="checkbox" id="cfgAutoUpdate" checked />
-          <span>
-            <strong data-i18n="cfg.autoupdate">自动检查更新</strong>
-            <small data-i18n="cfg.autoupdate.hint">从 GitHub Releases 拉取（仅安装版）</small>
-          </span>
-        </label>
+        <div class="settings-section">
+          <div class="settings-section-title">Context · Editor</div>
+          <div class="field-row">
+            <label class="field">
+              <span data-i18n="cfg.context">上下文压缩 <em>L1/L2</em></span>
+              <select id="cfgContextMode">
+                <option value="heuristic" data-i18n="cfg.context.heuristic">启发式（离线、默认）</option>
+                <option value="llm" data-i18n="cfg.context.llm">LLM 摘要（需 API Key）</option>
+              </select>
+              <small data-i18n="cfg.context.hint">LLM 模式会额外调用 xAI 精炼近端摘要与会话脉络</small>
+            </label>
+            <label class="field">
+              <span data-i18n="cfg.editor">外部编辑器</span>
+              <select id="cfgPreferredEditor">
+                <option value="auto" data-i18n="cfg.editor.auto">自动（Cursor → VS Code）</option>
+                <option value="cursor">Cursor</option>
+                <option value="code">VS Code</option>
+                <option value="system" data-i18n="cfg.editor.system">系统默认</option>
+              </select>
+            </label>
+          </div>
 
+          <label class="field check">
+            <input type="checkbox" id="cfgAutoUpdate" checked />
+            <span>
+              <strong data-i18n="cfg.autoupdate">自动检查更新</strong>
+              <small data-i18n="cfg.autoupdate.hint">从 GitHub Releases 拉取（仅安装版）</small>
+            </span>
+          </label>
+        </div>
+
+        <div class="settings-section">
+          <div class="settings-section-title mars">Diagnostics · Updates</div>
         <div class="diag-box">
           <div class="diag-head">
             <strong data-i18n="cfg.doctor">环境体检 / 诊断</strong>
@@ -602,6 +619,7 @@
           </div>
           <small class="muted" data-i18n="profile.hint">导出规则 / 模型 / 上下文模式等，便于团队共享</small>
         </div>
+        </div>
 
         <div class="modal-foot">
           <button class="btn ghost" id="btnProbeCli" data-i18n="cfg.probe">重新检测</button>
@@ -611,6 +629,8 @@
 
       <!-- 外观：语言 / 主题 / 遥测 -->
       <div class="settings-pane hidden" id="stab-appearance">
+        <div class="settings-section">
+          <div class="settings-section-title">Locale · Density · FX</div>
         <label class="field">
           <span data-i18n="lang.label">界面语言</span>
           <select id="cfgLocale">
@@ -634,6 +654,9 @@
           </select>
           <small data-i18n="fx.hint">增强光晕、星云与 Agent 边光；低配可关</small>
         </label>
+        </div>
+        <div class="settings-section">
+          <div class="settings-section-title mars">Theme · Style</div>
         <label class="field">
           <span data-i18n="style.label">对话风格</span>
           <select id="cfgStylePack">
@@ -680,6 +703,9 @@
           <input type="file" id="themeFileInput" accept=".json,application/json" class="theme-file" />
           <button type="button" class="btn small ghost" id="btnThemePick">选择文件…</button>
         </div>
+        </div>
+        <div class="settings-section">
+          <div class="settings-section-title mars">Telemetry</div>
         <label class="field check">
           <input type="checkbox" id="cfgTelemetry" />
           <span>
@@ -693,6 +719,7 @@
         </label>
         <div class="diag-actions">
           <button type="button" class="btn small ghost" id="btnOpenCrashDir">打开崩溃日志目录</button>
+        </div>
         </div>
         <div class="modal-foot">
           <button class="btn primary" id="btnSaveAppearance">保存外观</button>

@@ -1,0 +1,272 @@
+/* ═══════════════════════════════════════════════════════
+   GrokCode Visual Impact 5 — onboarding · settings · a11y
+   ═══════════════════════════════════════════════════════ */
+
+/* ── Onboarding = flight deck briefing ───────────────── */
+body.layout-v15 .onboarding-card {
+  width: min(520px, 94vw) !important;
+  overflow: hidden;
+}
+body.layout-v15 .onboarding-card .modal-head {
+  padding: 16px 18px 8px;
+  background: linear-gradient(
+    90deg,
+    rgba(125, 211, 252, 0.1),
+    rgba(249, 115, 22, 0.05) 50%,
+    transparent
+  );
+  border-bottom: 1px solid rgba(125, 211, 252, 0.1);
+}
+body.layout-v15 .onboarding-card .modal-head h2 {
+  font-size: 17px;
+  letter-spacing: 0.04em;
+  background: linear-gradient(105deg, #fff 20%, #7dd3fc 70%, #fb923c);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+body.layout-v15 .onboarding-card .modal-desc {
+  font-family: var(--mono, ui-monospace, monospace);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  color: #a1a1aa;
+}
+body.layout-v15 .onb-kicker {
+  font-family: var(--mono, ui-monospace, monospace);
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  color: #7dd3fc;
+  text-shadow: 0 0 12px rgba(125, 211, 252, 0.4);
+  margin-bottom: 6px;
+}
+body.layout-v15 .onb-dots {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+  padding: 12px 16px 4px;
+}
+body.layout-v15 .onb-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(125, 211, 252, 0.3);
+  transition: background 0.2s, box-shadow 0.2s, transform 0.15s;
+}
+body.layout-v15 .onb-dot.active {
+  background: #7dd3fc;
+  border-color: rgba(125, 211, 252, 0.8);
+  box-shadow:
+    0 0 0 3px rgba(125, 211, 252, 0.15),
+    0 0 14px rgba(125, 211, 252, 0.55);
+  transform: scale(1.15);
+}
+body.layout-v15 .onb-dot.done {
+  background: #34d399;
+  border-color: rgba(52, 211, 153, 0.6);
+  box-shadow: 0 0 10px rgba(52, 211, 153, 0.35);
+}
+body.layout-v15 .onb-hero {
+  text-align: center;
+  padding: 16px 20px 12px;
+  margin: 8px 16px 0;
+  border-radius: 14px;
+  border: 1px solid rgba(125, 211, 252, 0.16);
+  background:
+    radial-gradient(ellipse 80% 50% at 50% 0%, rgba(125, 211, 252, 0.12), transparent 55%),
+    radial-gradient(ellipse 60% 40% at 90% 100%, rgba(249, 115, 22, 0.08), transparent 50%),
+    rgba(0, 0, 0, 0.35);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+body.layout-v15 .onb-hero h3 {
+  font-size: 17px;
+  font-weight: 750;
+  margin: 10px 0 8px;
+  color: #f4f4f5;
+  letter-spacing: 0.02em;
+}
+body.layout-v15 .onb-hero p {
+  margin: 0;
+  color: #a1a1aa;
+  font-size: 12.5px;
+  line-height: 1.55;
+}
+body.layout-v15 .onb-hero code {
+  font-family: var(--mono, ui-monospace, monospace);
+  font-size: 11.5px;
+  color: #7dd3fc;
+  background: rgba(56, 189, 248, 0.1);
+  padding: 1px 6px;
+  border-radius: 4px;
+  border: 1px solid rgba(125, 211, 252, 0.2);
+}
+body.layout-v15 .onb-step .modal-foot {
+  margin: 14px 16px 16px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(125, 211, 252, 0.1);
+}
+body.layout-v15 #onbDoctorHost {
+  margin: 8px 16px 0;
+  max-height: 240px;
+  border-radius: 12px;
+  border: 1px solid rgba(125, 211, 252, 0.12);
+  background: rgba(0, 0, 0, 0.3);
+  padding: 8px;
+}
+
+/* ── Settings: section headers + density ─────────────── */
+body.layout-v15 .settings-card {
+  width: min(720px, 96vw) !important;
+}
+body.layout-v15 .settings-tabs {
+  gap: 4px;
+  padding: 8px 14px;
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0.35), transparent);
+  border-bottom: 1px solid rgba(125, 211, 252, 0.1);
+}
+body.layout-v15 .stab {
+  border-radius: 8px;
+  border: 1px solid transparent;
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  transition: border-color 0.12s, background 0.12s, box-shadow 0.15s, color 0.12s;
+}
+body.layout-v15 .stab:hover {
+  border-color: rgba(125, 211, 252, 0.2);
+}
+body.layout-v15 .stab.active {
+  border-color: rgba(56, 189, 248, 0.4);
+  background: linear-gradient(135deg, rgba(56, 189, 248, 0.16), rgba(249, 115, 22, 0.08));
+  color: #e0f2fe;
+  box-shadow: 0 0 14px rgba(56, 189, 248, 0.12);
+  font-weight: 650;
+}
+body.layout-v15 .settings-pane {
+  padding: 4px 2px 8px;
+}
+body.layout-v15 .settings-section {
+  margin: 14px 0 16px;
+  padding: 0;
+}
+body.layout-v15 .settings-section-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 10px;
+  padding: 0 2px 6px;
+  font-family: var(--mono, ui-monospace, monospace);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #7dd3fc;
+  text-shadow: 0 0 10px rgba(125, 211, 252, 0.25);
+  border-bottom: 1px solid rgba(125, 211, 252, 0.12);
+}
+body.layout-v15 .settings-section-title::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #7dd3fc;
+  box-shadow: 0 0 8px rgba(125, 211, 252, 0.6);
+  flex-shrink: 0;
+}
+body.layout-v15 .settings-section-title.mars::before {
+  background: #f97316;
+  box-shadow: 0 0 8px rgba(249, 115, 22, 0.5);
+}
+body.layout-v15 .cli-status-box {
+  border-color: rgba(125, 211, 252, 0.22);
+  background: linear-gradient(145deg, rgba(8, 16, 28, 0.85), rgba(0, 0, 0, 0.4));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+body.layout-v15 .cli-status-box.ok {
+  border-color: rgba(52, 211, 153, 0.4);
+  box-shadow: 0 0 16px rgba(52, 211, 153, 0.08);
+}
+body.layout-v15 .cli-status-box.bad {
+  border-color: rgba(251, 113, 133, 0.4);
+  box-shadow: 0 0 16px rgba(251, 113, 133, 0.08);
+}
+body.layout-v15 .diag-box {
+  border-color: rgba(125, 211, 252, 0.16);
+  background: linear-gradient(145deg, rgba(6, 10, 18, 0.7), rgba(0, 0, 0, 0.35));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
+}
+body.layout-v15 .diag-head strong {
+  font-family: var(--mono, ui-monospace, monospace);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #a5f3fc;
+}
+body.layout-v15 .field > span {
+  font-size: 12px;
+  color: #d4d4d8;
+}
+body.layout-v15 .field > span em {
+  color: #71717a;
+  font-style: normal;
+  font-size: 11px;
+}
+body.layout-v15 .field input,
+body.layout-v15 .field select,
+body.layout-v15 .field textarea {
+  border-color: rgba(125, 211, 252, 0.18);
+  background: rgba(0, 0, 0, 0.4);
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+body.layout-v15 .field input:focus,
+body.layout-v15 .field select:focus,
+body.layout-v15 .field textarea:focus {
+  border-color: rgba(56, 189, 248, 0.5);
+  box-shadow: 0 0 0 1px rgba(56, 189, 248, 0.15), 0 0 16px rgba(56, 189, 248, 0.1);
+  outline: none;
+}
+body.layout-v15 .theme-drop {
+  border: 1px dashed rgba(125, 211, 252, 0.3);
+  border-radius: 12px;
+  background: rgba(0, 0, 0, 0.3);
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+body.layout-v15 .theme-drop:hover,
+body.layout-v15 .theme-drop.dragover {
+  border-color: rgba(56, 189, 248, 0.55);
+  box-shadow: 0 0 20px rgba(56, 189, 248, 0.12);
+}
+body.layout-v15 .modal-foot {
+  border-top-color: rgba(125, 211, 252, 0.12);
+}
+
+/* Density: slightly tighter section titles */
+body.density-compact .settings-section-title {
+  margin-bottom: 6px;
+  font-size: 9.5px;
+}
+body.density-compact .onb-hero {
+  padding: 12px 14px 10px;
+  margin: 6px 12px 0;
+}
+
+/* ── Reduced motion global safety (docs reference) ───── */
+@media (prefers-reduced-motion: reduce) {
+  body.layout-v15 .onb-dot.active,
+  body.layout-v15 .onb-hero,
+  body.layout-v15 .settings-pane {
+    transition: none !important;
+    animation: none !important;
+  }
+  body.layout-v15 .onb-dot.active {
+    transform: none;
+  }
+}
+
+/* Utility: document can link this class for demos */
+body.force-reduced-motion *,
+body.force-reduced-motion *::before,
+body.force-reduced-motion *::after {
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.01ms !important;
+}

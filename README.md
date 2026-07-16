@@ -79,6 +79,22 @@ export XAI_API_KEY=xai-...   # or set in Settings
 
 ---
 
+## Accessibility & motion
+
+GrokCode’s flight-deck UI includes glows and micro-animations. They **respect OS reduced-motion**:
+
+| Setting | Effect |
+|---------|--------|
+| **Windows** | Settings → Accessibility → Visual effects → Animation effects **Off** |
+| **macOS** | System Settings → Accessibility → Display → **Reduce motion** |
+| **Linux** | Desktop “reduce animation” (varies by DE) |
+
+When reduced motion is on, boot rings, send pulse, Live timeline entrance, scrub flashes, and most decorative loops are disabled. Functional layout and themes still work.
+
+**Visual FX intensity** (Settings → Appearance): **Normal** (default) or **High** (stronger nebula / Agent edge). Use Normal on low-end GPUs. Toggle via **Ctrl+K** → “切换视觉强度 FX”.
+
+---
+
 ## Repo layout
 
 ```text
