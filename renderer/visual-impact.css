@@ -1,0 +1,503 @@
+/* ═══════════════════════════════════════════════════════
+   GrokCode Visual Impact v1.5.4 — flight-deck punch
+   void · ice cyan · mars orange · cinematic HUD
+   Loaded after layout-agent.css
+   ═══════════════════════════════════════════════════════ */
+
+:root {
+  --impact-ice: #7dd3fc;
+  --impact-ice-hot: #bae6fd;
+  --impact-mars: #f97316;
+  --impact-mars-hot: #fdba74;
+  --impact-void: #020308;
+  --glow-ice: 0 0 24px rgba(125, 211, 252, 0.35), 0 0 48px rgba(56, 189, 248, 0.12);
+  --glow-mars: 0 0 20px rgba(249, 115, 22, 0.3), 0 0 40px rgba(249, 115, 22, 0.1);
+  --glow-edge: linear-gradient(
+    125deg,
+    rgba(125, 211, 252, 0.55) 0%,
+    rgba(255, 255, 255, 0.12) 32%,
+    rgba(249, 115, 22, 0.45) 78%,
+    rgba(125, 211, 252, 0.25) 100%
+  );
+}
+
+/* ── Atmosphere: deeper void + sharper HUD frame ──────── */
+body.layout-v15 .nebula {
+  opacity: 0.42;
+  filter: blur(80px) saturate(1.15);
+}
+body.layout-v15 .nebula-a {
+  background: radial-gradient(circle, rgba(56, 189, 248, 0.32), transparent 68%);
+}
+body.layout-v15 .nebula-b {
+  background: radial-gradient(circle, rgba(249, 115, 22, 0.2), transparent 70%);
+}
+body.layout-v15 .hex-grid {
+  opacity: 0.07;
+}
+body.layout-v15 .scanlines {
+  opacity: 0.38;
+}
+body.layout-v15 .holo-beam {
+  opacity: 0.4;
+  height: 2px;
+  box-shadow:
+    0 0 20px rgba(125, 211, 252, 0.45),
+    0 0 40px rgba(249, 115, 22, 0.15);
+}
+body.layout-v15 .hud-corner {
+  opacity: 0.55;
+  width: 42px;
+  height: 42px;
+  border-width: 2px;
+  filter: drop-shadow(0 0 6px rgba(125, 211, 252, 0.35));
+}
+body.layout-v15 .hud-tr,
+body.layout-v15 .hud-br {
+  filter: drop-shadow(0 0 6px rgba(249, 115, 22, 0.35));
+}
+body.layout-v15 .grid-floor {
+  opacity: 0.4;
+}
+
+/* ── Topbar: command deck strip ──────────────────────── */
+body.layout-v15 .topbar {
+  background:
+    linear-gradient(90deg, rgba(125, 211, 252, 0.08), transparent 35%, transparent 65%, rgba(249, 115, 22, 0.07)),
+    linear-gradient(180deg, rgba(6, 10, 18, 0.92), rgba(0, 0, 0, 0.55)) !important;
+  border-bottom: 1px solid transparent !important;
+  box-shadow:
+    0 1px 0 rgba(125, 211, 252, 0.12),
+    0 12px 40px rgba(0, 0, 0, 0.45),
+    inset 0 -1px 0 rgba(249, 115, 22, 0.06) !important;
+}
+body.layout-v15 .topbar::after {
+  height: 2px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(125, 211, 252, 0.7),
+    rgba(255, 255, 255, 0.35),
+    rgba(249, 115, 22, 0.65),
+    transparent
+  );
+  box-shadow: 0 0 16px rgba(125, 211, 252, 0.35);
+  opacity: 0.95;
+}
+body.layout-v15 .logo-mark {
+  filter: drop-shadow(0 0 12px rgba(125, 211, 252, 0.55))
+    drop-shadow(0 0 4px rgba(249, 115, 22, 0.25));
+}
+body.layout-v15 .logo-pulse {
+  box-shadow: 0 0 16px rgba(125, 211, 252, 0.5);
+}
+body.layout-v15 .name-g {
+  background: linear-gradient(105deg, #fff 0%, #bae6fd 40%, #7dd3fc 60%, #fb923c 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  filter: drop-shadow(0 0 10px rgba(125, 211, 252, 0.25));
+}
+body.layout-v15 .name-code {
+  letter-spacing: 0.04em;
+  color: #e4e4e7;
+  text-shadow: 0 0 12px rgba(249, 115, 22, 0.2);
+}
+
+/* Layout presets: denser capsule */
+body.layout-v15 .layout-presets {
+  border: 1px solid rgba(125, 211, 252, 0.28);
+  background:
+    linear-gradient(180deg, rgba(20, 28, 42, 0.75), rgba(0, 0, 0, 0.55));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    0 0 20px rgba(125, 211, 252, 0.08);
+  padding: 3px;
+}
+body.layout-v15 .layout-preset {
+  font-weight: 600;
+  letter-spacing: 0.08em;
+}
+body.layout-v15 .layout-preset.active {
+  background: linear-gradient(105deg, #7dd3fc 0%, #e0f2fe 45%, #fb923c 100%);
+  color: #04060c;
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.15),
+    0 0 22px rgba(125, 211, 252, 0.45),
+    0 0 12px rgba(249, 115, 22, 0.2);
+  text-shadow: none;
+}
+body.layout-v15 .layout-preset.auto-pilot.active {
+  background: linear-gradient(105deg, #c4b5fd, #7dd3fc 70%, #38bdf8);
+  box-shadow: 0 0 18px rgba(167, 139, 250, 0.4);
+}
+
+/* CLI pill pulse when open */
+body.layout-v15 .cli-pill.open {
+  border-color: rgba(52, 211, 153, 0.55) !important;
+  box-shadow:
+    0 0 0 1px rgba(52, 211, 153, 0.15),
+    0 0 20px rgba(52, 211, 153, 0.2);
+}
+body.layout-v15 .cli-pill.open .dot {
+  box-shadow: 0 0 10px #4ade80, 0 0 20px rgba(74, 222, 128, 0.5);
+}
+
+/* ── Workspace strip ─────────────────────────────────── */
+body.layout-v15 .project-bar {
+  background:
+    linear-gradient(90deg, rgba(125, 211, 252, 0.06), transparent 40%, rgba(249, 115, 22, 0.05)),
+    linear-gradient(180deg, rgba(4, 6, 12, 0.95), rgba(0, 0, 0, 0.5)) !important;
+  box-shadow: inset 0 -1px 0 rgba(125, 211, 252, 0.1);
+}
+body.layout-v15 .project-tab.active {
+  border-color: rgba(56, 189, 248, 0.55) !important;
+  background: linear-gradient(135deg, rgba(56, 189, 248, 0.18), rgba(249, 115, 22, 0.08)) !important;
+  box-shadow:
+    0 0 0 1px rgba(56, 189, 248, 0.15),
+    0 0 18px rgba(56, 189, 248, 0.15) !important;
+  color: #e0f2fe !important;
+}
+
+/* ── Glass panels: cinematic edge ────────────────────── */
+body.layout-v15 .glass {
+  background:
+    linear-gradient(165deg, rgba(14, 18, 30, 0.9), rgba(4, 6, 12, 0.94)) padding-box,
+    var(--glow-edge) border-box !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.07),
+    inset 0 0 0 1px rgba(125, 211, 252, 0.05),
+    0 16px 48px rgba(0, 0, 0, 0.55),
+    0 0 0 1px rgba(0, 0, 0, 0.5) !important;
+}
+
+/* Agent primary: the hero surface */
+body.layout-v15 .chat.glass,
+body.layout-v15 .agent-primary.glass {
+  background:
+    linear-gradient(165deg, rgba(12, 20, 36, 0.96), rgba(4, 6, 12, 0.98)) padding-box,
+    linear-gradient(
+      140deg,
+      rgba(125, 211, 252, 0.75) 0%,
+      rgba(255, 255, 255, 0.15) 28%,
+      rgba(249, 115, 22, 0.55) 72%,
+      rgba(56, 189, 248, 0.4) 100%
+    )
+      border-box !important;
+  box-shadow:
+    inset 0 1px 0 rgba(125, 211, 252, 0.14),
+    0 0 0 1px rgba(125, 211, 252, 0.08),
+    0 20px 60px rgba(0, 0, 0, 0.65),
+    0 0 50px rgba(125, 211, 252, 0.1),
+    0 0 80px rgba(249, 115, 22, 0.04) !important;
+  position: relative;
+}
+body.layout-v15 .chat.glass::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  background: radial-gradient(
+    ellipse 80% 40% at 50% 0%,
+    rgba(125, 211, 252, 0.1),
+    transparent 60%
+  );
+  z-index: 0;
+}
+body.layout-v15 .chat .panel-head {
+  background: linear-gradient(
+    90deg,
+    rgba(125, 211, 252, 0.1),
+    rgba(249, 115, 22, 0.04) 50%,
+    transparent
+  ) !important;
+  border-bottom-color: rgba(125, 211, 252, 0.12);
+  position: relative;
+  z-index: 1;
+}
+body.layout-v15 .chat .panel-label {
+  color: #7dd3fc !important;
+  text-shadow:
+    0 0 12px rgba(125, 211, 252, 0.55),
+    0 0 24px rgba(125, 211, 252, 0.2);
+  letter-spacing: 0.16em;
+}
+
+/* Status chip when running */
+body.layout-v15 .status-chip {
+  border: 1px solid rgba(125, 211, 252, 0.2);
+  background: rgba(0, 0, 0, 0.35);
+  border-radius: 999px;
+  padding: 2px 8px 2px 6px;
+}
+body.layout-v15 .status-chip .pulse {
+  box-shadow: 0 0 8px var(--ice);
+}
+body.layout-v15 #agentStatus.running,
+body.layout-v15 .status-chip.running {
+  border-color: rgba(249, 115, 22, 0.5);
+  box-shadow: 0 0 16px rgba(249, 115, 22, 0.2);
+}
+
+/* Review bridge chip: hotter */
+body.layout-v15 .review-bridge-chip {
+  border-color: rgba(249, 115, 22, 0.55);
+  background: linear-gradient(105deg, rgba(249, 115, 22, 0.22), rgba(125, 211, 252, 0.1));
+  box-shadow: 0 0 14px rgba(249, 115, 22, 0.15);
+  font-weight: 600;
+}
+body.layout-v15 .review-bridge-chip:hover {
+  box-shadow: var(--glow-mars);
+  transform: translateY(-1px);
+}
+
+/* ── Mode bar + composer flight deck ─────────────────── */
+body.layout-v15 .mode-chip {
+  border: 1px solid rgba(125, 211, 252, 0.2);
+  background: rgba(0, 0, 0, 0.35);
+  transition: border-color 0.15s, box-shadow 0.15s, transform 0.12s, background 0.15s;
+}
+body.layout-v15 .mode-chip:hover {
+  border-color: rgba(125, 211, 252, 0.45);
+  transform: translateY(-1px);
+}
+body.layout-v15 .mode-chip.active {
+  border-color: transparent;
+  background: linear-gradient(105deg, rgba(56, 189, 248, 0.25), rgba(249, 115, 22, 0.18));
+  box-shadow:
+    0 0 0 1px rgba(125, 211, 252, 0.4),
+    0 0 20px rgba(56, 189, 248, 0.2);
+  color: #e0f2fe;
+  font-weight: 700;
+}
+body.layout-v15 .composer-box {
+  position: relative;
+  border-radius: 14px;
+  border: 1px solid rgba(125, 211, 252, 0.2);
+  background: rgba(0, 0, 0, 0.45);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.04),
+    0 8px 28px rgba(0, 0, 0, 0.4);
+  transition: border-color 0.2s, box-shadow 0.25s;
+}
+body.layout-v15 .composer-box:focus-within {
+  border-color: rgba(125, 211, 252, 0.55);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    0 0 0 1px rgba(125, 211, 252, 0.15),
+    0 0 32px rgba(125, 211, 252, 0.18),
+    0 0 48px rgba(249, 115, 22, 0.06);
+}
+body.layout-v15 .composer-glow {
+  opacity: 0.55;
+  background: radial-gradient(
+    ellipse 70% 80% at 50% 100%,
+    rgba(125, 211, 252, 0.15),
+    transparent 70%
+  );
+}
+body.layout-v15 .composer-box:focus-within .composer-glow {
+  opacity: 1;
+  background: radial-gradient(
+    ellipse 80% 100% at 50% 120%,
+    rgba(125, 211, 252, 0.22),
+    rgba(249, 115, 22, 0.08) 50%,
+    transparent 70%
+  );
+}
+body.layout-v15 #prompt {
+  caret-color: var(--impact-ice);
+}
+body.layout-v15 .btn.primary {
+  background: linear-gradient(105deg, #38bdf8 0%, #7dd3fc 40%, #fb923c 100%) !important;
+  border: 0 !important;
+  color: #041018 !important;
+  font-weight: 750 !important;
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.12),
+    0 4px 16px rgba(56, 189, 248, 0.35),
+    0 0 28px rgba(249, 115, 22, 0.15) !important;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.2);
+  transition: transform 0.12s, box-shadow 0.2s, filter 0.15s !important;
+}
+body.layout-v15 .btn.primary:hover {
+  filter: brightness(1.08);
+  transform: translateY(-1px);
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.18),
+    0 6px 24px rgba(56, 189, 248, 0.45),
+    0 0 40px rgba(249, 115, 22, 0.2) !important;
+}
+body.layout-v15 .btn.primary:active {
+  transform: translateY(0) scale(0.98);
+}
+body.layout-v15 .send-arrow {
+  text-shadow: 0 0 8px rgba(4, 16, 24, 0.4);
+}
+
+/* Hint chips */
+body.layout-v15 .hint-chip {
+  border-color: rgba(125, 211, 252, 0.22);
+  background: rgba(0, 0, 0, 0.35);
+  color: #a5f3fc;
+  font-weight: 500;
+}
+
+/* ── Center workspace tabs ───────────────────────────── */
+body.layout-v15 .panel-head.tabs {
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0.45), rgba(0, 0, 0, 0.2)) !important;
+  border-bottom: 1px solid rgba(125, 211, 252, 0.1);
+}
+body.layout-v15 .tab {
+  transition: background 0.15s, box-shadow 0.15s, color 0.15s;
+}
+body.layout-v15 .tab:hover {
+  color: #e0f2fe;
+  background: rgba(125, 211, 252, 0.06);
+}
+body.layout-v15 .tab.active {
+  background: linear-gradient(180deg, rgba(56, 189, 248, 0.18), rgba(56, 189, 248, 0.06)) !important;
+  box-shadow:
+    inset 0 0 0 1px rgba(56, 189, 248, 0.4),
+    0 0 16px rgba(56, 189, 248, 0.12) !important;
+  color: #e0f2fe !important;
+  font-weight: 650;
+}
+body.layout-v15 .live-badge {
+  box-shadow: 0 0 12px rgba(249, 115, 22, 0.45);
+  animation: liveBadgePulse 1.4s ease-in-out infinite;
+}
+@keyframes liveBadgePulse {
+  0%,
+  100% {
+    box-shadow: 0 0 8px rgba(249, 115, 22, 0.35);
+  }
+  50% {
+    box-shadow: 0 0 18px rgba(249, 115, 22, 0.55), 0 0 28px rgba(249, 115, 22, 0.2);
+  }
+}
+body.layout-v15 .tab-badge {
+  box-shadow: 0 0 8px rgba(249, 115, 22, 0.35);
+}
+
+/* Live mission bar */
+body.layout-v15 .live-status-bar {
+  background: linear-gradient(
+    90deg,
+    rgba(125, 211, 252, 0.08),
+    rgba(249, 115, 22, 0.04) 55%,
+    transparent
+  ) !important;
+  border-bottom-color: rgba(125, 211, 252, 0.12);
+}
+body.layout-v15 .live-pulse-ring.on {
+  box-shadow:
+    0 0 0 0 rgba(249, 115, 22, 0.5),
+    0 0 12px rgba(249, 115, 22, 0.6);
+}
+body.layout-v15 .live-side-toggle {
+  border-color: rgba(125, 211, 252, 0.35);
+  box-shadow: 0 0 12px rgba(125, 211, 252, 0.08);
+}
+body.layout-v15 .live-side-toggle[aria-expanded="true"] {
+  box-shadow: 0 0 16px rgba(56, 189, 248, 0.25);
+}
+
+/* Diff scrub export buttons */
+body.layout-v15 .diff-scrub-export:hover {
+  box-shadow: 0 0 12px rgba(52, 211, 153, 0.25);
+}
+body.layout-v15 .diff-scrub-play.on {
+  box-shadow: 0 0 14px rgba(249, 115, 22, 0.35);
+  border-color: rgba(249, 115, 22, 0.5);
+}
+
+/* Explorer rail */
+body.layout-v15 .rail-expand {
+  border-color: rgba(125, 211, 252, 0.45);
+  background:
+    linear-gradient(180deg, rgba(56, 189, 248, 0.18), rgba(0, 0, 0, 0.65)),
+    rgba(6, 10, 18, 0.95) !important;
+  box-shadow:
+    0 0 0 1px rgba(125, 211, 252, 0.12),
+    0 0 28px rgba(125, 211, 252, 0.22),
+    inset 0 0 24px rgba(125, 211, 252, 0.08) !important;
+}
+body.layout-v15 .rail-expand:hover {
+  box-shadow:
+    0 0 0 1px rgba(125, 211, 252, 0.3),
+    0 0 40px rgba(125, 211, 252, 0.4),
+    inset 0 0 28px rgba(125, 211, 252, 0.12) !important;
+}
+
+/* Terminal collapsed strip */
+body.layout-v15 .terminal-wrap.collapsed {
+  border-color: rgba(125, 211, 252, 0.15);
+  box-shadow: inset 0 0 20px rgba(125, 211, 252, 0.04);
+}
+body.layout-v15 .terminal-wrap.collapsed:hover {
+  border-color: rgba(125, 211, 252, 0.35);
+  box-shadow: 0 0 16px rgba(125, 211, 252, 0.12);
+}
+
+/* Task tabs */
+body.layout-v15 .task-tab.active {
+  border-color: rgba(56, 189, 248, 0.5) !important;
+  background: linear-gradient(135deg, rgba(56, 189, 248, 0.16), rgba(249, 115, 22, 0.08)) !important;
+  box-shadow: 0 0 14px rgba(56, 189, 248, 0.12);
+}
+
+/* Messages — subtle lift */
+body.layout-v15 .msg.user .body,
+body.layout-v15 .msg.user {
+  box-shadow: 0 0 20px rgba(125, 211, 252, 0.06);
+}
+body.layout-v15 .msg.assistant .body {
+  border-color: rgba(125, 211, 252, 0.1);
+}
+
+/* Status bar telemetry */
+body.layout-v15 .statusbar {
+  background: linear-gradient(
+    90deg,
+    rgba(0, 30, 45, 0.95),
+    #000 35%,
+    #000 65%,
+    rgba(40, 16, 0, 0.6)
+  ) !important;
+  border-top: 1px solid rgba(125, 211, 252, 0.12);
+  box-shadow: inset 0 1px 0 rgba(125, 211, 252, 0.08);
+}
+body.layout-v15 .sb-brand {
+  color: #7dd3fc;
+  text-shadow: 0 0 10px rgba(125, 211, 252, 0.35);
+}
+
+/* Toasts */
+body.layout-v15 .toast {
+  border-color: rgba(125, 211, 252, 0.25);
+  box-shadow:
+    0 12px 40px rgba(0, 0, 0, 0.55),
+    0 0 20px rgba(125, 211, 252, 0.08);
+  backdrop-filter: blur(16px);
+}
+
+/* Scrollbars slightly brighter */
+body.layout-v15 *::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, rgba(125, 211, 252, 0.45), rgba(249, 115, 22, 0.3));
+  background-clip: padding-box;
+}
+
+/* Reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  body.layout-v15 .live-badge,
+  body.layout-v15 .holo-beam,
+  body.layout-v15 .logo-mark {
+    animation: none !important;
+  }
+  body.layout-v15 .btn.primary:hover,
+  body.layout-v15 .layout-preset,
+  body.layout-v15 .mode-chip {
+    transition: none !important;
+  }
+}

@@ -43,16 +43,23 @@ Living plan for the GrokCode open-source ecosystem. Order may change based on co
 - [x] Pilot chat-center layout · Diff↔Agent review bridge (v1.5.1)
 - [x] Auto-Pilot ultra-wide · storyboard filmstrip import (v1.5.2)
 - [x] Storyboard disk rehydrate when paths exist (v1.5.3)
+- [x] Visual impact flight-deck polish (v1.5.4)
 
-## Next
+## Now (UI / experience)
+
+- [ ] Visual polish pass 2: chat message stream + Live timeline drama
+- [ ] Theme packs: void / ice / mars intensity variants
+- [ ] Micro-interactions: send, task switch, Diff scrub
+
+## Deferred (services — not now)
 
 - [ ] Optional true cloud template vault (accounted service)
 - [ ] Share encrypted packs via optional link service
-- [ ] Storyboard: reconstruct before from mini-diff when possible
+- [ ] Shared cloud team profiles
 
 ## Later
 
-- [ ] Shared cloud team profiles
+- [ ] Storyboard: reconstruct before from mini-diff when possible
 - [ ] Full accessibility audit (screen readers)
 - [ ] Plugin marketplace filters parity with every TUI flag
 

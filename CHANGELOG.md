@@ -11,6 +11,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 - See [ROADMAP.md](ROADMAP.md)
 
+## [1.5.4] — 2026-07-16
+
+### Visual impact — flight deck
+
+- New `visual-impact.css`: stronger ice/mars edge glows, Agent hero panel, cinematic topbar energy line
+- Composer focus bloom · primary Send gradient punch · mode chips / layout presets premium capsule
+- Live badge pulse · explorer rail glow · status bar telemetry strip
+- Cloud services explicitly deferred in ROADMAP (UI-first)
+
 ## [1.5.3] — 2026-07-16
 
 ### Storyboard disk rehydrate
