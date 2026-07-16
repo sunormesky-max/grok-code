@@ -4612,7 +4612,8 @@ function collectGlobalTurns() {
 
 /**
  * Import storyboard pack into Diff filmstrip (offline re-view).
- * Hydrates change entries + checkpoints; mini-diff text shown when full content missing.
+ * Hydrates change entries + checkpoints; mini-diff text when full content missing.
+ * If project open and paths still exist on disk → rehydrate after/ops from disk.
  */
 async function importStoryboardToFilmstrip() {
   const en = localeIsEn();
@@ -4630,13 +4631,27 @@ async function importStoryboardToFilmstrip() {
     switchTab('diff');
     const turns = collectGlobalTurns();
     if (turns.length) scrubToTurn(turns[turns.length - 1].key);
+
+    let re = { ok: 0, miss: 0, skipped: true };
+    if (P()?.path || P()?.id) {
+      re = await rehydrateStoryboardFromDisk({ silent: true });
+    }
+
     renderDiffPane();
     updateReviewBridgeUi();
     const n = turns.length;
+    const reBit =
+      re.skipped
+        ? en
+          ? ' · open a project to rehydrate from disk'
+          : ' · 打开项目可从磁盘 rehydrate'
+        : en
+          ? ` · disk ${re.ok} ok / ${re.miss} miss`
+          : ` · 磁盘 ${re.ok} 成功 / ${re.miss} 缺失`;
     toast(
       en
-        ? `Storyboard loaded · ${n} turns · ${resolved.file?.split(/[/\\]/).pop() || 'pack'}`
-        : `已载入 storyboard · ${n} 轮 · ${resolved.file?.split(/[/\\]/).pop() || '包'}`,
+        ? `Storyboard loaded · ${n} turns · ${resolved.file?.split(/[/\\]/).pop() || 'pack'}${reBit}`
+        : `已载入 storyboard · ${n} 轮 · ${resolved.file?.split(/[/\\]/).pop() || '包'}${reBit}`,
       'ok'
     );
   } catch (e) {
@@ -4652,6 +4667,7 @@ function hydrateStoryboardOverlay(pack, file) {
     file: file || '',
     turns,
     importedAt: Date.now(),
+    rehydrate: null,
   };
   for (const t of turns) {
     const key = t.key || `imp-${t.ts || Math.random().toString(36).slice(2, 8)}`;
@@ -4706,6 +4722,139 @@ function hydrateStoryboardOverlay(pack, file) {
   }
 }
 
+/**
+ * When paths still exist under the open project, pull disk content into
+ * after/ops so Diff can show real line diffs (not only mini-diff text).
+ */
+async function rehydrateStoryboardFromDisk(opts = {}) {
+  const en = localeIsEn();
+  if (!state.storyboardOverlay?.turns?.length) {
+    if (!opts.silent) toast(en ? 'No storyboard overlay' : '当前无 storyboard 回灌', 'err');
+    return { ok: 0, miss: 0, skipped: true };
+  }
+  if (!P()) {
+    if (!opts.silent) toast(en ? 'Open a project first' : '请先打开项目', 'err');
+    return { ok: 0, miss: 0, skipped: true };
+  }
+
+  const paths = new Set();
+  for (const t of state.storyboardOverlay.turns) {
+    for (const p of t.files || []) {
+      if (p) paths.add(String(p));
+    }
+  }
+
+  let ok = 0;
+  let miss = 0;
+  const projectId = pid();
+
+  for (const path of paths) {
+    try {
+      let exists = true;
+      if (typeof window.grok.exists === 'function') {
+        const ex = await window.grok.exists(projectId, path);
+        // preload may return boolean or { exists }
+        exists = typeof ex === 'boolean' ? ex : ex?.exists !== false && !ex?.error;
+        if (ex && ex.exists === false) exists = false;
+      }
+      if (!exists) {
+        miss += 1;
+        const e = changesMap().get(path);
+        if (e) e.rehydrated = false;
+        continue;
+      }
+
+      const data = await window.grok.readFile(projectId, path);
+      if (data?.error || data?.content == null) {
+        miss += 1;
+        continue;
+      }
+
+      const after = String(data.content);
+      let entry = changesMap().get(path);
+      if (!entry) {
+        entry = {
+          path,
+          before: '',
+          after: '',
+          created: false,
+          restored: false,
+          reviewed: false,
+          ts: Date.now(),
+          stats: { adds: 0, dels: 0 },
+          ops: [],
+          checkpoints: [],
+          fromImport: true,
+        };
+        changesMap().set(path, entry);
+      }
+
+      // Preserve session "before" if agent already tracked this file
+      const before =
+        entry.before != null && entry.before !== ''
+          ? entry.before
+          : contentCacheMap().has(path) && contentCacheMap().get(path) !== after
+            ? contentCacheMap().get(path)
+            : entry.before ?? '';
+
+      entry.after = after;
+      entry.rehydrated = true;
+      entry.fromImport = entry.fromImport || true;
+      contentCacheMap().set(path, after);
+
+      // Prefer full recompute when we have any baseline; else empty→disk
+      const base = before || '';
+      if (window.DiffUtil?.computeLineDiff) {
+        const recomputed = window.DiffUtil.computeLineDiff(base, after);
+        entry.ops = recomputed.ops;
+        entry.stats = recomputed.stats || entry.stats;
+        if (!entry.before && base === '') {
+          // no historical before — still show full file as added-like snapshot
+          entry.before = '';
+        } else if (base && !entry.before) {
+          entry.before = base;
+        }
+      }
+
+      // Upgrade import checkpoints: attach disk after; clear mini-diff when full ops exist
+      for (const cp of entry.checkpoints || []) {
+        if (!cp.fromImport) continue;
+        cp.after = after;
+        if (entry.ops?.length && base !== undefined) {
+          // keep mini-diff as secondary; primary view uses live recompute
+          if (base || after) {
+            cp.importDiffText = cp.importDiffText || '';
+            cp.preferDisk = true;
+          }
+        }
+      }
+
+      // view live (rehydrated disk)
+      entry.viewCheckpoint = -1;
+      entry.compareA = null;
+      entry.compareB = null;
+      changesMap().set(path, entry);
+      ok += 1;
+    } catch {
+      miss += 1;
+    }
+  }
+
+  state.storyboardOverlay.rehydrate = { ok, miss, at: Date.now() };
+  if (!opts.silent) {
+    toast(
+      en
+        ? `Disk rehydrate · ${ok} ok · ${miss} missing`
+        : `磁盘 rehydrate · ${ok} 成功 · ${miss} 缺失`,
+      miss && !ok ? 'err' : 'ok'
+    );
+    renderDiffPane();
+    updateReviewBridgeUi();
+  }
+  return { ok, miss, skipped: false };
+}
+window.rehydrateStoryboardFromDisk = rehydrateStoryboardFromDisk;
+
 function clearStoryboardOverlay() {
   if (!state.storyboardOverlay) return;
   // remove import-only file entries (no live agent content)
@@ -4714,7 +4863,7 @@ function clearStoryboardOverlay() {
       changesMap().delete(path);
     } else if (e.checkpoints?.length) {
       e.checkpoints = e.checkpoints.filter((c) => !c.fromImport);
-      if (!e.checkpoints.length && e.fromImport) changesMap().delete(path);
+      if (!e.checkpoints.length && e.fromImport && !e.rehydrated) changesMap().delete(path);
     }
   }
   state.storyboardOverlay = null;
@@ -6317,6 +6466,21 @@ function getDiffViewSnapshot(entry) {
     };
   }
   const cp = cps[idx];
+  // Prefer disk-rehydrated content when checkpoint was upgraded
+  if (cp?.fromImport && cp.preferDisk && (cp.after != null || entry.after != null)) {
+    const left = entry.before ?? '';
+    const right = cp.after ?? entry.after ?? '';
+    const recomputed = window.DiffUtil.computeLineDiff(left, right);
+    return {
+      ops: recomputed.ops,
+      stats: recomputed.stats,
+      after: right,
+      label: `disk#${idx + 1}`,
+      checkpoint: cp,
+      index: idx,
+      rehydrated: true,
+    };
+  }
   // Offline storyboard mini-diff text (no full before/after)
   if (cp?.fromImport && cp.importDiffText) {
     return {
@@ -6703,9 +6867,23 @@ function renderDiffPane() {
   if (state.storyboardOverlay) {
     const en = localeIsEn();
     const name = (state.storyboardOverlay.file || '').split(/[/\\]/).pop() || 'pack';
+    const rh = state.storyboardOverlay.rehydrate;
+    const rhBit = rh
+      ? en
+        ? ` · disk ${rh.ok}/${rh.ok + rh.miss}`
+        : ` · 磁盘 ${rh.ok}/${rh.ok + rh.miss}`
+      : '';
+    const rehydratedFile = cur?.rehydrated
+      ? en
+        ? ' · this file on disk'
+        : ' · 本文件已 rehydrate'
+      : '';
     overlayBanner = `<div class="diff-banner storyboard-overlay-banner">
-      ${en ? 'Offline storyboard' : '离线 Storyboard'} · ${esc(name)} · ${globalTurns.length} turns
-      <button type="button" class="link-btn" data-storyboard-clear>${en ? 'Exit' : '退出回灌'}</button>
+      <span>${en ? 'Offline storyboard' : '离线 Storyboard'} · ${esc(name)} · ${globalTurns.length} turns${rhBit}${rehydratedFile}</span>
+      <span class="storyboard-overlay-actions">
+        <button type="button" class="link-btn" data-storyboard-rehydrate>${en ? 'Rehydrate disk' : '从磁盘恢复'}</button>
+        <button type="button" class="link-btn" data-storyboard-clear>${en ? 'Exit' : '退出回灌'}</button>
+      </span>
     </div>`;
   }
   content.innerHTML =
@@ -6765,6 +6943,9 @@ function renderDiffPane() {
   });
   content.querySelector('[data-storyboard-clear]')?.addEventListener('click', () => {
     clearStoryboardOverlay();
+  });
+  content.querySelector('[data-storyboard-rehydrate]')?.addEventListener('click', () => {
+    rehydrateStoryboardFromDisk({ silent: false });
   });
   content.querySelectorAll('[data-budget-mode]').forEach((btn) => {
     btn.onclick = (e) => {

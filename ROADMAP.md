@@ -42,12 +42,13 @@ Living plan for the GrokCode open-source ecosystem. Order may change based on co
 - [x] Agent-first layout shell · Agent/Review/Full presets (v1.5.0)
 - [x] Pilot chat-center layout · Diff↔Agent review bridge (v1.5.1)
 - [x] Auto-Pilot ultra-wide · storyboard filmstrip import (v1.5.2)
+- [x] Storyboard disk rehydrate when paths exist (v1.5.3)
 
 ## Next
 
 - [ ] Optional true cloud template vault (accounted service)
 - [ ] Share encrypted packs via optional link service
-- [ ] Storyboard import: optional disk rehydrate when paths exist
+- [ ] Storyboard: reconstruct before from mini-diff when possible
 
 ## Later
 

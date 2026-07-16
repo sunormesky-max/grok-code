@@ -11,6 +11,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 - See [ROADMAP.md](ROADMAP.md)
 
+## [1.5.3] — 2026-07-16
+
+### Storyboard disk rehydrate
+
+- After importing a storyboard pack, **auto-rehydrate** files that still exist under the open project (read disk → after/ops)
+- Banner actions: **从磁盘恢复** / **退出回灌**; shows `disk ok/miss` counts
+- Prefer full line diffs when disk content is available; fall back to offline mini-diff text otherwise
+- Ctrl+K: 「Storyboard 从磁盘 rehydrate」
+
 ## [1.5.2] — 2026-07-16
 
 ### Auto-Pilot · storyboard filmstrip import

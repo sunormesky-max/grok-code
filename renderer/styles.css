@@ -3025,9 +3025,19 @@ button.pill:hover {
   align-items: center;
   justify-content: space-between;
   gap: 10px;
+  flex-wrap: wrap;
   background: rgba(251, 191, 36, 0.08) !important;
   border-color: rgba(251, 191, 36, 0.3) !important;
   color: #fde68a;
+}
+.storyboard-overlay-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.storyboard-overlay-actions .link-btn {
+  color: #fde68a;
+  border-color: rgba(251, 191, 36, 0.35);
 }
 
 /* Storyboard reviewer notes (local, per turn) */

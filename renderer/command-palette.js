@@ -238,6 +238,16 @@
         run: run(() => global.clearStoryboardOverlay?.()),
       },
       {
+        id: 'diff.storyboard.rehydrate',
+        title: t('cmd.diff.storyboard.rehydrate', 'Storyboard 从磁盘 rehydrate'),
+        keywords: 'diff storyboard rehydrate disk 磁盘 恢复',
+        group: 'actions',
+        run: run(() => {
+          global.switchTab?.('diff');
+          global.rehydrateStoryboardFromDisk?.({ silent: false });
+        }),
+      },
+      {
         id: 'layout.auto.pilot',
         title: t('cmd.layout.auto.pilot', '切换超宽自动 Pilot'),
         keywords: 'layout auto pilot ultrawide 自动 超宽',
