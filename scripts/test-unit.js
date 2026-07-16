@@ -54,7 +54,23 @@ function testPluginsExports() {
   const p = require(path.join(root, 'electron', 'plugins.js'));
   assert.equal(typeof p.listInstalled, 'function');
   assert.equal(typeof p.installPlugin, 'function');
-  console.log('ok  plugins exports');
+  assert.equal(typeof p.updatePlugin, 'function');
+  assert.equal(typeof p.validatePlugin, 'function');
+  assert.equal(typeof p.filterPlugins, 'function');
+
+  const sample = [
+    { name: 'alpha', enabled: true, marketplace: 'xai', description: 'core tools' },
+    { name: 'beta', enabled: false, marketplace: 'xai', description: 'extra' },
+    { name: 'gamma', enabled: true, marketplace: 'community', description: 'fun' },
+  ];
+  assert.equal(p.filterPlugins(sample, { status: 'enabled' }).length, 2);
+  assert.equal(p.filterPlugins(sample, { status: 'disabled' }).length, 1);
+  assert.equal(p.filterPlugins(sample, { marketplace: 'xai' }).length, 2);
+  assert.equal(p.filterPlugins(sample, { q: 'fun' }).length, 1);
+  assert.equal(p.filterPlugins(sample, { q: 'nope' }).length, 0);
+  const markets = p.collectMarketplacesFromPlugins(sample, []);
+  assert.deepEqual(markets, ['community', 'xai']);
+  console.log('ok  plugins exports + filters');
 }
 
 function testProfilesRoundtrip() {

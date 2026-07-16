@@ -866,31 +866,70 @@
           <div class="settings-section-title mars">Plugins · Marketplace</div>
         </div>
         <div class="mgmt-toolbar">
-          <span class="mgmt-hint">对接 <code>grok plugin</code> / marketplace · 与 TUI 同源</span>
+          <span class="mgmt-hint" data-i18n="plugin.hint">对接 <code>grok plugin</code> · list/install/update/validate/marketplace 与 TUI 对齐</span>
           <div class="mgmt-actions">
-            <button class="btn small ghost" id="btnPluginRefresh">刷新</button>
-            <button class="btn small ghost" id="btnPluginUpdateMarkets">更新市场</button>
+            <button class="btn small ghost" id="btnPluginRefresh" data-i18n="plugin.refresh">刷新</button>
+            <button class="btn small ghost" id="btnPluginUpdateAll" data-i18n="plugin.updateAll" title="grok plugin update">更新全部</button>
+            <button class="btn small ghost" id="btnPluginUpdateMarkets" data-i18n="plugin.updateMarkets">更新市场</button>
+          </div>
+        </div>
+        <div class="plugin-filters" id="pluginFilters" role="group" aria-label="Plugin filters">
+          <div class="plugin-filter-row">
+            <span class="plugin-filter-label" data-i18n="plugin.filter.scope">范围</span>
+            <div class="plugin-chip-row" data-filter="scope">
+              <button type="button" class="plugin-chip active" data-val="all" data-i18n="plugin.scope.all">全部</button>
+              <button type="button" class="plugin-chip" data-val="installed" data-i18n="plugin.scope.installed">已安装</button>
+              <button type="button" class="plugin-chip" data-val="available" data-i18n="plugin.scope.available">可安装</button>
+              <button type="button" class="plugin-chip" data-val="markets" data-i18n="plugin.scope.markets">市场源</button>
+            </div>
+          </div>
+          <div class="plugin-filter-row">
+            <span class="plugin-filter-label" data-i18n="plugin.filter.status">状态</span>
+            <div class="plugin-chip-row" data-filter="status">
+              <button type="button" class="plugin-chip active" data-val="all" data-i18n="plugin.status.all">全部</button>
+              <button type="button" class="plugin-chip" data-val="enabled" data-i18n="plugin.status.enabled">已启用</button>
+              <button type="button" class="plugin-chip" data-val="disabled" data-i18n="plugin.status.disabled">已禁用</button>
+            </div>
+          </div>
+          <div class="plugin-filter-row">
+            <span class="plugin-filter-label" data-i18n="plugin.filter.market">市场</span>
+            <select id="pluginMarketFilter" class="plugin-market-select" aria-label="Filter by marketplace">
+              <option value="" data-i18n="plugin.market.all">全部市场</option>
+            </select>
           </div>
         </div>
         <div class="tree-search-wrap" style="margin-bottom:10px">
           <input type="search" id="pluginFilter" data-i18n-placeholder="plugin.search" placeholder="搜索已安装 / 可安装插件…" autocomplete="off" />
         </div>
         <div class="field-row">
-          <label class="field">
-            <span>安装插件 <em>git URL / user/repo</em></span>
+          <label class="field grow">
+            <span data-i18n="plugin.installLabel">安装插件 <em>git URL / user/repo@ref</em></span>
             <input type="text" id="pluginSource" placeholder="owner/plugin-repo 或 https://github.com/…" />
           </label>
+          <label class="field check plugin-trust" title="grok plugin install --trust">
+            <input type="checkbox" id="pluginTrust" checked />
+            <span data-i18n="plugin.trust">--trust</span>
+          </label>
           <div class="field" style="align-self:end">
-            <button class="btn small primary" id="btnPluginInstall">安装</button>
+            <button class="btn small primary" id="btnPluginInstall" data-i18n="plugin.install">安装</button>
           </div>
         </div>
         <div class="field-row">
           <label class="field">
-            <span>添加市场源</span>
+            <span data-i18n="plugin.marketAdd">添加市场源</span>
             <input type="text" id="marketplaceSource" placeholder="https://github.com/xai-org/plugin-marketplace.git" />
           </label>
           <div class="field" style="align-self:end">
-            <button class="btn small ghost" id="btnMarketplaceAdd">添加源</button>
+            <button class="btn small ghost" id="btnMarketplaceAdd" data-i18n="plugin.addMarket">添加源</button>
+          </div>
+        </div>
+        <div class="field-row">
+          <label class="field grow">
+            <span data-i18n="plugin.validateLabel">校验清单 <em>plugin validate [path]</em></span>
+            <input type="text" id="pluginValidatePath" placeholder=". 或插件目录路径" />
+          </label>
+          <div class="field" style="align-self:end">
+            <button class="btn small ghost" id="btnPluginValidate" data-i18n="plugin.validate">校验</button>
           </div>
         </div>
         <div class="mgmt-list" id="pluginList">

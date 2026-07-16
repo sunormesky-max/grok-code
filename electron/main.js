@@ -1153,6 +1153,12 @@ ipcMain.handle('plugin:disable', (_e, payload = {}) =>
 ipcMain.handle('plugin:details', (_e, payload = {}) =>
   plugins.pluginDetails(payload.name, store.get('grokPath'))
 );
+ipcMain.handle('plugin:update', (_e, payload = {}) =>
+  plugins.updatePlugin(payload.name, store.get('grokPath'))
+);
+ipcMain.handle('plugin:validate', (_e, payload = {}) =>
+  plugins.validatePlugin(payload.path, store.get('grokPath'))
+);
 
 // ── Project profiles ────────────────────────────────────
 ipcMain.handle('profile:export', async (e, payload = {}) => {

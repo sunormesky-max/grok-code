@@ -11,6 +11,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 - See [ROADMAP.md](ROADMAP.md)
 
+## [1.7.1] — 2026-07-16
+
+### Plugin marketplace — TUI flag parity
+
+- **Filters**: scope (all / installed / available / markets), status (enabled / disabled), marketplace select, free-text search
+- **Actions**: `plugin update` (one + all), `plugin validate [path]`, install **`--trust`** checkbox
+- Row: update · details · enable/disable · uninstall; ON/OFF badges
+- IPC: `plugin:update`, `plugin:validate` · pure `filterPlugins` unit tests
+- Closes ROADMAP “Plugin marketplace filters parity with every TUI flag”
+
 ## [1.7.0] — 2026-07-16
 
 ### Storyboard — reconstruct before from mini-diff

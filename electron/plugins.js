@@ -134,6 +134,56 @@ async function pluginDetails(name, grokPath) {
   return { ok: true, details: r.data || r.stdout, text: r.stdout };
 }
 
+/** Update one plugin by name, or all when name is empty (TUI: grok plugin update [NAME]) */
+async function updatePlugin(name, grokPath) {
+  const args = ['plugin', 'update'];
+  if (name && String(name).trim()) args.push(String(name).trim());
+  return runGrok(args, grokPath, 180000);
+}
+
+/** Validate a plugin manifest directory (TUI: grok plugin validate [PATH]) */
+async function validatePlugin(pluginPath, grokPath) {
+  const args = ['plugin', 'validate'];
+  if (pluginPath && String(pluginPath).trim()) args.push(String(pluginPath).trim());
+  return runGrok(args, grokPath, 90000);
+}
+
+/**
+ * Pure filter helpers (UI + unit tests) — mirrors TUI list facets:
+ * scope: all|installed|available|markets
+ * status: all|enabled|disabled
+ * marketplace: '' | source name
+ * q: free-text
+ */
+function matchPluginQuery(obj, q) {
+  if (!q) return true;
+  const hay = `${obj.name || ''} ${obj.description || ''} ${obj.source || ''} ${obj.marketplace || ''} ${obj.version || ''}`.toLowerCase();
+  return hay.includes(String(q).toLowerCase());
+}
+
+function filterPlugins(list, { q = '', status = 'all', marketplace = '' } = {}) {
+  const items = Array.isArray(list) ? list : [];
+  return items.filter((p) => {
+    if (!matchPluginQuery(p, q)) return false;
+    if (status === 'enabled' && !p.enabled) return false;
+    if (status === 'disabled' && p.enabled) return false;
+    if (marketplace) {
+      const m = String(p.marketplace || p.market || '').toLowerCase();
+      if (m !== String(marketplace).toLowerCase()) return false;
+    }
+    return true;
+  });
+}
+
+function collectMarketplacesFromPlugins(installed = [], available = []) {
+  const set = new Set();
+  for (const p of [...installed, ...available]) {
+    const m = p?.marketplace || p?.market;
+    if (m) set.add(String(m));
+  }
+  return [...set].sort((a, b) => a.localeCompare(b));
+}
+
 function normalizePluginList(data) {
   if (!data) return null;
   if (Array.isArray(data)) {
@@ -206,4 +256,9 @@ module.exports = {
   enablePlugin,
   disablePlugin,
   pluginDetails,
+  updatePlugin,
+  validatePlugin,
+  matchPluginQuery,
+  filterPlugins,
+  collectMarketplacesFromPlugins,
 };

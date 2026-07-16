@@ -107,6 +107,8 @@ contextBridge.exposeInMainWorld('grok', {
   pluginEnable: (payload) => ipcRenderer.invoke('plugin:enable', payload || {}),
   pluginDisable: (payload) => ipcRenderer.invoke('plugin:disable', payload || {}),
   pluginDetails: (payload) => ipcRenderer.invoke('plugin:details', payload || {}),
+  pluginUpdate: (payload) => ipcRenderer.invoke('plugin:update', payload || {}),
+  pluginValidate: (payload) => ipcRenderer.invoke('plugin:validate', payload || {}),
 
   // Project profiles
   profileExport: (payload) => ipcRenderer.invoke('profile:export', payload || {}),

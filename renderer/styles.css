@@ -5165,6 +5165,107 @@ body.theme-ember {
   margin-left: 6px;
   font-weight: 400;
 }
+.mi-badge {
+  display: inline-block;
+  font-size: 9px;
+  font-family: var(--mono, monospace);
+  letter-spacing: 0.06em;
+  padding: 1px 6px;
+  border-radius: 999px;
+  margin-left: 6px;
+  vertical-align: middle;
+  border: 1px solid rgba(125, 211, 252, 0.2);
+  color: var(--muted);
+}
+.mi-badge.on {
+  border-color: rgba(52, 211, 153, 0.4);
+  color: #34d399;
+  background: rgba(52, 211, 153, 0.08);
+}
+.mi-badge.off {
+  border-color: rgba(161, 161, 170, 0.3);
+  color: #a1a1aa;
+  background: rgba(0, 0, 0, 0.25);
+}
+
+/* Plugin marketplace TUI-parity filters */
+.plugin-filters {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px 12px 10px;
+  margin: 0 0 4px;
+  border-bottom: 1px solid rgba(125, 211, 252, 0.08);
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0.28), transparent);
+}
+.plugin-filter-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.plugin-filter-label {
+  font-family: var(--mono, monospace);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--faint, #71717a);
+  min-width: 40px;
+}
+.plugin-chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.plugin-chip {
+  appearance: none;
+  border: 1px solid rgba(125, 211, 252, 0.15);
+  background: transparent;
+  color: var(--muted, #a1a1aa);
+  font-size: 10.5px;
+  font-family: var(--mono, monospace);
+  padding: 3px 9px;
+  border-radius: 999px;
+  cursor: pointer;
+  letter-spacing: 0.02em;
+  transition: border-color 0.12s, background 0.12s, color 0.12s;
+}
+.plugin-chip:hover {
+  border-color: rgba(125, 211, 252, 0.35);
+  color: #e4e4e7;
+}
+.plugin-chip.active {
+  border-color: rgba(56, 189, 248, 0.5);
+  background: rgba(56, 189, 248, 0.12);
+  color: #7dd3fc;
+}
+.plugin-market-select {
+  min-width: 160px;
+  max-width: 280px;
+  background: rgba(0, 0, 0, 0.45);
+  border: 1px solid rgba(125, 211, 252, 0.18);
+  color: var(--text, #e4e4e7);
+  border-radius: 8px;
+  padding: 4px 8px;
+  font-size: 12px;
+  font-family: var(--mono, monospace);
+}
+.plugin-trust {
+  align-self: end;
+  flex-direction: row !important;
+  align-items: center;
+  gap: 6px;
+  min-width: auto;
+  white-space: nowrap;
+  font-family: var(--mono, monospace);
+  font-size: 11px;
+  color: var(--muted);
+  padding-bottom: 6px;
+}
+.field.grow {
+  flex: 1;
+  min-width: 160px;
+}
 .mi-meta.mono {
   font-family: var(--mono);
   font-size: 11px;

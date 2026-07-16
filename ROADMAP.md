@@ -54,6 +54,7 @@ Living plan for the GrokCode open-source ecosystem. Order may change based on co
 - [x] Outline / split / tree flight-deck pass (v1.6.2)
 - [x] Optional cinematic idle ambient (v1.6.3)
 - [x] Storyboard mini-diff → before reconstruct (v1.7.0)
+- [x] Plugin marketplace TUI filter/action parity (v1.7.1)
 
 ## Now (UI / experience)
 
@@ -71,7 +72,7 @@ Living plan for the GrokCode open-source ecosystem. Order may change based on co
 
 - [x] Storyboard: reconstruct before from mini-diff when possible
 - [ ] Full accessibility audit (screen readers)
-- [ ] Plugin marketplace filters parity with every TUI flag
+- [x] Plugin marketplace filters parity with every TUI flag
 
 ## How to influence
 
