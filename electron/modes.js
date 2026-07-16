@@ -145,13 +145,60 @@ function isHotPersonalPath(absPath) {
 }
 
 /**
- * Merge base rules + style + mode for CLI --rules
+ * Merge base rules + project rules + style + mode for CLI --rules
+ * projectRules typically from workspace `.grok/rules` or `.grok/rules.md`
  */
-function buildRules({ baseRules = '', workMode = 'craft', stylePack = 'default' } = {}) {
+function buildRules({
+  baseRules = '',
+  projectRules = '',
+  workMode = 'craft',
+  stylePack = 'default',
+} = {}) {
   const mode = MODES[workMode] || MODES.craft;
   const style = STYLES[stylePack] || STYLES.default;
-  const parts = [String(baseRules || '').trim(), style.rules, mode.rules].filter(Boolean);
+  const parts = [
+    String(baseRules || '').trim(),
+    String(projectRules || '').trim()
+      ? `【项目规则 · .grok/rules】\n${String(projectRules).trim()}`
+      : '',
+    style.rules,
+    mode.rules,
+  ].filter(Boolean);
   return parts.join('\n\n');
+}
+
+/** Read project-level rules file if present */
+function readProjectRulesFile(projectPath) {
+  if (!projectPath) return { text: '', file: null };
+  const fs = require('fs');
+  const path = require('path');
+  const candidates = [
+    path.join(projectPath, '.grok', 'rules.md'),
+    path.join(projectPath, '.grok', 'rules'),
+    path.join(projectPath, '.grok', 'RULES.md'),
+  ];
+  for (const file of candidates) {
+    try {
+      if (fs.existsSync(file) && fs.statSync(file).isFile()) {
+        const text = fs.readFileSync(file, 'utf8');
+        return { text: String(text || '').slice(0, 20_000), file };
+      }
+    } catch {
+      /* ignore */
+    }
+  }
+  return { text: '', file: null };
+}
+
+function writeProjectRulesFile(projectPath, content) {
+  if (!projectPath) throw new Error('需要项目路径');
+  const fs = require('fs');
+  const path = require('path');
+  const dir = path.join(projectPath, '.grok');
+  fs.mkdirSync(dir, { recursive: true });
+  const file = path.join(dir, 'rules.md');
+  fs.writeFileSync(file, String(content ?? ''), 'utf8');
+  return { ok: true, file };
 }
 
 /**
@@ -200,6 +247,8 @@ module.exports = {
   STYLES,
   PERSONAL_PROTECT,
   buildRules,
+  readProjectRulesFile,
+  writeProjectRulesFile,
   modePromptPrefix,
   listModes,
   listStyles,

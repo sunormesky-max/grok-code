@@ -24,13 +24,14 @@ Living plan for the GrokCode open-source ecosystem. Order may change based on co
 - [x] Diff review/j-k/multi-select · slash cmds · chat message search
 - [x] @file mentions · Diff side-by-side · task pin/reorder · prompt drafts
 - [x] Diff blame hover · paste attach · rules chip · bg flight notify
+- [x] Diff checkpoints · drag-drop attach · .grok/rules.md · quiet hours
 
 ## Next
 
-- [ ] Checkpoint restore: jump Diff file to a prior agent turn snapshot
-- [ ] Composer drag-drop files (same path as paste attach)
-- [ ] Per-project rules override (workspace `.grok/rules`)
-- [ ] Quiet hours / mute chime schedule
+- [ ] One-click “open .grok/rules.md in Code” from rules modal
+- [ ] Checkpoint diff-between two turns (A→B)
+- [ ] Attachment save image into project `.grok/paste/`
+- [ ] Session templates (prompt starters pack)
 
 ## Later
 

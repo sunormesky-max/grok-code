@@ -459,6 +459,27 @@ ipcMain.handle('modes:list', () => ({
   styles: modes.listStyles(),
 }));
 
+ipcMain.handle('projectRules:get', (_e, payload = {}) => {
+  let projectPath = payload.projectPath || null;
+  if (!projectPath && payload.projectId) {
+    const p = projects.get(payload.projectId);
+    projectPath = p?.path || null;
+  }
+  if (!projectPath) return { text: '', file: null, exists: false };
+  const r = modes.readProjectRulesFile(projectPath);
+  return { text: r.text || '', file: r.file, exists: Boolean(r.file) };
+});
+
+ipcMain.handle('projectRules:set', (_e, payload = {}) => {
+  let projectPath = payload.projectPath || null;
+  if (!projectPath && payload.projectId) {
+    const p = projects.get(payload.projectId);
+    projectPath = p?.path || null;
+  }
+  if (!projectPath) throw new Error('需要打开项目');
+  return modes.writeProjectRulesFile(projectPath, payload.content ?? '');
+});
+
 ipcMain.handle('cli:probe', () => probeGrok(store.get('grokPath')));
 
 // ── 体检 / 诊断 / 首启 ──────────────────────────────────
@@ -775,9 +796,16 @@ ipcMain.handle('agent:run', async (_e, payload) => {
   });
   const fullPrompt = modePrefix + skillsIndex + basePrompt;
 
-  // merged rules for CLI
+  // merged rules for CLI (global + project .grok/rules + style + mode)
+  let projectRulesText = '';
+  try {
+    projectRulesText = modes.readProjectRulesFile(p.path).text || '';
+  } catch {
+    projectRulesText = '';
+  }
   const mergedRules = modes.buildRules({
     baseRules: store.get('rules') || '',
+    projectRules: projectRulesText,
     workMode,
     stylePack,
   });

@@ -97,6 +97,16 @@ function testModes() {
   assert.ok(craft.includes('飞行') || craft.includes('直接'), 'craft is flight/act-now');
   const craftRules = m.buildRules({ workMode: 'craft' });
   assert.ok(craftRules.includes('Craft'));
+  const withProj = m.buildRules({ baseRules: 'g', projectRules: 'prefer tests', workMode: 'craft' });
+  assert.ok(withProj.includes('prefer tests') || withProj.includes('项目规则'));
+  assert.equal(typeof m.readProjectRulesFile, 'function');
+  assert.equal(typeof m.writeProjectRulesFile, 'function');
+  const os = require('os');
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'grokcode-rules-'));
+  fs.mkdirSync(path.join(tmp, '.grok'), { recursive: true });
+  fs.writeFileSync(path.join(tmp, '.grok', 'rules.md'), 'no force push\n', 'utf8');
+  const pr = m.readProjectRulesFile(tmp);
+  assert.ok(pr.text.includes('no force push'));
   assert.equal(m.listModes().length, 3);
   assert.ok(m.listStyles().length >= 3);
   // plan execute phrase

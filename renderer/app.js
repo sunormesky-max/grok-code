@@ -2372,8 +2372,46 @@ window.openChatSearch = openChatSearch;
 window.toggleDiffViewMode = toggleDiffViewMode;
 
 // ── Background flight complete notify ───────────────────
+function getQuietHours() {
+  return (
+    loadJson('grokcode-quiet-hours', { enabled: false, start: '22:00', end: '08:00' }) || {
+      enabled: false,
+      start: '22:00',
+      end: '08:00',
+    }
+  );
+}
+
+function setQuietHours(q) {
+  saveJson('grokcode-quiet-hours', q);
+}
+
+function parseHm(s) {
+  const m = String(s || '').match(/^(\d{1,2}):(\d{2})$/);
+  if (!m) return null;
+  const h = Number(m[1]);
+  const min = Number(m[2]);
+  if (h > 23 || min > 59) return null;
+  return h * 60 + min;
+}
+
+function isQuietHoursNow() {
+  const q = getQuietHours();
+  if (!q?.enabled) return false;
+  const start = parseHm(q.start || '22:00');
+  const end = parseHm(q.end || '08:00');
+  if (start == null || end == null) return false;
+  const now = new Date();
+  const cur = now.getHours() * 60 + now.getMinutes();
+  if (start === end) return true; // whole day quiet
+  if (start < end) return cur >= start && cur < end;
+  // overnight e.g. 22:00–08:00
+  return cur >= start || cur < end;
+}
+
 function playCompleteChime() {
   if (state.notifySound === false) return;
+  if (isQuietHoursNow()) return;
   try {
     const Ctx = window.AudioContext || window.webkitAudioContext;
     if (!Ctx) return;
@@ -2448,9 +2486,29 @@ function bindRulesQuickEdit() {
     try {
       const cfg = await window.grok.getConfig();
       const rules = String(cfg.rules || '').trim();
-      chip.textContent = rules ? `rules · ${rules.slice(0, 18)}${rules.length > 18 ? '…' : ''}` : 'rules';
-      chip.title = rules || (localeIsEn() ? 'Click to edit --rules' : '点击编辑 --rules');
-      chip.classList.toggle('has-rules', Boolean(rules));
+      let proj = '';
+      try {
+        if (P()?.path) {
+          const pr = await window.grok.projectRulesGet({ projectPath: P().path, projectId: pid() });
+          proj = String(pr?.text || '').trim();
+        }
+      } catch {
+        /* ignore */
+      }
+      const any = rules || proj;
+      const quiet = isQuietHoursNow();
+      chip.textContent = quiet
+        ? 'rules · quiet'
+        : any
+          ? `rules · ${(rules || proj).slice(0, 14)}${(rules || proj).length > 14 ? '…' : ''}`
+          : 'rules';
+      chip.title =
+        (rules ? `global:\n${rules.slice(0, 200)}\n` : '') +
+        (proj ? `project:\n${proj.slice(0, 200)}\n` : '') +
+        (localeIsEn() ? 'Click to edit' : '点击编辑') +
+        (quiet ? (localeIsEn() ? ' · quiet hours' : ' · 静音时段') : '');
+      chip.classList.toggle('has-rules', Boolean(any));
+      chip.classList.toggle('quiet', quiet);
     } catch {
       /* ignore */
     }
@@ -2468,6 +2526,15 @@ async function openRulesQuickEdit() {
   } catch {
     cfg = {};
   }
+  let projRules = { text: '', file: null, exists: false };
+  try {
+    if (P()?.path) {
+      projRules = await window.grok.projectRulesGet({ projectPath: P().path, projectId: pid() });
+    }
+  } catch {
+    /* ignore */
+  }
+  const quiet = getQuietHours();
   let root = document.getElementById('rulesQuickModal');
   if (!root) {
     root = document.createElement('div');
@@ -2480,16 +2547,25 @@ async function openRulesQuickEdit() {
   root.classList.remove('hidden');
   root.innerHTML = `
     <div class="gc-modal-backdrop" data-close="1"></div>
-    <div class="gc-modal-card glass" style="width:min(520px,94vw)">
+    <div class="gc-modal-card glass" style="width:min(560px,94vw);max-height:min(88vh,760px);overflow:auto">
       <div class="gc-modal-head">
         <div>
-          <div class="skill-preview-kicker">--rules</div>
-          <h2>${en ? 'Project rules' : '附加规则'}</h2>
-          <p class="skill-preview-desc">${en ? 'Injected into every agent turn' : '注入每一轮 Agent 请求'}</p>
+          <div class="skill-preview-kicker">RULES</div>
+          <h2>${en ? 'Rules & notify' : '规则与通知'}</h2>
+          <p class="skill-preview-desc">${en ? 'Global --rules + workspace .grok/rules.md' : '全局 --rules + 工作区 .grok/rules.md'}</p>
         </div>
         <button type="button" class="icon-btn" data-close="1">✕</button>
       </div>
-      <textarea id="rulesQuickText" class="rules-quick-ta" rows="8" placeholder="${en ? 'e.g. Prefer Chinese; no git commit' : '例如：优先中文；不要 git commit'}"></textarea>
+      <label class="rules-label">${en ? 'Global rules (--rules)' : '全局规则 (--rules)'}</label>
+      <textarea id="rulesQuickText" class="rules-quick-ta" rows="5" placeholder="${en ? 'e.g. Prefer Chinese; no git commit' : '例如：优先中文；不要 git commit'}"></textarea>
+      <label class="rules-label">${en ? 'Project rules (.grok/rules.md)' : '项目规则 (.grok/rules.md)'}${projRules.file ? ` · ${esc(String(projRules.file).split(/[/\\]/).slice(-2).join('/'))}` : ''}</label>
+      <textarea id="projectRulesText" class="rules-quick-ta" rows="5" placeholder="${en ? 'Overrides for this workspace only' : '仅对本工作区生效'}" ${P() ? '' : 'disabled'}></textarea>
+      <div class="rules-quiet-row">
+        <label><input type="checkbox" id="quietEnabled" ${quiet.enabled ? 'checked' : ''}/> ${en ? 'Quiet hours (mute chime)' : '静音时段（关闭提示音）'}</label>
+        <input type="time" id="quietStart" value="${esc(quiet.start || '22:00')}" />
+        <span>–</span>
+        <input type="time" id="quietEnd" value="${esc(quiet.end || '08:00')}" />
+      </div>
       <div class="gc-modal-actions">
         <button type="button" class="btn small ghost" data-act="sound">${state.notifySound !== false ? (en ? 'Chime on' : '提示音开') : en ? 'Chime off' : '提示音关'}</button>
         <button type="button" class="btn small ghost" data-close="1">${en ? 'Cancel' : '取消'}</button>
@@ -2497,7 +2573,9 @@ async function openRulesQuickEdit() {
       </div>
     </div>`;
   const ta = root.querySelector('#rulesQuickText');
+  const pta = root.querySelector('#projectRulesText');
   if (ta) ta.value = cfg.rules || '';
+  if (pta) pta.value = projRules.text || '';
   const close = () => root.classList.add('hidden');
   root.querySelectorAll('[data-close]').forEach((el) => {
     el.onclick = () => close();
@@ -2511,10 +2589,23 @@ async function openRulesQuickEdit() {
   };
   root.querySelector('[data-act="save"]').onclick = async () => {
     const rules = ta?.value || '';
+    const projectText = pta?.value || '';
     try {
       await window.grok.setConfig({ rules });
       const cfgEl = document.getElementById('cfgRules');
       if (cfgEl) cfgEl.value = rules;
+      if (P()?.path) {
+        await window.grok.projectRulesSet({
+          projectPath: P().path,
+          projectId: pid(),
+          content: projectText,
+        });
+      }
+      setQuietHours({
+        enabled: Boolean(root.querySelector('#quietEnabled')?.checked),
+        start: root.querySelector('#quietStart')?.value || '22:00',
+        end: root.querySelector('#quietEnd')?.value || '08:00',
+      });
       window.refreshRulesChip?.();
       toast(en ? 'Rules saved' : '规则已保存', 'ok');
       close();
@@ -2525,13 +2616,42 @@ async function openRulesQuickEdit() {
   ta?.focus();
 }
 
-// ── Composer paste attachments ──────────────────────────
+// ── Composer paste / drag-drop attachments ──────────────
 function bindComposerAttachments() {
   const ta = document.getElementById('prompt');
   if (!ta || ta._attachBound) return;
   ta._attachBound = true;
   ta.addEventListener('paste', onComposerPaste);
   ensureAttachBar();
+  const zone = document.querySelector('.composer') || document.querySelector('.composer-box');
+  if (zone && !zone._dropBound) {
+    zone._dropBound = true;
+    zone.addEventListener('dragover', (e) => {
+      if (![...e.dataTransfer.types].includes('Files')) return;
+      e.preventDefault();
+      zone.classList.add('drag-attach');
+    });
+    zone.addEventListener('dragleave', (e) => {
+      if (!zone.contains(e.relatedTarget)) zone.classList.remove('drag-attach');
+    });
+    zone.addEventListener('drop', async (e) => {
+      zone.classList.remove('drag-attach');
+      const files = [...(e.dataTransfer?.files || [])];
+      if (!files.length) return;
+      e.preventDefault();
+      e.stopPropagation();
+      for (const file of files.slice(0, 6)) {
+        await addAttachmentFromFile(file);
+      }
+      renderAttachBar();
+      toast(
+        localeIsEn()
+          ? `Attached ${Math.min(files.length, 6)} file(s)`
+          : `已附加 ${Math.min(files.length, 6)} 个文件`,
+        'ok'
+      );
+    });
+  }
 }
 
 function ensureAttachBar() {
@@ -3075,7 +3195,16 @@ async function recordFileChange(path, { reason = 'change' } = {}) {
       reason,
       restored: false,
       reviewed: prev && !prev.restored ? Boolean(prev.reviewed) : false,
+      checkpoints: Array.isArray(prev?.checkpoints) ? prev.checkpoints.slice() : [],
+      viewCheckpoint: prev?.viewCheckpoint ?? -1,
     };
+    // store content snapshot for turn replay (cap size)
+    if (String(after).length <= 400_000) {
+      pushFileCheckpoint(entry, {
+        ...turnMeta,
+        after,
+      });
+    }
     changesMap().set(path, entry);
     // 更新缓存到最新，便于后续二次修改
     contentCacheMap().set(path, after);
@@ -3171,7 +3300,7 @@ async function recordFileChangeForProject(proj, filePath, { reason = 'change' } 
     };
     const turns = Array.isArray(prev?.turns) ? prev.turns.slice(-8) : [];
     if (turnMeta.turnId || turnMeta.taskTitle) turns.push(turnMeta);
-    proj.changes.set(filePath, {
+    const entry = {
       path: filePath,
       before: keepBefore,
       after,
@@ -3187,7 +3316,13 @@ async function recordFileChangeForProject(proj, filePath, { reason = 'change' } 
       reason,
       restored: false,
       reviewed: prev && !prev.restored ? Boolean(prev.reviewed) : false,
-    });
+      checkpoints: Array.isArray(prev?.checkpoints) ? prev.checkpoints.slice() : [],
+      viewCheckpoint: prev?.viewCheckpoint ?? -1,
+    };
+    if (String(after).length <= 400_000) {
+      pushFileCheckpoint(entry, { ...turnMeta, after });
+    }
+    proj.changes.set(filePath, entry);
     proj.contentCache.set(filePath, after);
     pushLiveEvent({
       kind: 'write',
@@ -3202,6 +3337,63 @@ async function recordFileChangeForProject(proj, filePath, { reason = 'change' } 
 
 function sortedDiffItems() {
   return [...changesMap().entries()].sort((a, b) => (b[1].ts || 0) - (a[1].ts || 0));
+}
+
+/** Keep last N content snapshots for Diff turn replay */
+function pushFileCheckpoint(entry, meta = {}) {
+  if (!entry) return;
+  if (!Array.isArray(entry.checkpoints)) entry.checkpoints = [];
+  const after = meta.after;
+  if (after == null) return;
+  const last = entry.checkpoints[entry.checkpoints.length - 1];
+  // update same turn in place
+  if (last && meta.turnId && last.turnId === meta.turnId) {
+    last.after = after;
+    last.ts = meta.ts || Date.now();
+    last.prompt = meta.prompt || last.prompt;
+    last.taskTitle = meta.taskTitle || last.taskTitle;
+    return;
+  }
+  entry.checkpoints.push({
+    turnId: meta.turnId || null,
+    taskId: meta.taskId || null,
+    taskTitle: meta.taskTitle || null,
+    prompt: meta.prompt || null,
+    ts: meta.ts || Date.now(),
+    reason: meta.reason || null,
+    after,
+  });
+  if (entry.checkpoints.length > 8) {
+    entry.checkpoints = entry.checkpoints.slice(-8);
+  }
+  // viewing live by default
+  entry.viewCheckpoint = -1;
+}
+
+function getDiffViewSnapshot(entry) {
+  if (!entry) return null;
+  const cps = entry.checkpoints || [];
+  const idx = entry.viewCheckpoint;
+  if (idx == null || idx < 0 || idx >= cps.length) {
+    return {
+      ops: entry.ops,
+      stats: entry.stats,
+      after: entry.after,
+      label: 'live',
+      checkpoint: null,
+      index: -1,
+    };
+  }
+  const cp = cps[idx];
+  const recomputed = window.DiffUtil.computeLineDiff(entry.before ?? '', cp.after ?? '');
+  return {
+    ops: recomputed.ops,
+    stats: recomputed.stats,
+    after: cp.after,
+    label: `cp-${idx + 1}`,
+    checkpoint: cp,
+    index: idx,
+  };
 }
 
 function selectDiffFile(path, opts = {}) {
@@ -3437,33 +3629,76 @@ function renderDiffPane() {
   if (content.dataset.diffPath !== (P() && P().selectedDiffPath)) {
     state.diffHunkCollapsed = new Set();
     content.dataset.diffPath = (P() && P().selectedDiffPath) || '';
+    // default to live view when changing files
+    if (cur.viewCheckpoint != null && cur.viewCheckpoint >= 0) {
+      /* keep selection if same session */
+    }
   }
 
+  const snap = getDiffViewSnapshot(cur);
   const viewMode = state.diffViewMode === 'split' ? 'split' : 'unified';
   const lastTurn = Array.isArray(cur.turns) && cur.turns.length ? cur.turns[cur.turns.length - 1] : null;
+  const cp = snap?.checkpoint;
   const blame = {
-    turnId: cur.turnId || lastTurn?.turnId || '',
-    taskTitle: cur.taskTitle || lastTurn?.taskTitle || '',
-    prompt: cur.prompt || lastTurn?.prompt || '',
-    ts: cur.ts || lastTurn?.ts || null,
-    reason: cur.reason || lastTurn?.reason || '',
+    turnId: cp?.turnId || cur.turnId || lastTurn?.turnId || '',
+    taskTitle: cp?.taskTitle || cur.taskTitle || lastTurn?.taskTitle || '',
+    prompt: cp?.prompt || cur.prompt || lastTurn?.prompt || '',
+    ts: cp?.ts || cur.ts || lastTurn?.ts || null,
+    reason: cp?.reason || cur.reason || lastTurn?.reason || '',
     turns: cur.turns || [],
   };
   if (blame.taskTitle || blame.turnId) {
     const when = blame.ts ? new Date(blame.ts).toLocaleTimeString() : '';
-    banner += `<div class="diff-banner blame-banner">Agent turn · ${esc(blame.taskTitle || 'task')}${when ? ` · ${esc(when)}` : ''}${blame.prompt ? ` · ${esc(String(blame.prompt).slice(0, 80))}` : ''} · hover +/- 行看详情</div>`;
+    const viewHint =
+      snap?.index >= 0
+        ? ` · 查看 checkpoint #${snap.index + 1}`
+        : ' · hover +/- 行看详情';
+    banner += `<div class="diff-banner blame-banner">Agent turn · ${esc(blame.taskTitle || 'task')}${when ? ` · ${esc(when)}` : ''}${blame.prompt ? ` · ${esc(String(blame.prompt).slice(0, 80))}` : ''}${viewHint}</div>`;
   }
+
+  const cps = cur.checkpoints || [];
+  const cpBar =
+    cps.length > 0
+      ? `<div class="diff-cp-bar">
+          <span class="diff-cp-label">Checkpoints</span>
+          <button type="button" class="diff-cp-chip${snap?.index < 0 ? ' active' : ''}" data-cp="-1">Live</button>
+          ${cps
+            .map((c, i) => {
+              const t = c.ts ? new Date(c.ts).toLocaleTimeString() : `#${i + 1}`;
+              return `<button type="button" class="diff-cp-chip${snap?.index === i ? ' active' : ''}" data-cp="${i}" title="${esc(c.taskTitle || '')} · ${esc(String(c.prompt || '').slice(0, 80))}">${esc(t)}</button>`;
+            })
+            .join('')}
+          ${
+            snap?.index >= 0 && !cur.restored
+              ? `<button type="button" class="btn small ghost" data-cp-act="restore">${localeIsEn() ? 'Restore this turn' : '还原到此轮'}</button>`
+              : ''
+          }
+        </div>`
+      : '';
+
+  const viewOps = snap?.ops || cur.ops;
   const bodyHtml =
     viewMode === 'split'
-      ? window.DiffUtil.toSideBySideHtml(cur.ops, { context: 3, blame })
-      : window.DiffUtil.toUnifiedHtml(cur.ops, {
+      ? window.DiffUtil.toSideBySideHtml(viewOps, { context: 3, blame })
+      : window.DiffUtil.toUnifiedHtml(viewOps, {
           context: 3,
           collapsed: state.diffHunkCollapsed,
           blame,
         });
 
+  // stats reflect current view
+  if (snap?.stats && !cur.restored) {
+    const bits2 = [
+      `<span class="a" style="color:var(--ok)">+${snap.stats.adds}</span> · <span class="d" style="color:var(--danger)">-${snap.stats.dels}</span>`,
+    ];
+    if (snap.index >= 0) bits2.push(`<span style="color:#fbbf24">· cp#${snap.index + 1}</span>`);
+    if (cur.reviewed) bits2.push('<span style="color:#7dd3fc">· 已审阅</span>');
+    $('#diffStats').innerHTML = bits2.join(' ');
+  }
+
   content.innerHTML =
     banner +
+    cpBar +
     `<div class="diff-hunk-toolbar">
       <button type="button" class="link-btn${viewMode === 'unified' ? ' active-view' : ''}" data-diff-act="unified">Unified</button>
       <button type="button" class="link-btn${viewMode === 'split' ? ' active-view' : ''}" data-diff-act="split">Side-by-side</button>
@@ -3478,6 +3713,21 @@ function renderDiffPane() {
     bodyHtml;
 
   bindDiffBlameTooltips(content, blame);
+
+  content.querySelectorAll('[data-cp]').forEach((btn) => {
+    btn.onclick = () => {
+      const path = P() && P().selectedDiffPath;
+      const entry = path && changesMap().get(path);
+      if (!entry) return;
+      entry.viewCheckpoint = Number(btn.dataset.cp);
+      changesMap().set(path, entry);
+      state.diffHunkCollapsed = new Set();
+      renderDiffPane();
+    };
+  });
+  content.querySelector('[data-cp-act="restore"]')?.addEventListener('click', () => {
+    restoreToCheckpoint();
+  });
 
   content.querySelector('[data-diff-act="unified"]')?.addEventListener('click', () => {
     state.diffViewMode = 'unified';
@@ -3506,6 +3756,64 @@ function renderDiffPane() {
     state.diffHunkCollapsed = new Set([...heads].map((h) => Number(h.dataset.hunk)));
     renderDiffPane();
   });
+}
+
+/** Write selected checkpoint content back to disk */
+async function restoreToCheckpoint() {
+  const path = P() && P().selectedDiffPath;
+  if (!path || !changesMap().has(path)) return;
+  const entry = changesMap().get(path);
+  const snap = getDiffViewSnapshot(entry);
+  if (!snap || snap.index < 0 || snap.after == null) {
+    toast(localeIsEn() ? 'Select a checkpoint first' : '请先选择一个 checkpoint', 'err');
+    return;
+  }
+  const ok = confirm(
+    localeIsEn()
+      ? `Write checkpoint #${snap.index + 1} content back to disk for\n${path}?`
+      : `将 checkpoint #${snap.index + 1} 的内容写回磁盘？\n${path}`
+  );
+  if (!ok) return;
+  try {
+    state._restoring = true;
+    const isEmpty = snap.after === '';
+    if (isEmpty && entry.created) {
+      await window.grok.deleteFile(pid(), path);
+      contentCacheMap().set(path, '');
+    } else {
+      await window.grok.writeFile(pid(), path, snap.after);
+      contentCacheMap().set(path, snap.after);
+    }
+    // recompute live entry from original before → new after
+    const recomputed = window.DiffUtil.computeLineDiff(entry.before ?? '', snap.after);
+    entry.after = snap.after;
+    entry.ops = recomputed.ops;
+    entry.stats = recomputed.stats;
+    entry.viewCheckpoint = -1;
+    entry.ts = Date.now();
+    changesMap().set(path, entry);
+    if (requireProject().currentFile === path) {
+      $('#editor').value = snap.after;
+      requireProject().dirty = false;
+      syncGutter();
+      updateEditorChrome();
+    }
+    pushLiveEvent({
+      kind: 'status',
+      title: localeIsEn() ? `Restored checkpoint ${path}` : `已还原 checkpoint ${path}`,
+      sub: `#${snap.index + 1}`,
+    });
+    renderLiveChanges();
+    renderDiffPane();
+    await loadTree();
+    toast(localeIsEn() ? 'Checkpoint restored to disk' : '已写回 checkpoint 内容', 'ok');
+  } catch (err) {
+    toast(err.message || 'restore failed', 'err');
+  } finally {
+    setTimeout(() => {
+      state._restoring = false;
+    }, 500);
+  }
 }
 
 function toggleDiffViewMode() {

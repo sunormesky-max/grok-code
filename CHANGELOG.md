@@ -11,6 +11,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 - See [ROADMAP.md](ROADMAP.md)
 
+## [1.3.7] — 2026-07-16
+
+### Checkpoints · project rules · quiet hours
+
+- **Diff checkpoints**: per-turn content snapshots · Live / cp chips · restore checkpoint to disk
+- **Composer drag-drop**: drop files onto composer (same attach path as paste)
+- **Project rules**: workspace `.grok/rules.md` merged into agent `--rules` (global + project)
+- **Quiet hours**: mute completion chime between configured times (in rules modal)
+
 ## [1.3.6] — 2026-07-16
 
 ### Signal & context
