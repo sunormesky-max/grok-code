@@ -30,12 +30,13 @@ Living plan for the GrokCode open-source ecosystem. Order may change based on co
 - [x] Turn scrubber · template tags/search · heat legend · encrypted packs (v1.4.0)
 - [x] Scrub persist · [ ] keys · template favorites (v1.4.1)
 - [x] Diff play scrub · welcome ★ · `.grok/templates.json` (v1.4.2)
+- [x] Scrub speed · open templates in Code · welcome apply&send (v1.4.3)
 
 ## Next
 
-- [ ] Scrub playback speed control (0.5x–2x)
-- [ ] Open/edit project templates.json in Code
-- [ ] Template “apply & send” one-click from welcome
+- [ ] Loop playback mode for scrub
+- [ ] Right-click welcome chip → pin / send / edit
+- [ ] Diff filmstrip thumbnails per turn (file count + heat)
 - [ ] Optional true cloud template vault (accounted service)
 
 ## Later

@@ -441,6 +441,23 @@
         run: run(() => global.exportTemplatesPack?.()),
       },
       {
+        id: 'templates.project.open',
+        title: t('cmd.templates.project', '打开项目 templates.json'),
+        keywords: 'project templates.json .grok',
+        group: 'actions',
+        run: run(() => global.openProjectTemplatesInCode?.()),
+      },
+      {
+        id: 'diff.play',
+        title: t('cmd.diff.play', 'Diff 播放 / 暂停 turn'),
+        keywords: 'diff play scrub 播放',
+        group: 'actions',
+        run: run(() => {
+          global.switchTab?.('diff');
+          global.toggleScrubPlay?.();
+        }),
+      },
+      {
         id: 'diff.restoreTurn',
         title: t('cmd.diff.restoreTurn', 'Diff 整轮还原'),
         keywords: 'diff restore turn 整轮 还原 checkpoint',

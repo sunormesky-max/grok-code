@@ -73,7 +73,10 @@ const state = {
   /** auto-play scrub through turns */
   diffScrubPlaying: false,
   diffScrubPlayTimer: null,
-  diffScrubPlayMs: loadJson('grokcode-diff-scrub-ms', 1400) || 1400,
+  /** base interval ms at 1x */
+  diffScrubPlayMs: 1400,
+  /** playback speed multiplier 0.5 | 1 | 1.5 | 2 */
+  diffScrubPlaySpeed: loadJson('grokcode-diff-scrub-speed', 1) || 1,
 };
 
 /** 当前激活任务 */
@@ -1210,25 +1213,57 @@ async function saveTemplateToProject(t) {
   }
 }
 
+/** Ensure `.grok/templates.json` exists and open in Code */
+async function openProjectTemplatesInCode() {
+  if (!P()?.path) {
+    toast(localeIsEn() ? 'Open a project first' : '请先打开项目', 'err');
+    return;
+  }
+  const en = localeIsEn();
+  try {
+    const rel = '.grok/templates.json';
+    const exists = await window.grok.exists(pid(), rel);
+    if (!exists) {
+      await window.grok.projectTemplatesSet({
+        projectPath: P().path,
+        projectId: pid(),
+        templates: [],
+      });
+    }
+    await openFile(rel, { switchToCode: true });
+    switchTab('editor');
+    toast(en ? 'Opened .grok/templates.json' : '已打开 .grok/templates.json', 'ok');
+  } catch (e) {
+    toast(e.message || 'open failed', 'err');
+  }
+}
+window.openProjectTemplatesInCode = openProjectTemplatesInCode;
+
 function templatePrompt(t, en) {
   if (!t) return '';
   if (en) return t.promptEn || t.prompt || t.promptZh || '';
   return t.promptZh || t.prompt || t.promptEn || '';
 }
 
-function applySessionTemplate(t) {
+function applySessionTemplate(t, opts = {}) {
   if (!t) return;
   const en = localeIsEn();
   if (state.workMode !== 'craft') setWorkMode('craft');
-  const prompt = templatePrompt(t, en);
+  const promptText = templatePrompt(t, en);
   const el = document.getElementById('prompt');
   if (el) {
-    el.value = prompt;
+    el.value = promptText;
     autoResizePrompt();
     updateCharCount();
     el.focus();
   }
   schedulePromptDraftSave();
+  if (opts.send) {
+    // fire after UI settles
+    setTimeout(() => {
+      sendPrompt().catch((e) => toast(e.message || String(e), 'err'));
+    }, 30);
+  }
 }
 
 function getUserTemplates() {
@@ -1420,6 +1455,7 @@ async function openTemplatesMenu() {
     <div class="slash-head">${en ? 'Pack / sync' : '包 / 同步'}</div>
     <button type="button" class="slash-item" data-act="custom"><span class="slash-label">${en ? '+ Save current as template' : '+ 将当前输入存为模板'}</span></button>
     <button type="button" class="slash-item" data-act="to-project" ${P() ? '' : 'disabled'}><span class="slash-label">${en ? '+ Save current → project .grok/templates.json' : '+ 当前输入 → 项目 templates.json'}</span></button>
+    <button type="button" class="slash-item" data-act="open-project" ${P() ? '' : 'disabled'}><span class="slash-label">${en ? 'Open .grok/templates.json in Code' : '在 Code 打开 templates.json'}</span></button>
     <button type="button" class="slash-item" data-act="export"><span class="slash-label">${en ? 'Export JSON pack' : '导出 JSON 包'}</span></button>
     <button type="button" class="slash-item" data-act="import"><span class="slash-label">${en ? 'Import JSON pack' : '导入 JSON 包'}</span></button>
     <button type="button" class="slash-item" data-act="export-enc"><span class="slash-label">${en ? 'Export encrypted pack…' : '导出加密包…'}</span><span class="slash-desc">${en ? 'AES-GCM + passphrase' : 'AES-GCM 口令加密'}</span></button>
@@ -1514,6 +1550,7 @@ async function openTemplatesMenu() {
         tags: [],
       });
     },
+    'open-project': () => openProjectTemplatesInCode(),
     export: () => exportTemplatesPack(),
     import: () => importTemplatesPack(),
     'export-enc': () => exportTemplatesEncrypted(),
@@ -1723,18 +1760,35 @@ async function showWelcome(box) {
         ${quick
           .map(
             (t) =>
-              `<button type="button" class="quick-btn craft-q${t.favorite ? ' fav' : ''}" data-tpl="${esc(t.id)}">${
-                t.favorite ? '★ ' : ''
-              }${esc(en ? t.labelEn || t.id : t.labelZh || t.id)}</button>`
+              `<span class="quick-btn-wrap">
+                <button type="button" class="quick-btn craft-q${t.favorite ? ' fav' : ''}" data-tpl="${esc(t.id)}" title="${en ? 'Fill composer' : '填入输入框'}">${
+                  t.favorite ? '★ ' : ''
+                }${esc(en ? t.labelEn || t.id : t.labelZh || t.id)}</button>
+                <button type="button" class="quick-send" data-tpl-send="${esc(t.id)}" title="${en ? 'Apply & send (Craft)' : '应用并发送 (Craft)'}">↵</button>
+              </span>`
           )
           .join('')}
         <button type="button" class="quick-btn" data-act="more-tpl">${en ? 'More…' : '更多…'}</button>
       </div>
+      <p class="welcome-send-hint muted">${en ? '↵ = apply template and send immediately' : '↵ = 填入模板并立即发送'}</p>
     </div>`;
   box.querySelectorAll('.quick-btn[data-tpl]').forEach((btn) => {
     btn.onclick = () => {
       const t = quick.find((x) => x.id === btn.dataset.tpl);
       applySessionTemplate(t);
+    };
+  });
+  box.querySelectorAll('[data-tpl-send]').forEach((btn) => {
+    btn.onclick = (e) => {
+      e.stopPropagation();
+      const t = quick.find((x) => x.id === btn.dataset.tplSend);
+      if (!t) return;
+      if (!P()) {
+        toast(en ? 'Open a project first' : '请先打开项目', 'err');
+        openProjectFlow();
+        return;
+      }
+      applySessionTemplate(t, { send: true });
     };
   });
   box.querySelector('[data-act="more-tpl"]')?.addEventListener('click', () => openTemplatesMenu());
@@ -4189,7 +4243,27 @@ function stopScrubPlay() {
   state.diffScrubPlaying = false;
 }
 
-function startScrubPlay() {
+const SCRUB_SPEEDS = [0.5, 1, 1.5, 2];
+
+function scrubIntervalMs() {
+  const speed = Number(state.diffScrubPlaySpeed) || 1;
+  const base = Number(state.diffScrubPlayMs) || 1400;
+  return Math.max(400, Math.min(6000, Math.round(base / speed)));
+}
+
+function setScrubPlaySpeed(speed) {
+  const s = SCRUB_SPEEDS.includes(Number(speed)) ? Number(speed) : 1;
+  state.diffScrubPlaySpeed = s;
+  saveJson('grokcode-diff-scrub-speed', s);
+  // restart interval if playing
+  if (state.diffScrubPlaying) {
+    startScrubPlay({ quiet: true });
+  } else {
+    renderDiffPane();
+  }
+}
+
+function startScrubPlay(opts = {}) {
   const turns = collectGlobalTurns();
   if (turns.length < 1) {
     toast(localeIsEn() ? 'No turns to play' : '暂无 turn 可播放', 'err');
@@ -4201,7 +4275,7 @@ function startScrubPlay() {
   if (!state.diffScrubTurn || !turns.some((t) => t.key === state.diffScrubTurn)) {
     scrubToTurn(turns[0].key, { render: true });
   }
-  const ms = Math.max(600, Math.min(5000, Number(state.diffScrubPlayMs) || 1400));
+  const ms = scrubIntervalMs();
   state.diffScrubPlayTimer = setInterval(() => {
     if (!state.diffScrubPlaying) return;
     const list = collectGlobalTurns();
@@ -4223,7 +4297,17 @@ function startScrubPlay() {
     }
     scrubToTurn(list[idx].key);
   }, ms);
-  renderDiffPane();
+  if (!opts.quiet) renderDiffPane();
+  else {
+    // update play button state only
+    document.querySelectorAll('[data-scrub-play]').forEach((b) => {
+      b.classList.add('on');
+      b.textContent = '❚❚';
+    });
+    document.querySelectorAll('.diff-scrub-speed').forEach((b) => {
+      b.classList.toggle('active', Number(b.dataset.speed) === Number(state.diffScrubPlaySpeed));
+    });
+  }
 }
 
 function toggleScrubPlay() {
@@ -4233,11 +4317,16 @@ function toggleScrubPlay() {
     toast(localeIsEn() ? 'Playback paused' : '已暂停播放', 'ok');
   } else {
     startScrubPlay();
-    toast(localeIsEn() ? 'Playing turns…' : '正在播放 turn…', 'ok');
+    const sp = state.diffScrubPlaySpeed || 1;
+    toast(
+      localeIsEn() ? `Playing turns… ${sp}x` : `正在播放 turn… ${sp}x`,
+      'ok'
+    );
   }
 }
 window.toggleScrubPlay = toggleScrubPlay;
 window.stopScrubPlay = stopScrubPlay;
+window.setScrubPlaySpeed = setScrubPlaySpeed;
 
 function scrubberHtml(turns) {
   if (!turns.length) return '';
@@ -4245,23 +4334,30 @@ function scrubberHtml(turns) {
   const cur = state.diffScrubTurn;
   const idx = cur ? turns.findIndex((t) => t.key === cur) : -1;
   const playing = state.diffScrubPlaying;
+  const speed = Number(state.diffScrubPlaySpeed) || 1;
   return `<div class="diff-scrub-bar" id="diffScrubBar">
     <span class="diff-scrub-label">Turn timeline</span>
     <button type="button" class="diff-cp-chip${!cur ? ' active' : ''}" data-scrub="">${en ? 'All / Live' : '全部 / Live'}</button>
     <button type="button" class="diff-scrub-play${playing ? ' on' : ''}" data-scrub-play="1" title="${en ? 'Play / pause auto-scrub' : '播放 / 暂停自动 scrub'}">${playing ? '❚❚' : '▶'}</button>
+    <span class="diff-scrub-speeds" title="${en ? 'Playback speed' : '播放倍速'}">
+      ${SCRUB_SPEEDS.map(
+        (s) =>
+          `<button type="button" class="diff-scrub-speed${speed === s ? ' active' : ''}" data-speed="${s}">${s}x</button>`
+      ).join('')}
+    </span>
     <button type="button" class="diff-scrub-nav" data-scrub-nav="-1" title="[">‹</button>
     <input type="range" id="diffScrubRange" min="0" max="${Math.max(0, turns.length - 1)}" value="${idx >= 0 ? idx : turns.length - 1}" ${turns.length < 2 ? 'disabled' : ''} />
     <button type="button" class="diff-scrub-nav" data-scrub-nav="1" title="]">›</button>
     <div class="diff-scrub-ticks">
       ${turns
-        .map((t, i) => {
-          const label = t.ts ? new Date(t.ts).toLocaleTimeString() : `#${i + 1}`;
+        .map((t) => {
+          const label = t.ts ? new Date(t.ts).toLocaleTimeString() : t.key.slice(0, 8);
           const n = t.files?.size || 0;
           return `<button type="button" class="diff-scrub-tick${cur === t.key ? ' active' : ''}" data-scrub="${esc(t.key)}" title="${esc(t.taskTitle || '')} · ${n} files · ${esc(String(t.prompt || '').slice(0, 80))}">${esc(label)}<small>${n}f</small></button>`;
         })
         .join('')}
     </div>
-    <span class="muted" style="font-size:10px"><kbd>[</kbd><kbd>]</kbd> · ▶</span>
+    <span class="muted" style="font-size:10px"><kbd>[</kbd><kbd>]</kbd> · ▶ · ${speed}x</span>
   </div>`;
 }
 
@@ -4733,6 +4829,13 @@ function renderDiffPane() {
     };
   });
   content.querySelector('[data-scrub-play]')?.addEventListener('click', () => toggleScrubPlay());
+  content.querySelectorAll('[data-speed]').forEach((btn) => {
+    btn.onclick = (e) => {
+      e.stopPropagation();
+      setScrubPlaySpeed(Number(btn.dataset.speed));
+      toast(`${btn.dataset.speed}x`, 'ok');
+    };
+  });
   const range = content.querySelector('#diffScrubRange');
   if (range && globalTurns.length) {
     range.oninput = () => {

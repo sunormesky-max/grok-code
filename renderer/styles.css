@@ -2555,6 +2555,31 @@ button.pill:hover {
   background: rgba(249, 115, 22, 0.15);
   animation: craftPulse 1.2s ease-in-out infinite;
 }
+.diff-scrub-speeds {
+  display: inline-flex;
+  gap: 2px;
+  margin: 0 2px;
+}
+.diff-scrub-speed {
+  appearance: none;
+  border: 1px solid rgba(125, 211, 252, 0.2);
+  background: transparent;
+  color: var(--faint);
+  font-size: 10px;
+  font-family: var(--mono);
+  padding: 2px 5px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+.diff-scrub-speed:hover {
+  border-color: rgba(56, 189, 248, 0.45);
+  color: #7dd3fc;
+}
+.diff-scrub-speed.active {
+  border-color: rgba(56, 189, 248, 0.6);
+  background: rgba(56, 189, 248, 0.15);
+  color: #7dd3fc;
+}
 .welcome-fav-label {
   font-size: 11px;
   font-family: var(--mono);
@@ -2565,6 +2590,38 @@ button.pill:hover {
 .quick-btn.fav {
   border-color: rgba(251, 191, 36, 0.45);
   color: #fde68a;
+}
+.quick-btn-wrap {
+  display: inline-flex;
+  align-items: stretch;
+  border-radius: 999px;
+  overflow: hidden;
+  border: 1px solid rgba(125, 211, 252, 0.22);
+}
+.quick-btn-wrap .quick-btn {
+  border: none;
+  border-radius: 0;
+  border-right: 1px solid rgba(125, 211, 252, 0.15);
+}
+.quick-btn-wrap .quick-send {
+  appearance: none;
+  border: none;
+  background: rgba(56, 189, 248, 0.12);
+  color: #7dd3fc;
+  font-family: var(--mono);
+  font-size: 12px;
+  font-weight: 700;
+  padding: 0 10px;
+  cursor: pointer;
+  min-width: 28px;
+}
+.quick-btn-wrap .quick-send:hover {
+  background: rgba(56, 189, 248, 0.28);
+  color: #e0f2fe;
+}
+.welcome-send-hint {
+  font-size: 11px;
+  margin: 6px 2px 0;
 }
 #diffScrubRange {
   flex: 1;

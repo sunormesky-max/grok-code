@@ -11,6 +11,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 - See [ROADMAP.md](ROADMAP.md)
 
+## [1.4.3] — 2026-07-16
+
+### Playback speed · project templates in Code · apply & send
+
+- **Scrub speed**: 0.5x / 1x / 1.5x / 2x chips on Diff timeline (persisted)
+- **Open project templates**: menu + Ctrl+K → open/create `.grok/templates.json` in Code
+- **Welcome ↵**: one-click apply template and send (Craft)
+
 ## [1.4.2] — 2026-07-16
 
 ### Play scrub · project templates
