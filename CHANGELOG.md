@@ -11,6 +11,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 - See [ROADMAP.md](ROADMAP.md)
 
+## [1.5.0] — 2026-07-16
+
+### Agent-first layout (Codex / ZCode inspired · Grok sci-fi)
+
+- **Layout presets** in titlebar: **Agent** (default) · **Review** · **Full**
+- **Agent mode**: chat is the primary stage (wider, elevated HUD glass); Explorer + Terminal tucked; Live detail collapsed
+- **Review mode**: open file tree + Live detail for code review
+- **Full mode**: classic multi-pane IDE density
+- Compact workspace strip, quieter cosmos atmosphere, denser task/composer chrome
+- New stylesheet `layout-agent.css`
+
 ## [1.4.14] — 2026-07-16
 
 ### Calmer UI · collapsible middle chrome

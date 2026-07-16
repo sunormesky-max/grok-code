@@ -39,12 +39,14 @@ Living plan for the GrokCode open-source ecosystem. Order may change based on co
 - [x] Pack compare polish · progressive compress modes (v1.4.9)
 - [x] HTML pack compare · encrypted storyboard export (v1.4.10)
 - [x] Native Windows titleBarOverlay · calmer collapsible chrome (v1.4.13–1.4.14)
+- [x] Agent-first layout shell · Agent/Review/Full presets (v1.5.0)
 
 ## Next
 
 - [ ] Optional true cloud template vault (accounted service)
 - [ ] Import encrypted storyboard into Diff filmstrip (offline re-view)
 - [ ] Share encrypted packs via optional link service
+- [ ] Layout: optional chat-center swap for ultra-wide displays
 
 ## Later
 

@@ -1,0 +1,367 @@
+/* ═══════════════════════════════════════════════════════
+   GrokCode Layout v1.5 — Agent-first shell
+   Inspired by Codex / ZCode command-center patterns
+   Visual language: Grok void · ice cyan · mars orange
+   ═══════════════════════════════════════════════════════ */
+
+:root {
+  --files-w: 240px;
+  --chat-w: 460px;
+  --term-h: 148px;
+  --topbar-h: 48px;
+  --workspace-h: 36px;
+  --radius: 12px;
+  --radius-sm: 8px;
+}
+
+/* ── Quieter cosmos (content first, sci-fi as atmosphere) ─ */
+body.layout-v15 .hex-grid {
+  opacity: 0.04;
+}
+body.layout-v15 .scanlines {
+  opacity: 0.28;
+}
+body.layout-v15 .holo-beam {
+  opacity: 0.22;
+}
+body.layout-v15 .nebula {
+  opacity: 0.32;
+}
+body.layout-v15 .grid-floor {
+  opacity: 0.28;
+}
+body.layout-v15 .hud-corner {
+  opacity: 0.28;
+  width: 36px;
+  height: 36px;
+}
+
+/* ── Top command strip ───────────────────────────────── */
+body.layout-v15 .topbar {
+  height: var(--topbar-h);
+  gap: 10px;
+  padding: 0 10px 0 12px;
+}
+body.layout-v15.plat-win .topbar {
+  padding-right: 146px;
+}
+body.layout-v15 .brand-text .tag {
+  display: none; /* declutter; brand alone is enough */
+}
+body.layout-v15 .brand-text .name {
+  font-size: 14.5px;
+}
+body.layout-v15 .logo {
+  width: 32px;
+  height: 32px;
+}
+body.layout-v15 .logo-mark {
+  width: 30px;
+  height: 30px;
+}
+body.layout-v15 .top-actions .btn:not(.icon-only) {
+  padding: 0 10px;
+  height: 30px;
+  font-size: 12px;
+}
+body.layout-v15 .top-actions .btn .btn-ico {
+  margin-right: 2px;
+}
+
+/* Layout preset chips (Codex-style mode surface) */
+.layout-presets {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px;
+  border-radius: 999px;
+  border: 1px solid rgba(125, 211, 252, 0.16);
+  background: rgba(0, 0, 0, 0.35);
+  -webkit-app-region: no-drag !important;
+  app-region: no-drag !important;
+}
+.layout-preset {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: var(--faint);
+  font-family: var(--mono, ui-monospace, monospace);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 4px 9px;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: color 0.12s, background 0.12s, box-shadow 0.12s;
+}
+.layout-preset:hover {
+  color: #e4e4e7;
+  background: rgba(255, 255, 255, 0.05);
+}
+.layout-preset.active {
+  color: #0a0c12;
+  background: linear-gradient(105deg, #7dd3fc, #a5f3fc 55%, #fb923c);
+  font-weight: 700;
+  box-shadow: 0 0 16px rgba(125, 211, 252, 0.35);
+}
+
+/* ── Workspace strip (projects) — single dense rail ──── */
+body.layout-v15 .project-bar {
+  min-height: var(--workspace-h);
+  height: var(--workspace-h);
+  padding: 0 10px;
+  gap: 6px;
+  background:
+    linear-gradient(90deg, rgba(125, 211, 252, 0.04), transparent 50%),
+    rgba(0, 0, 0, 0.42);
+  border-bottom-color: rgba(255, 255, 255, 0.05);
+}
+body.layout-v15 .project-bar-label {
+  font-size: 8.5px;
+  letter-spacing: 0.14em;
+  opacity: 0.55;
+}
+body.layout-v15 .project-tab {
+  padding: 3px 10px !important;
+  font-size: 11.5px !important;
+  border-radius: 7px !important;
+  max-width: 160px;
+}
+body.layout-v15 .project-add {
+  padding: 2px 8px;
+  font-size: 11px;
+  height: 26px;
+}
+
+/* ── Main stage ──────────────────────────────────────── */
+body.layout-v15 .main {
+  padding: 8px;
+  gap: 0;
+}
+body.layout-v15 .center {
+  margin: 0 8px;
+  gap: 8px;
+}
+body.layout-v15 .panel {
+  border-radius: var(--radius);
+}
+body.layout-v15 .panel-head {
+  min-height: 36px;
+  padding: 6px 10px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.025), transparent);
+}
+body.layout-v15 .panel-label {
+  font-size: 10px;
+  letter-spacing: 0.12em;
+}
+
+/* Secondary surfaces: Explorer / Center — quieter glass */
+body.layout-v15 .files.glass,
+body.layout-v15 .editor-wrap.glass,
+body.layout-v15 .terminal-wrap.glass {
+  background:
+    linear-gradient(165deg, rgba(12, 14, 20, 0.72), rgba(4, 6, 10, 0.82)) padding-box,
+    linear-gradient(
+      135deg,
+      rgba(125, 211, 252, 0.18),
+      rgba(255, 255, 255, 0.04) 40%,
+      rgba(249, 115, 22, 0.1)
+    )
+      border-box !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.04),
+    0 8px 28px rgba(0, 0, 0, 0.35) !important;
+}
+body.layout-v15 .files.glass::after,
+body.layout-v15 .editor-wrap.glass::after {
+  display: none; /* no shine animation on secondary */
+}
+
+/* Primary surface: Agent chat — elevated HUD */
+body.layout-v15 .chat.glass {
+  width: var(--chat-w);
+  min-width: 320px;
+  max-width: 56vw;
+  background:
+    linear-gradient(165deg, rgba(14, 20, 32, 0.94), rgba(6, 8, 14, 0.96)) padding-box,
+    linear-gradient(
+      145deg,
+      rgba(125, 211, 252, 0.45) 0%,
+      rgba(255, 255, 255, 0.08) 35%,
+      rgba(249, 115, 22, 0.28) 100%
+    )
+      border-box !important;
+  box-shadow:
+    inset 0 1px 0 rgba(125, 211, 252, 0.1),
+    0 0 0 1px rgba(125, 211, 252, 0.06),
+    0 16px 48px rgba(0, 0, 0, 0.55),
+    0 0 40px rgba(125, 211, 252, 0.06) !important;
+}
+body.layout-v15 .chat .panel-head {
+  background: linear-gradient(90deg, rgba(125, 211, 252, 0.06), transparent 70%);
+}
+body.layout-v15 .chat .panel-label {
+  color: #7dd3fc;
+  text-shadow: 0 0 12px rgba(125, 211, 252, 0.35);
+}
+
+/* Task strip inside chat — denser */
+body.layout-v15 .task-bar {
+  min-height: 34px;
+  padding: 4px 8px;
+  gap: 6px;
+  background: rgba(0, 0, 0, 0.25);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+}
+body.layout-v15 .task-tab {
+  padding: 3px 10px;
+  font-size: 11.5px;
+  border-radius: 7px;
+}
+body.layout-v15 .task-add {
+  font-size: 11px;
+  padding: 2px 8px;
+}
+
+/* Composer — flight deck, less chip noise */
+body.layout-v15 .mode-bar {
+  padding: 6px 10px 0;
+  gap: 6px;
+}
+body.layout-v15 .mode-hint {
+  font-size: 10.5px;
+  opacity: 0.65;
+}
+body.layout-v15 .composer-hints .hint-chip:nth-child(n + 4) {
+  display: none; /* keep Enter / Craft /cmds only */
+}
+body.layout-v15 .composer-box {
+  margin: 6px 10px 10px;
+}
+body.layout-v15 .composer-bar {
+  padding-top: 6px;
+}
+
+/* Center workspace tabs — segment control */
+body.layout-v15 .panel-head.tabs {
+  gap: 2px;
+  padding: 4px 8px;
+  background: rgba(0, 0, 0, 0.28);
+}
+body.layout-v15 .tab {
+  border-radius: 7px;
+  padding: 5px 12px;
+  font-size: 12px;
+}
+body.layout-v15 .tab.active {
+  background: rgba(56, 189, 248, 0.12);
+  box-shadow: inset 0 0 0 1px rgba(56, 189, 248, 0.35);
+}
+body.layout-v15 #btnSplitLayout {
+  margin-left: 4px;
+  opacity: 0.75;
+  font-size: 11px;
+}
+body.layout-v15 .file-path {
+  font-size: 11px;
+  opacity: 0.7;
+  max-width: 28vw;
+}
+
+/* Live status — compact mission bar */
+body.layout-v15 .live-status-bar {
+  padding: 8px 10px;
+  gap: 8px;
+}
+body.layout-v15 .live-status-text strong {
+  font-size: 12.5px;
+}
+body.layout-v15 .live-stats .stat {
+  font-size: 10px;
+  padding: 2px 7px;
+}
+
+/* Terminal strip */
+body.layout-v15 .terminal-wrap.collapsed {
+  height: 32px !important;
+  border-radius: 8px;
+}
+body.layout-v15 .terminal-wrap.collapsed .panel-head {
+  min-height: 32px;
+  padding: 0 10px;
+}
+
+/* Explorer rail */
+body.layout-v15 .rail-expand {
+  width: 32px;
+  border-radius: 10px;
+  animation: none;
+  box-shadow:
+    0 0 0 1px rgba(125, 211, 252, 0.12),
+    0 0 18px rgba(125, 211, 252, 0.12);
+}
+body.layout-v15 .rail-label {
+  font-size: 9px;
+  letter-spacing: 0.16em;
+}
+
+/* Status bar — telemetry strip */
+body.layout-v15 .statusbar {
+  height: 26px;
+  font-size: 10.5px;
+  padding: 0 12px;
+  opacity: 0.92;
+}
+body.layout-v15 #sbHint {
+  font-size: 10.5px;
+  opacity: 0.5;
+}
+
+/* ── Layout presets ──────────────────────────────────── */
+/* Agent: chat primary, files/term tucked away */
+body.layout-mode-agent {
+  --chat-w: 480px;
+  --files-w: 220px;
+}
+/* Review: open explorer + more center room */
+body.layout-mode-review {
+  --chat-w: 380px;
+  --files-w: 250px;
+}
+/* Full: classic multi-pane */
+body.layout-mode-full {
+  --chat-w: 400px;
+  --files-w: 260px;
+  --term-h: 160px;
+}
+
+/* Wide chat on large screens in agent mode */
+@media (min-width: 1500px) {
+  body.layout-mode-agent {
+    --chat-w: 520px;
+  }
+}
+@media (max-width: 1280px) {
+  body.layout-v15 {
+    --chat-w: min(420px, 40vw);
+  }
+  body.layout-v15 .layout-presets .layout-preset {
+    padding: 4px 7px;
+    font-size: 9px;
+  }
+}
+
+/* Resize handles thinner, less visual noise */
+body.layout-v15 .resize-v {
+  width: 5px;
+  opacity: 0.35;
+}
+body.layout-v15 .resize-v:hover {
+  opacity: 1;
+}
+body.layout-v15 .resize-h {
+  opacity: 0.35;
+}
+body.layout-v15 .resize-h:hover {
+  opacity: 1;
+}

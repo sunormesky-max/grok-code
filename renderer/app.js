@@ -52,10 +52,12 @@ const state = {
   unsubs: [],
   termHistory: loadJson(TERM_HIST_KEY, []),
   termHistIdx: -1,
-  filesCollapsed: false,
+  filesCollapsed: true,
   termCollapsed: true,
   /** Live 右侧详情（焦点/变更/上下文）默认折叠，界面更干净 */
   liveSideCollapsed: loadJson('grokcode-live-side-collapsed', true) !== false,
+  /** agent | review | full — Codex/ZCode 式布局预设 */
+  layoutMode: loadJson('grokcode-layout-mode', 'agent') || 'agent',
   filter: '',
   /** Live / Diff（工作区级共享） */
   activeTab: 'live',
@@ -1146,22 +1148,79 @@ function syncMaxBtn(maximized) {
 function restoreLayout() {
   const L = loadJson(LAYOUT_KEY, null);
   if (!L) {
-    // 首次：终端收起，Live 侧栏收起
+    // 首次 / Agent 默认：文件树 + 终端 + Live 侧栏全收起，对话主舞台
     state.termCollapsed = true;
     state.liveSideCollapsed = true;
+    state.filesCollapsed = true;
+    applyLayoutMode(state.layoutMode || 'agent', { persist: false, toast: false });
     applyChromeCollapse();
     return;
   }
   if (L.filesW) document.documentElement.style.setProperty('--files-w', L.filesW + 'px');
   if (L.chatW) document.documentElement.style.setProperty('--chat-w', L.chatW + 'px');
   if (L.termH) document.documentElement.style.setProperty('--term-h', L.termH + 'px');
-  if (L.filesCollapsed) state.filesCollapsed = true;
-  // 有布局记录时尊重用户；缺省仍收起终端
+  if (typeof L.filesCollapsed === 'boolean') state.filesCollapsed = L.filesCollapsed;
+  else state.filesCollapsed = true;
   if (typeof L.termCollapsed === 'boolean') state.termCollapsed = L.termCollapsed;
   else state.termCollapsed = true;
   if (typeof L.liveSideCollapsed === 'boolean') state.liveSideCollapsed = L.liveSideCollapsed;
+  if (L.layoutMode) state.layoutMode = L.layoutMode;
+  applyLayoutMode(state.layoutMode || 'agent', { persist: false, toast: false, skipCollapse: true });
   applyChromeCollapse();
 }
+
+/**
+ * Agent-first layout presets (Codex / ZCode command-center inspired)
+ * - agent: chat primary, files/term tucked
+ * - review: explorer open, balanced chat
+ * - full: classic multi-pane
+ */
+function applyLayoutMode(mode, opts = {}) {
+  const m = ['agent', 'review', 'full'].includes(mode) ? mode : 'agent';
+  state.layoutMode = m;
+  document.body.classList.add('layout-v15');
+  document.body.classList.remove('layout-mode-agent', 'layout-mode-review', 'layout-mode-full');
+  document.body.classList.add(`layout-mode-${m}`);
+
+  document.querySelectorAll('[data-layout]').forEach((btn) => {
+    btn.classList.toggle('active', btn.dataset.layout === m);
+  });
+
+  if (!opts.skipCollapse) {
+    if (m === 'agent') {
+      state.filesCollapsed = true;
+      state.termCollapsed = true;
+      state.liveSideCollapsed = true;
+    } else if (m === 'review') {
+      state.filesCollapsed = false;
+      state.termCollapsed = true;
+      state.liveSideCollapsed = false;
+      // slightly smaller chat so center breathes
+      document.documentElement.style.setProperty('--chat-w', '380px');
+      document.documentElement.style.setProperty('--files-w', '250px');
+    } else if (m === 'full') {
+      state.filesCollapsed = false;
+      state.termCollapsed = false;
+      state.liveSideCollapsed = false;
+      document.documentElement.style.setProperty('--chat-w', '400px');
+      document.documentElement.style.setProperty('--files-w', '260px');
+      document.documentElement.style.setProperty('--term-h', '160px');
+    }
+    if (m === 'agent') {
+      document.documentElement.style.setProperty('--chat-w', '480px');
+      document.documentElement.style.setProperty('--files-w', '220px');
+    }
+    applyChromeCollapse();
+  }
+
+  saveJson('grokcode-layout-mode', m);
+  if (opts.persist !== false) persistLayout();
+  if (opts.toast) {
+    const labels = { agent: 'Agent · 对话主舞台', review: 'Review · 审阅台', full: 'Full · 全面板' };
+    toast(labels[m] || m, 'ok');
+  }
+}
+window.applyLayoutMode = applyLayoutMode;
 
 function applyChromeCollapse() {
   $('#filesPanel')?.classList.toggle('collapsed', state.filesCollapsed);
@@ -1188,8 +1247,10 @@ function persistLayout() {
     filesCollapsed: state.filesCollapsed,
     termCollapsed: state.termCollapsed,
     liveSideCollapsed: state.liveSideCollapsed,
+    layoutMode: state.layoutMode || 'agent',
   });
   saveJson('grokcode-live-side-collapsed', state.liveSideCollapsed);
+  saveJson('grokcode-layout-mode', state.layoutMode || 'agent');
 }
 
 // ── Session templates (starters pack) ───────────────────
@@ -2045,6 +2106,12 @@ function bindUi() {
   document.querySelector('.terminal-wrap .panel-head')?.addEventListener('click', (e) => {
     if (e.target.closest('button')) return;
     if (state.termCollapsed) toggleTerm();
+  });
+  // 布局预设 Agent / Review / Full
+  document.querySelectorAll('[data-layout]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      applyLayoutMode(btn.dataset.layout, { toast: true });
+    });
   });
 
 

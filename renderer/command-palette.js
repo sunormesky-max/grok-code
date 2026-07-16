@@ -186,6 +186,27 @@
         run: run(() => document.getElementById('btnToggleTerm')?.click()),
       },
       {
+        id: 'layout.agent',
+        title: t('cmd.layout.agent', '布局 · Agent 对话主舞台'),
+        keywords: 'layout agent chat primary 布局 对话',
+        group: 'actions',
+        run: run(() => global.applyLayoutMode?.('agent', { toast: true })),
+      },
+      {
+        id: 'layout.review',
+        title: t('cmd.layout.review', '布局 · Review 审阅台'),
+        keywords: 'layout review explorer 审阅 布局',
+        group: 'actions',
+        run: run(() => global.applyLayoutMode?.('review', { toast: true })),
+      },
+      {
+        id: 'layout.full',
+        title: t('cmd.layout.full', '布局 · Full 全面板'),
+        keywords: 'layout full ide 全面板',
+        group: 'actions',
+        run: run(() => global.applyLayoutMode?.('full', { toast: true })),
+      },
+      {
         id: 'tree.refresh',
         title: t('cmd.tree.refresh', '刷新文件树'),
         keywords: 'refresh tree 刷新',

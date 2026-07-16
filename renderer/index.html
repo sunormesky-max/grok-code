@@ -8,6 +8,7 @@
   <link rel="stylesheet" href="styles.css" />
   <link rel="stylesheet" href="ui-polish.css" />
   <link rel="stylesheet" href="density.css" />
+  <link rel="stylesheet" href="layout-agent.css" />
   <link rel="stylesheet" href="help-overlay.css" />
   <link rel="stylesheet" href="tree-polish.css" />
   <link rel="stylesheet" href="search-ui.css" />
@@ -15,7 +16,7 @@
   <link rel="stylesheet" href="work-mode.css" />
   <link rel="stylesheet" href="outline.css" />
 </head>
-<body class="theme-grok booting">
+<body class="theme-grok booting layout-v15 layout-mode-agent">
   <a class="skip-link" href="#app" data-i18n="a11y.skip">跳到主内容</a>
   <!-- ═══ BOOT SEQUENCE ═══ -->
   <div id="bootScreen" class="boot-screen" role="dialog" aria-label="GrokCode 启动">
@@ -117,13 +118,20 @@
         </div>
       </div>
 
+      <!-- Codex/ZCode 式布局预设：Agent 主对话 · Review 审阅 · Full 全开 -->
+      <div class="layout-presets" id="layoutPresets" role="group" aria-label="布局预设">
+        <button type="button" class="layout-preset active" data-layout="agent" title="Agent 优先 · 对话主舞台">Agent</button>
+        <button type="button" class="layout-preset" data-layout="review" title="Review · 资源树 + 中间审阅">Review</button>
+        <button type="button" class="layout-preset" data-layout="full" title="Full · 全面板">Full</button>
+      </div>
+
       <div class="titlebar-spacer titlebar-drag" aria-hidden="true"></div>
 
       <div class="top-actions">
         <button type="button" class="btn ghost" id="btnOpen" title="添加项目到工作台 (Ctrl+O)">
-          <span class="btn-ico">＋</span> <span data-i18n="btn.addProject">添加项目</span>
+          <span class="btn-ico">＋</span> <span data-i18n="btn.addProject">项目</span>
         </button>
-        <button type="button" class="btn ghost" id="btnOpenWindow" title="在新窗口打开项目（并排开发）">⧉ <span data-i18n="btn.newWindow">新窗口</span></button>
+        <button type="button" class="btn ghost icon-only" id="btnOpenWindow" title="在新窗口打开项目（并排开发）" aria-label="新窗口">⧉</button>
         <button type="button" class="btn ghost icon-only" id="btnSettings" data-i18n-title="btn.settings" data-i18n-aria="btn.settings" title="设置 (Ctrl+,)">⚙</button>
         <!-- Linux / 无 titleBarOverlay 时显示；Windows 由系统绘制，JS 会隐藏 -->
         <div class="win-controls" id="winControls" role="group" aria-label="窗口控制">
@@ -134,11 +142,11 @@
       </div>
     </header>
 
-    <!-- 多项目栏：并行挂载多个仓库 -->
+    <!-- 工作区轨道：项目线程（Codex project/thread 条） -->
     <div class="project-bar no-drag" id="projectBar">
-      <div class="project-bar-label" data-i18n="projects.label">PROJECTS</div>
+      <div class="project-bar-label" data-i18n="projects.label">WS</div>
       <div class="project-tabs" id="projectTabs"></div>
-      <button type="button" class="project-add" id="btnAddProject" title="添加项目 (Ctrl+O)" data-i18n="projects.add">＋ 项目</button>
+      <button type="button" class="project-add" id="btnAddProject" title="添加项目 (Ctrl+O)" data-i18n="projects.add">＋</button>
       <button type="button" class="project-add ghost" id="btnNewWindowProject" title="新窗口打开">⧉</button>
     </div>
 
@@ -323,11 +331,11 @@
 
       <div class="resize-v" data-resize="chat"></div>
 
-      <aside class="panel chat glass">
+      <aside class="panel chat glass agent-primary" id="chatPanel">
         <div class="panel-head">
           <div class="panel-title">
-            <span class="panel-label" data-i18n="chat.label">Grok</span>
-            <span class="panel-sub" id="taskPanelHint">multi-task</span>
+            <span class="panel-label" data-i18n="chat.label">Agent</span>
+            <span class="panel-sub" id="taskPanelHint">threads</span>
           </div>
           <div class="chat-head-actions">
             <span class="status-chip" id="agentStatus">
@@ -390,7 +398,7 @@
       <span id="sbCli">CLI —</span>
       <span class="sep">·</span>
       <span id="sbAgent">待命</span>
-      <span class="ml-auto" id="sbHint">Ctrl+1 Craft · ⌃⇧↵ 单次Craft · Ctrl+2 Plan · Ctrl+3 Ask · Ctrl+K</span>
+      <span class="ml-auto" id="sbHint">Agent/Review/Full · Ctrl+1/2/3 模式 · Ctrl+K · Ctrl+B 树</span>
     </footer>
   </div>
 
