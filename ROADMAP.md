@@ -33,12 +33,13 @@ Living plan for the GrokCode open-source ecosystem. Order may change based on co
 - [x] Scrub speed · open templates in Code · welcome apply&send (v1.4.3)
 - [x] Loop scrub · welcome context menu · Diff filmstrip (v1.4.4)
 - [x] Filmstrip hover paths · L loop · storyboard export (v1.4.5)
+- [x] HTML review pack · tip open-in-Code (v1.4.6)
 
 ## Next
 
-- [ ] Storyboard PNG/HTML render (beyond Markdown)
-- [ ] Click path in filmstrip tip → open file in Code
-- [ ] Shared review link for storyboard (local HTML pack)
+- [ ] Storyboard PNG raster export
+- [ ] Embed mini unified diffs in HTML pack (size-capped)
+- [ ] “Copy review folder” with assets for handoff
 - [ ] Optional true cloud template vault (accounted service)
 
 ## Later

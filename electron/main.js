@@ -1311,19 +1311,26 @@ ipcMain.handle('session:exportShare', async (e, payload = {}) => {
   const win = BrowserWindow.fromWebContents(e.sender);
   const markdown = String(payload.markdown || '');
   const json = String(payload.json || '');
+  const html = String(payload.html || '');
   const defaultName = String(payload.defaultName || 'grok-session.md').replace(/[<>:"|?*]/g, '-');
+  const filters = [
+    { name: 'Markdown', extensions: ['md'] },
+    { name: 'HTML review pack', extensions: ['html', 'htm'] },
+    { name: 'JSON', extensions: ['json'] },
+    { name: 'All', extensions: ['*'] },
+  ];
   const save = await dialog.showSaveDialog(win, {
-    title: '导出 GrokCode 会话',
+    title: payload.title || '导出 GrokCode 会话',
     defaultPath: path.join(osHomedir(), defaultName),
-    filters: [
-      { name: 'Markdown', extensions: ['md'] },
-      { name: 'JSON', extensions: ['json'] },
-      { name: 'All', extensions: ['*'] },
-    ],
+    filters,
   });
   if (save.canceled || !save.filePath) return { ok: false, canceled: true };
   try {
-    const out = save.filePath.toLowerCase().endsWith('.json') ? json || markdown : markdown || json;
+    const fp = save.filePath.toLowerCase();
+    let out = markdown || html || json;
+    if (fp.endsWith('.json')) out = json || markdown || html;
+    else if (fp.endsWith('.html') || fp.endsWith('.htm')) out = html || markdown || json;
+    else out = markdown || html || json;
     fs.writeFileSync(save.filePath, out, 'utf8');
     return { ok: true, file: save.filePath };
   } catch (err) {

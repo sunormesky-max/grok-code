@@ -11,6 +11,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 - See [ROADMAP.md](ROADMAP.md)
 
+## [1.4.6] — 2026-07-16
+
+### Storyboard HTML pack · open from tip
+
+- **Click path in filmstrip tip** → open file in Code
+- **HTML review pack**: self-contained offline storyboard (timeline + prompt + files)
+- Export toolbar: **⬇** Markdown · **HTML** pack; save dialog supports both
+
 ## [1.4.5] — 2026-07-16
 
 ### Filmstrip polish

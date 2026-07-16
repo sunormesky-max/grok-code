@@ -2674,24 +2674,49 @@ button.pill:hover {
   background: rgba(52, 211, 153, 0.1);
 }
 
-/* Filmstrip path hover panel */
+/* Filmstrip path hover panel (interactive — click to open) */
 .diff-film-tip {
   position: fixed;
   z-index: 14000;
-  width: min(300px, 90vw);
-  max-height: min(360px, 50vh);
+  width: min(320px, 90vw);
+  max-height: min(380px, 55vh);
   overflow: auto;
   padding: 10px 12px;
   border-radius: 10px;
   border: 1px solid rgba(125, 211, 252, 0.35);
   background: rgba(8, 10, 18, 0.97);
   box-shadow: 0 12px 40px rgba(0, 0, 0, 0.55);
-  pointer-events: none;
+  pointer-events: auto;
   font-size: 11.5px;
   color: #e4e4e7;
 }
 .diff-film-tip.hidden {
   display: none;
+}
+.diff-film-tip .dft-path-btn {
+  appearance: none;
+  border: none;
+  background: transparent;
+  color: #a5f3fc;
+  font: inherit;
+  font-family: var(--mono, ui-monospace, monospace);
+  font-size: 10.5px;
+  text-align: left;
+  padding: 2px 0;
+  cursor: pointer;
+  width: 100%;
+  word-break: break-all;
+}
+.diff-film-tip .dft-path-btn:hover {
+  color: #7dd3fc;
+  text-decoration: underline;
+}
+.diff-scrub-export.html {
+  width: auto;
+  padding: 0 6px;
+  font-size: 9px;
+  font-family: var(--mono, monospace);
+  letter-spacing: 0.04em;
 }
 .diff-film-tip .dft-head {
   display: flex;

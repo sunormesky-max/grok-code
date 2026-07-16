@@ -469,12 +469,22 @@
       },
       {
         id: 'diff.storyboard',
-        title: t('cmd.diff.storyboard', '导出 Diff storyboard'),
+        title: t('cmd.diff.storyboard', '导出 Diff storyboard Markdown'),
         keywords: 'diff export storyboard filmstrip markdown',
         group: 'actions',
         run: run(() => {
           global.switchTab?.('diff');
-          global.exportFilmstripStoryboard?.();
+          global.exportFilmstripStoryboard?.({ format: 'md' });
+        }),
+      },
+      {
+        id: 'diff.storyboard.html',
+        title: t('cmd.diff.storyboard.html', '导出 Diff HTML 审阅包'),
+        keywords: 'diff export storyboard html review pack 审阅',
+        group: 'actions',
+        run: run(() => {
+          global.switchTab?.('diff');
+          global.exportFilmstripHtml?.();
         }),
       },
       {
