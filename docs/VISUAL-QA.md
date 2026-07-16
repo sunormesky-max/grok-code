@@ -33,6 +33,17 @@ Use after UI/visual changes. Prefer a **wide window (≥1600px)** and **Normal F
 - [ ] Diff filmstrip cards match HUD language when scrubbing
 - [ ] Review bridge chip appears when there are changes
 
+## Outline · Split · Explorer
+
+- [ ] **Outline** (open a source file): STRUCTURE · Outline head, kind chips, active ice rail
+- [ ] Outline empty: muted mono “打开文件后显示大纲”
+- [ ] Theme **Mars/Ice**: outline active rail matches theme accent
+- [ ] **Split** (Code|Diff): dual-pane top edge ice/mars; divider grip glows on hover
+- [ ] Split toggle active: gradient capsule + glow
+- [ ] **Explorer**: panel-label ice glow, filter focus bloom, toolbar mono caps
+- [ ] Tree active file: left ice rail + name glow; ext tint bar on files
+- [ ] Density **紧凑**: outline/tree rows still readable; split grip thinner
+
 ## Overlays
 
 - [ ] **Ctrl+K**: glass card, group labels, active row ice rail + hint kbd chip

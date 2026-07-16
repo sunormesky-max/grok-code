@@ -11,6 +11,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 - See [ROADMAP.md](ROADMAP.md)
 
+## [1.6.2] — 2026-07-16
+
+### Visual impact 9 — outline · split · tree
+
+- **Outline panel**: STRUCTURE HUD head, ice rail, kind chips, active glow, theme tints
+- **Code|Diff split**: dual-pane edge chrome, gradient divider grip, active Split toggle
+- **Explorer tree**: flight-deck panel head/filter/toolbar, active ice rail, ext-tint glow, breadcrumb HUD
+- Compact density + high FX + reduced-motion for the new layers
+- `visual-impact-9.css` + VISUAL-QA outline/split/tree checks
+
 ## [1.6.1] — 2026-07-16
 
 ### Visual impact 8 — help · compact · themed boot

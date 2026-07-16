@@ -51,11 +51,12 @@ Living plan for the GrokCode open-source ecosystem. Order may change based on co
 - [x] MCP/Skills/Plugins panes · doctor cards · force reduce motion (v1.5.9)
 - [x] Command palette · global search HUD · visual QA checklist (v1.6.0)
 - [x] Help overlay · compact audit · themed boot (v1.6.1)
+- [x] Outline / split / tree flight-deck pass (v1.6.2)
 
 ## Now (UI / experience)
 
-- [ ] Outline panel / split layout visual pass
-- [ ] Tree polish vs flight-deck chrome consistency
+- [x] Outline panel / split layout visual pass
+- [x] Tree polish vs flight-deck chrome consistency
 - [ ] Optional “cinematic idle” ambient (off by default)
 
 ## Deferred (services — not now)

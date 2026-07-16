@@ -201,7 +201,7 @@
     panel.innerHTML = `
       <div class="outline-head">
         <span>Outline</span>
-        <button type="button" class="link-btn" id="btnOutlineRefresh">↻</button>
+        <button type="button" class="link-btn" id="btnOutlineRefresh" title="刷新大纲">↻</button>
       </div>
       <div class="outline-list" id="outlineList">
         <div class="muted pad">打开文件后显示大纲</div>
