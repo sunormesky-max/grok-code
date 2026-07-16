@@ -518,6 +518,23 @@
         }),
       },
       {
+        id: 'diff.storyboard.budget.cycle',
+        title: t('cmd.diff.storyboard.budget', '循环导出包体积预算'),
+        keywords: 'diff storyboard budget compress full balanced compact 预算 压缩',
+        group: 'actions',
+        run: run(() => {
+          const order = ['full', 'balanced', 'compact'];
+          const cur = global.getStoryboardBudgetMode?.() || 'balanced';
+          const next = order[(order.indexOf(cur) + 1) % order.length];
+          global.setStoryboardBudgetMode?.(next);
+          global.renderDiffPane?.();
+          global.toast?.(
+            t('toast.budget', '导出预算：{mode}', { mode: next }),
+            'ok'
+          );
+        }),
+      },
+      {
         id: 'diff.restoreTurn',
         title: t('cmd.diff.restoreTurn', 'Diff 整轮还原'),
         keywords: 'diff restore turn 整轮 还原 checkpoint',

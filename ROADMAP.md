@@ -36,12 +36,13 @@ Living plan for the GrokCode open-source ecosystem. Order may change based on co
 - [x] HTML review pack · tip open-in-Code (v1.4.6)
 - [x] Mini diffs · PNG · review folder pack (v1.4.7)
 - [x] Storyboard notes · pack A|B compare · budget compress (v1.4.8)
+- [x] Pack compare polish · progressive compress modes (v1.4.9)
 
 ## Next
 
-- [ ] Pack compare polish (side-by-side file/diff detail)
-- [ ] Compress tuning / progressive strip options
 - [ ] Optional true cloud template vault (accounted service)
+- [ ] Compare HTML packs without requiring JSON
+- [ ] Storyboard pack encryption at rest
 
 ## Later
 

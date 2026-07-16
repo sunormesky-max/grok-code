@@ -11,6 +11,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 - See [ROADMAP.md](ROADMAP.md)
 
+## [1.4.9] — 2026-07-16
+
+### Pack compare polish · progressive compress
+
+- **Compare detail**: click a turn → side-by-side prompts/notes, file both/only-A/only-B lists, mini-diff stats + text pair
+- **Compare filters**: All / Diff / Only A / Only B / Same + summary pills; **Copy summary** markdown
+- **Budget modes**: Full / Balanced / Compact chips on Diff toolbar (persisted); progressive strip (trim text → omit cold diffs → all diffs → trim prompts) with export toast stats
+
 ## [1.4.8] — 2026-07-16
 
 ### Storyboard notes · pack compare · budget compress
