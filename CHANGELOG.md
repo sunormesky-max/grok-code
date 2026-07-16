@@ -11,6 +11,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 - See [ROADMAP.md](ROADMAP.md)
 
+## [1.6.3] — 2026-07-16
+
+### Visual impact 10 — cinematic idle ambient
+
+- **Optional cinematic idle** (off by default): Settings → 外观 → 电影级待机氛围; Ctrl+K toggle
+- After ~12s without input: soft vignette, dust motes, secondary scan beam, richer nebula/corners
+- Respects force reduce motion + OS `prefers-reduced-motion`; starfield meteors slightly more frequent when idle
+- `visual-impact-10.css` + `GrokFx` idle API (`get/set/toggleCinematicIdle`)
+
 ## [1.6.2] — 2026-07-16
 
 ### Visual impact 9 — outline · split · tree

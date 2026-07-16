@@ -1,0 +1,270 @@
+/* ═══════════════════════════════════════════════════════
+   GrokCode Visual Impact 10 — cinematic idle ambient
+   Off by default. Enable: Settings → 电影级待机 / body.cinematic-idle
+   Rich layer only when body also has .is-idle (no input ~12s)
+   ═══════════════════════════════════════════════════════ */
+
+/* Idle layer host — hidden unless enabled */
+.cinematic-idle-layer {
+  display: none;
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+body.cinematic-idle .cinematic-idle-layer {
+  display: block;
+}
+
+/* Soft void vignette */
+body.cinematic-idle .ci-vignette {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(ellipse 75% 60% at 50% 42%, transparent 35%, rgba(0, 0, 0, 0.35) 100%),
+    radial-gradient(ellipse 50% 40% at 20% 80%, rgba(56, 189, 248, 0.04), transparent 70%),
+    radial-gradient(ellipse 45% 35% at 85% 15%, rgba(249, 115, 22, 0.035), transparent 65%);
+  opacity: 0.55;
+  transition: opacity 1.2s ease;
+}
+body.cinematic-idle.is-idle .ci-vignette {
+  opacity: 0.85;
+  animation: ciVignetteBreathe 14s ease-in-out infinite alternate;
+}
+@keyframes ciVignetteBreathe {
+  from {
+    opacity: 0.7;
+  }
+  to {
+    opacity: 0.95;
+  }
+}
+
+/* Floating ice/mars motes */
+body.cinematic-idle .ci-motes {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  transition: opacity 1.4s ease;
+  background-image:
+    radial-gradient(1.5px 1.5px at 12% 28%, rgba(186, 230, 253, 0.55), transparent),
+    radial-gradient(1px 1px at 38% 62%, rgba(125, 211, 252, 0.4), transparent),
+    radial-gradient(1.5px 1.5px at 72% 18%, rgba(251, 146, 60, 0.4), transparent),
+    radial-gradient(1px 1px at 88% 48%, rgba(186, 230, 253, 0.35), transparent),
+    radial-gradient(1px 1px at 22% 78%, rgba(249, 115, 22, 0.3), transparent),
+    radial-gradient(1.5px 1.5px at 55% 40%, rgba(125, 211, 252, 0.45), transparent),
+    radial-gradient(1px 1px at 64% 85%, rgba(186, 230, 253, 0.3), transparent),
+    radial-gradient(1px 1px at 8% 52%, rgba(251, 191, 36, 0.25), transparent);
+  background-size: 100% 100%;
+}
+body.cinematic-idle.is-idle .ci-motes {
+  opacity: 0.75;
+  animation: ciMotesDrift 48s linear infinite;
+}
+@keyframes ciMotesDrift {
+  0% {
+    transform: translate(0, 0);
+  }
+  50% {
+    transform: translate(-1.5%, 1.2%);
+  }
+  100% {
+    transform: translate(0, 0);
+  }
+}
+
+/* Secondary horizontal scan (slower, quieter than main holo-beam) */
+body.cinematic-idle .ci-beam {
+  position: absolute;
+  left: -5%;
+  right: -5%;
+  height: 1px;
+  top: 30%;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(125, 211, 252, 0.2),
+    rgba(255, 255, 255, 0.15),
+    rgba(249, 115, 22, 0.18),
+    transparent
+  );
+  box-shadow: 0 0 18px rgba(125, 211, 252, 0.15);
+  opacity: 0;
+  transition: opacity 0.8s ease;
+}
+body.cinematic-idle.is-idle .ci-beam {
+  opacity: 0.55;
+  animation: ciBeamSweep 16s ease-in-out infinite;
+}
+@keyframes ciBeamSweep {
+  0% {
+    top: 12%;
+    opacity: 0;
+  }
+  12% {
+    opacity: 0.5;
+  }
+  50% {
+    top: 55%;
+    opacity: 0.35;
+  }
+  88% {
+    opacity: 0.45;
+  }
+  100% {
+    top: 88%;
+    opacity: 0;
+  }
+}
+
+/* ── Enhance existing cosmos only when idle ambient on ── */
+body.cinematic-idle.layout-v15 .nebula {
+  opacity: 0.52;
+  filter: blur(88px) saturate(1.1);
+  transition: opacity 1s ease, filter 1s ease;
+}
+body.cinematic-idle.is-idle.layout-v15 .nebula {
+  opacity: 0.68;
+  animation-duration: 36s;
+  filter: blur(92px) saturate(1.2);
+}
+body.cinematic-idle.is-idle.layout-v15 .nebula-b {
+  opacity: 0.55;
+}
+body.cinematic-idle.layout-v15 .holo-beam {
+  opacity: 0.35;
+}
+body.cinematic-idle.is-idle.layout-v15 .holo-beam {
+  opacity: 0.55;
+  animation-duration: 12s;
+  box-shadow:
+    0 0 28px rgba(125, 211, 252, 0.35),
+    0 0 48px rgba(249, 115, 22, 0.12);
+}
+body.cinematic-idle.is-idle.layout-v15 .hex-grid {
+  opacity: 0.1;
+  animation: ciGridBreathe 20s ease-in-out infinite alternate;
+}
+@keyframes ciGridBreathe {
+  from {
+    opacity: 0.07;
+  }
+  to {
+    opacity: 0.12;
+  }
+}
+body.cinematic-idle.is-idle.layout-v15 .grid-floor {
+  animation-duration: 10s;
+  opacity: 0.65;
+}
+body.cinematic-idle.is-idle.layout-v15 .hud-corner {
+  opacity: 0.7;
+  animation: ciCornerPulse 6s ease-in-out infinite alternate;
+}
+body.cinematic-idle.is-idle.layout-v15 .hud-tr,
+body.cinematic-idle.is-idle.layout-v15 .hud-br {
+  animation-delay: -3s;
+}
+@keyframes ciCornerPulse {
+  from {
+    opacity: 0.45;
+    filter: drop-shadow(0 0 2px rgba(125, 211, 252, 0.15));
+  }
+  to {
+    opacity: 0.8;
+    filter: drop-shadow(0 0 8px rgba(125, 211, 252, 0.35));
+  }
+}
+
+/* Subtle status-bar ambient when fully idle */
+body.cinematic-idle.is-idle.layout-v15 .status {
+  box-shadow: inset 0 1px 0 rgba(125, 211, 252, 0.08);
+}
+
+/* Theme tints for idle layer */
+body.theme-mars.cinematic-idle .ci-motes {
+  background-image:
+    radial-gradient(1.5px 1.5px at 12% 28%, rgba(253, 186, 116, 0.5), transparent),
+    radial-gradient(1px 1px at 38% 62%, rgba(249, 115, 22, 0.4), transparent),
+    radial-gradient(1.5px 1.5px at 72% 18%, rgba(251, 191, 36, 0.4), transparent),
+    radial-gradient(1px 1px at 88% 48%, rgba(253, 186, 116, 0.35), transparent),
+    radial-gradient(1px 1px at 22% 78%, rgba(249, 115, 22, 0.35), transparent),
+    radial-gradient(1.5px 1.5px at 55% 40%, rgba(251, 146, 60, 0.4), transparent),
+    radial-gradient(1px 1px at 64% 85%, rgba(253, 186, 116, 0.3), transparent),
+    radial-gradient(1px 1px at 8% 52%, rgba(251, 191, 36, 0.3), transparent);
+}
+body.theme-mars.cinematic-idle .ci-beam {
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(249, 115, 22, 0.25),
+    rgba(253, 186, 116, 0.2),
+    rgba(249, 115, 22, 0.2),
+    transparent
+  );
+  box-shadow: 0 0 18px rgba(249, 115, 22, 0.2);
+}
+body.theme-ice.cinematic-idle .ci-beam {
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(34, 211, 238, 0.3),
+    rgba(186, 230, 253, 0.25),
+    rgba(56, 189, 248, 0.2),
+    transparent
+  );
+  box-shadow: 0 0 18px rgba(34, 211, 238, 0.25);
+}
+body.theme-void.cinematic-idle .ci-motes {
+  opacity: 0.4;
+  filter: grayscale(0.4);
+}
+body.theme-void.cinematic-idle.is-idle .ci-motes {
+  opacity: 0.55;
+}
+
+/* High FX: slightly richer when both on */
+body.fx-high.cinematic-idle.is-idle.layout-v15 .nebula {
+  opacity: 0.78;
+  filter: blur(96px) saturate(1.3);
+}
+body.fx-high.cinematic-idle.is-idle .ci-beam {
+  opacity: 0.7;
+  box-shadow:
+    0 0 28px rgba(125, 211, 252, 0.3),
+    0 0 48px rgba(249, 115, 22, 0.12);
+}
+
+/* ── Kill ambient under reduced motion ────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  body.cinematic-idle .ci-vignette,
+  body.cinematic-idle .ci-motes,
+  body.cinematic-idle .ci-beam,
+  body.cinematic-idle.is-idle.layout-v15 .nebula,
+  body.cinematic-idle.is-idle.layout-v15 .holo-beam,
+  body.cinematic-idle.is-idle.layout-v15 .hex-grid,
+  body.cinematic-idle.is-idle.layout-v15 .hud-corner,
+  body.cinematic-idle.is-idle.layout-v15 .grid-floor {
+    animation: none !important;
+  }
+  body.cinematic-idle .cinematic-idle-layer {
+    display: none !important;
+  }
+  body.cinematic-idle.is-idle.layout-v15 .nebula {
+    opacity: 0.45;
+    filter: blur(90px);
+  }
+}
+body.force-reduced-motion.cinematic-idle .ci-vignette,
+body.force-reduced-motion.cinematic-idle .ci-motes,
+body.force-reduced-motion.cinematic-idle .ci-beam,
+body.force-reduced-motion.cinematic-idle.is-idle.layout-v15 .nebula,
+body.force-reduced-motion.cinematic-idle.is-idle.layout-v15 .holo-beam,
+body.force-reduced-motion.cinematic-idle.is-idle.layout-v15 .hex-grid,
+body.force-reduced-motion.cinematic-idle.is-idle.layout-v15 .hud-corner {
+  animation: none !important;
+}
+body.force-reduced-motion.cinematic-idle .cinematic-idle-layer {
+  display: none !important;
+}

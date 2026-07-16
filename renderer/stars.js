@@ -17,6 +17,21 @@
     /* ignore */
   }
 
+  function motionBlocked() {
+    return (
+      reduced ||
+      document.body.classList.contains('force-reduced-motion')
+    );
+  }
+
+  function cinematicIdleOn() {
+    return (
+      document.body.classList.contains('cinematic-idle') &&
+      document.body.classList.contains('is-idle') &&
+      !motionBlocked()
+    );
+  }
+
   function resize() {
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
     w = window.innerWidth;
@@ -90,8 +105,11 @@
       }
     }
 
-    // meteors
-    if (!reduced && Math.random() < 0.004) spawnMeteor();
+    // meteors — slightly more frequent during cinematic idle
+    if (!motionBlocked()) {
+      const rate = cinematicIdleOn() ? 0.01 : 0.004;
+      if (Math.random() < rate) spawnMeteor();
+    }
     for (let i = meteors.length - 1; i >= 0; i--) {
       const m = meteors[i];
       m.x += Math.cos(m.angle) * m.speed * (dt / 16);

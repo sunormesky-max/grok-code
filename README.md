@@ -95,6 +95,8 @@ When reduced motion is on, boot rings, send pulse, Live timeline entrance, scrub
 
 **Force reduce motion** (Settings → Appearance checkbox, or **Ctrl+K** → “切换强制减少动效”): applies `body.force-reduced-motion` even if the OS setting is off — useful for demos or low-end machines.
 
+**Cinematic idle ambient** (off by default; Settings → Appearance, or **Ctrl+K** → “电影级待机”): after ~12s without input, soft vignette / dust motes / scan beam enrich the flight deck. Disabled under reduce-motion; skip on low-end GPUs.
+
 ---
 
 ## Repo layout

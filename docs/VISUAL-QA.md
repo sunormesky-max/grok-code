@@ -61,6 +61,14 @@ Use after UI/visual changes. Prefer a **wide window (≥1600px)** and **Normal F
 - [ ] Theme **Void** boot: mono stellar
 - [ ] Theme **Ember** boot: red residual
 
+## Cinematic idle (optional)
+
+- [ ] Setting **电影级待机** defaults **off** (no body.cinematic-idle until checked)
+- [ ] Enable → wait ~12s without mouse/keys: motes + vignette + secondary beam appear
+- [ ] Move mouse → ambient damps (`.is-idle` removed)
+- [ ] With **强制减少动效** or OS reduce motion: idle layer hidden / no extra animations
+- [ ] Ctrl+K → “电影级待机” toggles same as settings
+
 ## Motion / a11y
 
 - [ ] OS **Reduce motion** → no boot rings / send pulse spam

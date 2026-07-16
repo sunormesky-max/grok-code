@@ -383,6 +383,19 @@
         }),
       },
       {
+        id: 'idle.toggle',
+        title: t('cmd.idle.toggle', '切换电影级待机氛围'),
+        keywords: 'cinematic idle ambient nebula 待机 氛围 电影 星云',
+        group: 'actions',
+        run: run(() => {
+          const on = global.GrokFx?.toggleCinematicIdle?.();
+          global.toast?.(
+            t('toast.idle', '电影级待机：{mode}', { mode: on ? 'on' : 'off' }),
+            'ok'
+          );
+        }),
+      },
+      {
         id: 'search.files',
         title: t('cmd.search.files', '搜索文件'),
         hint: 'Ctrl+P',

@@ -18,6 +18,7 @@
   <link rel="stylesheet" href="visual-impact-7.css" />
   <link rel="stylesheet" href="visual-impact-8.css" />
   <link rel="stylesheet" href="visual-impact-9.css" />
+  <link rel="stylesheet" href="visual-impact-10.css" />
   <link rel="stylesheet" href="help-overlay.css" />
   <link rel="stylesheet" href="tree-polish.css" />
   <link rel="stylesheet" href="search-ui.css" />
@@ -81,6 +82,12 @@
       <div class="hud-corner hud-br"></div>
       <div class="scanlines"></div>
       <div class="holo-beam"></div>
+      <!-- Cinematic idle ambient (opt-in; body.cinematic-idle + .is-idle) -->
+      <div class="cinematic-idle-layer" aria-hidden="true">
+        <div class="ci-vignette"></div>
+        <div class="ci-motes"></div>
+        <div class="ci-beam"></div>
+      </div>
     </div>
 
     <!-- 自定义标题栏：拖拽仅 titlebar-drag；Windows 窗口按钮用系统 titleBarOverlay -->
@@ -663,6 +670,13 @@
           <span>
             <strong data-i18n="motion.reduce">强制减少动效</strong>
             <small data-i18n="motion.reduce.hint">关闭扫光、脉冲、入场动画（另尊重系统设置）</small>
+          </span>
+        </label>
+        <label class="field check fx-motion">
+          <input type="checkbox" id="cfgCinematicIdle" />
+          <span>
+            <strong data-i18n="idle.label">电影级待机氛围</strong>
+            <small data-i18n="idle.hint">默认关闭；开启后约 12 秒无操作时增强星云、尘埃与扫描束（低配勿开）</small>
           </span>
         </label>
         </div>

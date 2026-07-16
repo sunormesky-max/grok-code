@@ -34,6 +34,8 @@
     if (fx) fx.value = window.GrokFx?.getFx?.() || 'normal';
     const rm = $('#cfgReduceMotion');
     if (rm) rm.checked = Boolean(window.GrokFx?.getReduceMotion?.());
+    const ci = $('#cfgCinematicIdle');
+    if (ci) ci.checked = Boolean(window.GrokFx?.getCinematicIdle?.());
     const st = $('#cfgStylePack');
     if (st) st.value = cfg.stylePack || 'default';
     const pp = $('#cfgPersonalProtect');
@@ -160,6 +162,8 @@
     if (fx) window.GrokFx?.setFx?.(fx);
     const rm = $('#cfgReduceMotion');
     if (rm) window.GrokFx?.setReduceMotion?.(rm.checked);
+    const ci = $('#cfgCinematicIdle');
+    if (ci) window.GrokFx?.setCinematicIdle?.(ci.checked);
     await window.grok.setConfig({
       locale: partial.locale,
       theme: partial.theme,
@@ -211,6 +215,15 @@
         window.GrokI18n?.t?.('toast.motion', null, {
           mode: on ? 'on' : 'off',
         }) || (on ? '减少动效：开' : '减少动效：关'),
+        'ok'
+      );
+    });
+    $('#cfgCinematicIdle')?.addEventListener('change', (e) => {
+      const on = window.GrokFx?.setCinematicIdle?.(e.target.checked);
+      window.toast?.(
+        window.GrokI18n?.t?.('toast.idle', null, {
+          mode: on ? 'on' : 'off',
+        }) || (on ? '电影级待机：开' : '电影级待机：关'),
         'ok'
       );
     });
