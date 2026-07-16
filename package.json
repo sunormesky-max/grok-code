@@ -1,7 +1,7 @@
 {
   "name": "grok-code",
-  "version": "1.9.5",
-  "description": "Desktop coding agent powered by local Grok Build CLI — multi-project, multi-task, context inheritance, MCP & Skills",
+  "version": "1.10.1",
+  "description": "Desktop coding agent powered by local Grok Build CLI ??multi-project, multi-task, context inheritance, MCP & Skills",
   "main": "electron/main.js",
   "productName": "GrokCode",
   "author": {
@@ -17,8 +17,118 @@
   "bugs": {
     "url": "https://github.com/sunormesky-max/grok-code/issues"
   },
+  "keywords": [
+    "grok",
+    "xai",
+    "electron",
+    "coding-agent",
+    "desktop",
+    "mcp",
+    "opencode",
+    "codex"
+  ],
+  "scripts": {
+    "start": "electron .",
+    "dev": "electron . --dev",
+    "lint": "node scripts/check.js",
+    "catalog": "node scripts/build-catalog.js",
+    "icons": "node scripts/gen-icons.js",
+    "precheck": "node scripts/gen-icons.js",
+    "check": "node scripts/check.js && node scripts/test-unit.js && node scripts/build-catalog.js",
+    "test": "node scripts/test-unit.js",
+    "audit:official": "npm audit --registry=https://registry.npmjs.org/",
+    "prepack": "node scripts/gen-icons.js",
+    "predist": "node scripts/gen-icons.js",
+    "pack": "electron-builder --dir",
+    "dist": "electron-builder",
+    "dist:win": "electron-builder --win",
+    "dist:linux": "electron-builder --linux",
+    "dist:mac": "electron-builder --mac",
+    "release:dry": "electron-builder --win --publish never"
+  },
   "dependencies": {
     "electron-store": "^8.2.0",
     "electron-updater": "^6.8.9"
+  },
+  "devDependencies": {
+    "electron": "^43.1.1",
+    "electron-builder": "^26.15.3"
+  },
+  "build": {
+    "appId": "com.grokcode.desktop",
+    "productName": "GrokCode",
+    "copyright": "Copyright ? 2026 GrokCode Contributors",
+    "directories": {
+      "output": "release",
+      "buildResources": "build"
+    },
+    "icon": "build/icon.png",
+    "files": [
+      "electron/**/*",
+      "renderer/**/*",
+      "package.json",
+      "!**/node_modules/*/{CHANGELOG.md,README.md,README,readme.md,readme}",
+      "!**/{test,tests,__tests__,coverage}/**"
+    ],
+    "extraMetadata": {
+      "main": "electron/main.js"
+    },
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "artifactName": "${productName}-${version}-${os}-${arch}.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "GrokCode"
+    },
+    "portable": {
+      "artifactName": "${productName}-${version}-portable.${ext}"
+    },
+    "linux": {
+      "target": [
+        "AppImage",
+        "deb"
+      ],
+      "category": "Development",
+      "maintainer": "GrokCode Contributors <grokcode-oss@users.noreply.github.com>",
+      "vendor": "GrokCode Contributors",
+      "synopsis": "Desktop coding agent for local Grok CLI",
+      "description": "Multi-project multi-task desktop flight deck over Grok Build CLI.",
+      "artifactName": "${productName}-${version}-${os}-${arch}.${ext}"
+    },
+    "mac": {
+      "target": [
+        "dmg"
+      ],
+      "category": "public.app-category.developer-tools",
+      "artifactName": "${productName}-${version}-${os}-${arch}.${ext}",
+      "identity": null,
+      "hardenedRuntime": false,
+      "gatekeeperAssess": false
+    },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "sunormesky-max",
+        "repo": "grok-code",
+        "releaseType": "release"
+      }
+    ]
   }
 }
