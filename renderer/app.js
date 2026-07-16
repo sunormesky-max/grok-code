@@ -780,17 +780,16 @@ function rebuildLiveTimeline(proj) {
   }
   if (window.GrokLiveVirtual?.renderVirtualTimeline) {
     window.GrokLiveVirtual.renderVirtualTimeline(box, events, { esc, forceBottom: true });
-    return;
-  }
-  box.innerHTML = '';
-  for (const ev of events.slice(-120)) {
-    const row = document.createElement('div');
-    const ts = ev.ts ? new Date(ev.ts) : new Date();
-    const t = `${String(ts.getHours()).padStart(2, '0')}:${String(ts.getMinutes()).padStart(2, '0')}:${String(
-      ts.getSeconds()
-    ).padStart(2, '0')}`;
-    row.className = `live-event ${ev.kind || 'status'}`;
-    row.innerHTML = `
+  } else {
+    box.innerHTML = '';
+    for (const ev of events.slice(-120)) {
+      const row = document.createElement('div');
+      const ts = ev.ts ? new Date(ev.ts) : new Date();
+      const t = `${String(ts.getHours()).padStart(2, '0')}:${String(ts.getMinutes()).padStart(2, '0')}:${String(
+        ts.getSeconds()
+      ).padStart(2, '0')}`;
+      row.className = `live-event ${ev.kind || 'status'}`;
+      row.innerHTML = `
       <div class="t">${t}</div>
       <div class="dot"></div>
       <div class="card">
@@ -798,9 +797,15 @@ function rebuildLiveTimeline(proj) {
         <div class="title">${esc(ev.title || '')}</div>
         ${ev.sub ? `<div class="sub">${esc(ev.sub)}</div>` : ''}
       </div>`;
-    box.appendChild(row);
+      box.appendChild(row);
+    }
+    box.scrollTop = box.scrollHeight;
   }
-  box.scrollTop = box.scrollHeight;
+  // Re-attach sticky stream/thought mirrors wiped by rebuild (virtual or plain)
+  const task = T();
+  if (task?.running && (task.streamBuf || task.thoughtBuf)) {
+    paintLiveStreamMirrors(task);
+  }
 }
 
 async function openProjectFlow({ newWindow = false } = {}) {
@@ -7934,18 +7939,22 @@ function isActiveProjectId(projectId) {
   return Boolean(P() && P().id === projectId);
 }
 
-/** Multi-task fairness: active paints fast; background streams throttle */
+/** Multi-task fairness: active paints every frame (true stream); background throttles */
 const StreamFair = {
-  ACTIVE_MS: 16,
-  BG_MS: 140,
+  /** Active task: no artificial delay — next rAF paints (≈60fps stream feel) */
+  ACTIVE_MS: 0,
+  BG_MS: 100,
   TAB_MS: 280,
   LIVE_BG_MS: 400,
-  MAX_PAINT_PER_TICK: 2,
+  LIVE_MIRROR_MS: 48,
+  MAX_PAINT_PER_TICK: 3,
   /** @type {Map<string, { task: object, streamDirty: boolean, thoughtDirty: boolean, lastStream: number, lastThought: number }>} */
   q: new Map(),
   raf: 0,
   lastTab: 0,
   lastLiveBg: 0,
+  lastLiveMirror: 0,
+  liveMirrorRaf: 0,
   tabTimer: 0,
 
   ensure(task) {
@@ -7966,10 +7975,16 @@ const StreamFair = {
     return e;
   },
 
+  isActive(task) {
+    return Boolean(task?.id && task.id === (window.TaskStore?.activeId || null));
+  },
+
   markStream(task) {
     const e = this.ensure(task);
     if (!e) return;
     e.streamDirty = true;
+    // Active: force eligible this frame (no minMs holdback)
+    if (this.isActive(task)) e.lastStream = 0;
     this.kick();
   },
 
@@ -7977,6 +7992,7 @@ const StreamFair = {
     const e = this.ensure(task);
     if (!e) return;
     e.thoughtDirty = true;
+    if (this.isActive(task)) e.lastThought = 0;
     this.kick();
   },
 
@@ -8028,6 +8044,7 @@ const StreamFair = {
             e.task.streamRaf = null;
           }
           upsertAssistant(e.task.streamBuf, true, e.task);
+          if (active) this.scheduleLiveMirror(e.task);
           painted += 1;
         } else {
           needMore = true;
@@ -8045,6 +8062,7 @@ const StreamFair = {
             e.task.thoughtRaf = null;
           }
           upsertThought(e.task.thoughtBuf, true, e.task);
+          if (active) this.scheduleLiveMirror(e.task);
           painted += 1;
         } else {
           needMore = true;
@@ -8082,6 +8100,24 @@ const StreamFair = {
     }
     if (task.streamBuf) upsertAssistant(task.streamBuf, true, task);
     if (task.thoughtBuf) upsertThought(task.thoughtBuf, true, task);
+    if (this.isActive(task)) paintLiveStreamMirrors(task);
+  },
+
+  /** Throttled Live-panel stream/thought mirror (path visible while Chat also streams) */
+  scheduleLiveMirror(task) {
+    if (!task || !this.isActive(task)) return;
+    const now = performance.now();
+    if (now - this.lastLiveMirror < this.LIVE_MIRROR_MS) {
+      if (this.liveMirrorRaf) return;
+      this.liveMirrorRaf = requestAnimationFrame(() => {
+        this.liveMirrorRaf = 0;
+        this.lastLiveMirror = performance.now();
+        paintLiveStreamMirrors(task);
+      });
+      return;
+    }
+    this.lastLiveMirror = now;
+    paintLiveStreamMirrors(task);
   },
 
   scheduleTabs() {
@@ -8124,10 +8160,105 @@ function setTaskPhase(task, phase, detail) {
   if (!task) return;
   const next = phase || 'running';
   const det = detail || '';
+  const prev = task.phase;
   if (task.phase === next && task.phaseDetail === det) return;
   task.phase = next;
   task.phaseDetail = det;
   StreamFair.scheduleTabs();
+  // Discrete path breadcrumbs (active only). Skip streaming spam + tool
+  // (tool_start already records name/path). Skip boot duplicate if same turn.
+  if (
+    isActiveTask(task) &&
+    prev !== next &&
+    next !== 'streaming' &&
+    next !== 'tool' &&
+    next !== 'idle' &&
+    next !== 'done'
+  ) {
+    const labels = {
+      boot: '启动 CLI',
+      thinking: '思考中',
+      error: '出错',
+      retry: '重试',
+      max_turns: '达到轮次上限',
+      stopped: '已停止',
+    };
+    pushLiveEvent({
+      kind: next === 'error' ? 'error' : 'status',
+      title: labels[next] || next,
+      sub: det || task.title,
+      projectId: task.projectId,
+    });
+  }
+}
+
+/**
+ * Sticky Live cards for live stream/thought so center Live is never a black box.
+ * Updated in-place; re-attached after timeline rebuilds.
+ */
+function paintLiveStreamMirrors(task) {
+  task = task || T();
+  if (!task || !isActiveTask(task)) return;
+  const box = $('#liveTimeline');
+  if (!box) return;
+  const empty = box.querySelector('#liveEmpty');
+  if (empty && (task.streamBuf || task.thoughtBuf || task.running)) empty.remove();
+
+  const paintOne = (kind, text) => {
+    if (!text) return;
+    const id = kind === 'thought' ? 'liveThoughtMirror' : 'liveStreamMirror';
+    let row = document.getElementById(id);
+    if (!row || !row.isConnected) {
+      row = document.createElement('div');
+      row.id = id;
+      row.dataset.sticky = id;
+      row.className = `live-event ${kind === 'thought' ? 'thought' : 'stream'} running live-mirror`;
+      row.innerHTML = `
+        <div class="t"></div>
+        <div class="dot"></div>
+        <div class="card">
+          <div class="kind">${kind === 'thought' ? 'think' : 'stream'}</div>
+          <div class="title"></div>
+          <pre class="sub stream-mirror-body"></pre>
+        </div>`;
+      box.appendChild(row);
+    }
+    const ts = new Date();
+    const t = `${String(ts.getHours()).padStart(2, '0')}:${String(ts.getMinutes()).padStart(2, '0')}:${String(
+      ts.getSeconds()
+    ).padStart(2, '0')}`;
+    const tEl = row.querySelector('.t');
+    if (tEl) tEl.textContent = t;
+    const titleEl = row.querySelector('.title');
+    if (titleEl) {
+      titleEl.textContent =
+        kind === 'thought'
+          ? `Thinking · ${text.length} 字`
+          : task.phase === 'tool'
+            ? `回复流 · ${text.length} 字（工具进行中）`
+            : `流式输出 · ${text.length} 字`;
+    }
+    const body = row.querySelector('.stream-mirror-body');
+    if (body) {
+      const s = String(text);
+      // Keep tail so long replies stay readable while streaming
+      body.textContent = s.length > 1600 ? `…${s.slice(-1600)}` : s;
+    }
+    row.classList.toggle('running', Boolean(task.running));
+  };
+
+  // Thought first, then stream (path order)
+  if (task.thoughtBuf) paintOne('thought', task.thoughtBuf);
+  if (task.streamBuf) paintOne('stream', task.streamBuf);
+
+  if (box.scrollHeight - box.scrollTop - box.clientHeight < 140) {
+    box.scrollTop = box.scrollHeight;
+  }
+}
+
+function clearLiveStreamMirrors() {
+  document.getElementById('liveStreamMirror')?.remove();
+  document.getElementById('liveThoughtMirror')?.remove();
 }
 
 function formatUsageBrief(usage) {
@@ -8168,26 +8299,43 @@ function bindAgentEvents() {
     window.grok.on('agent:text', (d) => {
       const task = taskFromEvent(d);
       if (!task) return;
+      const prevLen = (task.streamBuf || '').length;
       if (typeof d.text === 'string') task.streamBuf = d.text;
       else if (d.delta) task.streamBuf = (task.streamBuf || '') + d.delta;
       if (task.running) setTaskPhase(task, 'streaming', 'speaking…');
+      // Always schedule fair paint; active is zero-delay next frame
       scheduleStreamPaint(task);
+      if (isActiveTask(task) && task.running) {
+        // First token: immediate paint so UI never stays blank until done
+        if (prevLen === 0 && task.streamBuf) {
+          StreamFair.flushTask(task);
+          setLivePhase('streaming…', `${task.title} · ${task.streamBuf.length} 字`);
+        } else {
+          setLivePhase('streaming…', `${task.title} · ${(task.streamBuf || '').length} 字`);
+          StreamFair.scheduleLiveMirror(task);
+        }
+      }
     }),
     window.grok.on('agent:thought', (d) => {
       const task = taskFromEvent(d);
       if (!task) return;
+      const prevLen = (task.thoughtBuf || '').length;
       if (typeof d.text === 'string') task.thoughtBuf = d.text;
       else if (d.delta) task.thoughtBuf = (task.thoughtBuf || '') + d.delta;
       if (task.running) setTaskPhase(task, 'thinking', 'thinking…');
       scheduleThoughtPaint(task);
       if (isActiveTask(task) && task.running) {
-        setLivePhase('thinking…', task.title);
+        setLivePhase('thinking…', `${task.title} · ${(task.thoughtBuf || '').length} 字`);
+        if (prevLen === 0 && task.thoughtBuf) StreamFair.flushTask(task);
+        else StreamFair.scheduleLiveMirror(task);
       }
     }),
     window.grok.on('agent:tool_start', (d) => {
       const task = taskFromEvent(d);
       if (!task) return;
       const active = isActiveTask(task);
+      // Flush pending stream so tool row appears after latest text in chat
+      if (active) StreamFair.flushTask(task);
       appendToolStart(d, task);
       task.toolCount += 1;
       setTaskPhase(task, 'tool', `${d.name || 'tool'}…`);
@@ -8210,6 +8358,8 @@ function bindAgentEvents() {
           setLiveFocus(fpath, contentCacheMap().get(fpath) || '');
         }
         updateLiveStats();
+        // Keep stream mirrors after timeline rebuild from pushLiveEvent
+        paintLiveStreamMirrors(task);
       } else {
         // Background tasks: batch Live noise so active stream stays smooth
         StreamFair.pushLiveBg(write ? 'write' : 'tool', liveTitle, liveSub, task.projectId);
@@ -8314,6 +8464,7 @@ function bindAgentEvents() {
         return;
       }
       finalizeLiveMessages(task);
+      clearLiveStreamMirrors();
       task.running = false;
       task.phase = 'done';
       task.phaseDetail = '';
@@ -8624,6 +8775,7 @@ async function runTaskPrompt(task, text, opts = {}) {
         }
       }
       finalizeLiveMessages(task);
+      clearLiveStreamMirrors();
       markTurnEnded(task, { stopped: true, tools: task.toolCount || 0 });
       appendStopBar(task, text, { partial: Boolean(partial) });
       pushLiveEvent({
@@ -8649,6 +8801,7 @@ async function runTaskPrompt(task, text, opts = {}) {
       upsertAssistant('（无文本输出 — 可能只做了工具操作，请看资源管理器 / Diff）', true, task);
     }
     finalizeLiveMessages(task);
+    clearLiveStreamMirrors();
     markTurnEnded(task, {
       stopped: false,
       tools: task.toolCount || 0,

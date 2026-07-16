@@ -1150,6 +1150,7 @@ button.pill:hover {
 .live-event.write .dot { background: var(--mars); box-shadow: 0 0 8px var(--mars-glow); }
 .live-event.status .dot { background: #a1a1aa; }
 .live-event.thought .dot { background: var(--warn); }
+.live-event.stream .dot { background: var(--ok); box-shadow: 0 0 8px rgba(34, 197, 94, 0.35); }
 .live-event.error .dot { background: var(--danger); }
 .live-event.done .dot { background: var(--ok); }
 .live-event .card {
@@ -1169,6 +1170,8 @@ button.pill:hover {
 }
 .live-event.tool .card .kind { color: var(--ice); }
 .live-event.write .card .kind { color: var(--mars-hot); }
+.live-event.stream .card .kind { color: var(--ok); }
+.live-event.thought .card .kind { color: var(--warn); }
 .live-event .card .title {
   color: var(--text);
   font-weight: 600;
@@ -1182,6 +1185,28 @@ button.pill:hover {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+/* Sticky stream/thought mirrors — multi-line live path (not black-box) */
+.live-event.live-mirror .card .sub.stream-mirror-body,
+.live-event.live-mirror pre.stream-mirror-body {
+  margin-top: 6px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow: auto;
+  max-height: 220px;
+  text-overflow: unset;
+  line-height: 1.45;
+  color: var(--muted, #a1a1aa);
+  font-size: 11.5px;
+  background: rgba(0, 0, 0, 0.22);
+  border-radius: 6px;
+  padding: 6px 8px;
+}
+.live-event.live-mirror.stream .card {
+  border-color: rgba(34, 197, 94, 0.28);
+}
+.live-event.live-mirror.thought .card {
+  border-color: rgba(234, 179, 8, 0.28);
 }
 .live-event.running .card {
   border-color: rgba(249, 115, 22, 0.35);

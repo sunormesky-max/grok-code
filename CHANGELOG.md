@@ -11,6 +11,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 - See [ROADMAP.md](ROADMAP.md)
 
+## [1.9.6] — 2026-07-16
+
+### Core — real-time streaming (no black box)
+
+- **Preload allowlist**: pass through `agent:phase` + `agent:usage` (were silently dropped — phase machine / Live path dead)
+- **StreamFair**: active task paints every frame (`ACTIVE_MS: 0`); first token flushes immediately
+- **Live stream mirrors**: sticky think/stream cards in center Live timeline update as tokens arrive
+- **Path breadcrumbs**: boot / thinking / tool path / usage visible mid-run; tools flush pending chat stream first
+- Chat + Live both stream; no more “silent until done then dump”
+
 ## [1.9.5] — 2026-07-16
 
 ### A11y — keyboard & screen reader pass
