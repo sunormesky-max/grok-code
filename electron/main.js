@@ -480,6 +480,34 @@ ipcMain.handle('projectRules:set', (_e, payload = {}) => {
   return modes.writeProjectRulesFile(projectPath, payload.content ?? '');
 });
 
+/** Save base64 image into workspace `.grok/paste/` */
+ipcMain.handle('paste:saveImage', (_e, payload = {}) => {
+  const p = payload.projectId ? projects.get(payload.projectId) : null;
+  const projectPath = payload.projectPath || p?.path;
+  if (!projectPath) throw new Error('需要打开项目');
+  const b64 = String(payload.base64 || '').replace(/^data:image\/\w+;base64,/, '');
+  if (!b64) throw new Error('无效图片数据');
+  let buf;
+  try {
+    buf = Buffer.from(b64, 'base64');
+  } catch {
+    throw new Error('base64 解码失败');
+  }
+  if (buf.length > 5_000_000) throw new Error('图片过大（>5MB）');
+  const extRaw = String(payload.ext || 'png').replace(/[^a-z0-9]/gi, '').toLowerCase() || 'png';
+  const dir = path.join(projectPath, '.grok', 'paste');
+  fs.mkdirSync(dir, { recursive: true });
+  const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+  const safeName = String(payload.name || 'paste')
+    .replace(/[^\w.\u4e00-\u9fff-]+/g, '-')
+    .slice(0, 40);
+  const fileName = `${safeName}-${stamp}.${extRaw}`;
+  const abs = path.join(dir, fileName);
+  fs.writeFileSync(abs, buf);
+  const relPath = path.join('.grok', 'paste', fileName).replace(/\\/g, '/');
+  return { ok: true, relPath, file: abs, bytes: buf.length };
+});
+
 ipcMain.handle('cli:probe', () => probeGrok(store.get('grokPath')));
 
 // ── 体检 / 诊断 / 首启 ──────────────────────────────────

@@ -8,6 +8,7 @@ contextBridge.exposeInMainWorld('grok', {
   listModes: () => ipcRenderer.invoke('modes:list'),
   projectRulesGet: (payload) => ipcRenderer.invoke('projectRules:get', payload || {}),
   projectRulesSet: (payload) => ipcRenderer.invoke('projectRules:set', payload || {}),
+  pasteSaveImage: (payload) => ipcRenderer.invoke('paste:saveImage', payload || {}),
 
   // 多项目
   projectList: () => ipcRenderer.invoke('project:list'),

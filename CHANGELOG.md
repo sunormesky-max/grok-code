@@ -11,6 +11,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 - See [ROADMAP.md](ROADMAP.md)
 
+## [1.3.8] — 2026-07-16
+
+### Templates · checkpoints compare · paste save
+
+- **Rules → Code**: rules modal **Open in Code** saves then opens `.grok/rules.md`
+- **Checkpoint A→B**: Diff bar compare two points (before / cp / live) with dedicated ops view
+- **Paste images → disk**: images saved under workspace `.grok/paste/` when a project is open
+- **Session templates pack**: `session-templates.json` + welcome chips + `/template` + save current prompt as template
+
 ## [1.3.7] — 2026-07-16
 
 ### Checkpoints · project rules · quiet hours

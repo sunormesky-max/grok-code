@@ -418,6 +418,13 @@
         keywords: 'rules 规则',
         group: 'actions',
         run: run(() => global.openRulesQuickEdit?.()),
+      },
+      {
+        id: 'templates.open',
+        title: t('cmd.templates', '会话模板包'),
+        keywords: 'template starter 模板 会话',
+        group: 'actions',
+        run: run(() => global.openTemplatesMenu?.()),
       }
     );
   }

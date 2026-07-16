@@ -25,13 +25,14 @@ Living plan for the GrokCode open-source ecosystem. Order may change based on co
 - [x] @file mentions · Diff side-by-side · task pin/reorder · prompt drafts
 - [x] Diff blame hover · paste attach · rules chip · bg flight notify
 - [x] Diff checkpoints · drag-drop attach · .grok/rules.md · quiet hours
+- [x] Rules open in Code · A→B checkpoint compare · paste→.grok/paste · templates pack
 
 ## Next
 
-- [ ] One-click “open .grok/rules.md in Code” from rules modal
-- [ ] Checkpoint diff-between two turns (A→B)
-- [ ] Attachment save image into project `.grok/paste/`
-- [ ] Session templates (prompt starters pack)
+- [ ] Template marketplace / import JSON pack
+- [ ] Diff “blame heat” density by turn age
+- [ ] Multi-file checkpoint restore (whole turn)
+- [ ] Optional cloud sync for user templates (opt-in)
 
 ## Later
 

@@ -1091,11 +1091,135 @@ function persistLayout() {
   });
 }
 
+// ── Session templates (starters pack) ───────────────────
+const USER_TEMPLATES_KEY = 'grokcode-session-templates';
+let _bundledTemplates = null;
+
+async function loadSessionTemplates() {
+  if (!_bundledTemplates) {
+    try {
+      const res = await fetch('session-templates.json');
+      _bundledTemplates = await res.json();
+    } catch {
+      _bundledTemplates = [];
+    }
+  }
+  const custom = loadJson(USER_TEMPLATES_KEY, []) || [];
+  const bundled = Array.isArray(_bundledTemplates) ? _bundledTemplates : [];
+  // custom overrides by id
+  const map = new Map();
+  for (const t of bundled) map.set(t.id, { ...t, source: 'bundled' });
+  for (const t of custom) if (t?.id) map.set(t.id, { ...t, source: 'user' });
+  return [...map.values()];
+}
+
+function templatePrompt(t, en) {
+  if (!t) return '';
+  if (en) return t.promptEn || t.prompt || t.promptZh || '';
+  return t.promptZh || t.prompt || t.promptEn || '';
+}
+
+function applySessionTemplate(t) {
+  if (!t) return;
+  const en = localeIsEn();
+  if (state.workMode !== 'craft') setWorkMode('craft');
+  const prompt = templatePrompt(t, en);
+  const el = document.getElementById('prompt');
+  if (el) {
+    el.value = prompt;
+    autoResizePrompt();
+    updateCharCount();
+    el.focus();
+  }
+  schedulePromptDraftSave();
+}
+
+async function openTemplatesMenu() {
+  const list = await loadSessionTemplates();
+  const en = localeIsEn();
+  let menu = document.getElementById('templatesMenu');
+  if (!menu) {
+    menu = document.createElement('div');
+    menu.id = 'templatesMenu';
+    menu.className = 'slash-menu templates-menu';
+    document.body.appendChild(menu);
+  }
+  menu.innerHTML =
+    `<div class="slash-head">${en ? 'Session templates' : '会话模板'}</div>` +
+    list
+      .map(
+        (t) =>
+          `<button type="button" class="slash-item" data-id="${esc(t.id)}">
+            <span class="slash-label">${esc(en ? t.labelEn || t.id : t.labelZh || t.id)}</span>
+            <span class="slash-desc">${esc(templatePrompt(t, en).slice(0, 90))}</span>
+          </button>`
+      )
+      .join('') +
+    `<button type="button" class="slash-item" data-act="custom"><span class="slash-label">${en ? '+ Save current as template' : '+ 将当前输入存为模板'}</span></button>`;
+  const ta = document.getElementById('prompt');
+  const rect = ta?.getBoundingClientRect() || { left: 40, top: window.innerHeight - 120, width: 360 };
+  menu.style.left = `${Math.max(8, rect.left)}px`;
+  menu.style.bottom = `${window.innerHeight - rect.top + 6}px`;
+  menu.style.width = `${Math.min(420, rect.width || 360)}px`;
+  menu.classList.remove('hidden');
+  menu.querySelectorAll('.slash-item[data-id]').forEach((btn) => {
+    btn.onclick = () => {
+      const t = list.find((x) => x.id === btn.dataset.id);
+      menu.classList.add('hidden');
+      applySessionTemplate(t);
+    };
+  });
+  menu.querySelector('[data-act="custom"]')?.addEventListener('click', () => {
+    menu.classList.add('hidden');
+    saveCurrentAsTemplate();
+  });
+  const onDoc = (e) => {
+    if (!menu.contains(e.target)) {
+      menu.classList.add('hidden');
+      document.removeEventListener('click', onDoc);
+    }
+  };
+  setTimeout(() => document.addEventListener('click', onDoc), 0);
+}
+
+function saveCurrentAsTemplate() {
+  const text = document.getElementById('prompt')?.value?.trim();
+  if (!text) {
+    toast(localeIsEn() ? 'Composer is empty' : '输入框为空', 'err');
+    return;
+  }
+  const en = localeIsEn();
+  const label = prompt(en ? 'Template name' : '模板名称', text.slice(0, 16));
+  if (!label) return;
+  const id =
+    'user-' +
+    String(label)
+      .toLowerCase()
+      .replace(/[^a-z0-9\u4e00-\u9fff]+/g, '-')
+      .slice(0, 32) +
+    '-' +
+    Date.now().toString(36).slice(-4);
+  const custom = loadJson(USER_TEMPLATES_KEY, []) || [];
+  custom.push({
+    id,
+    labelZh: label,
+    labelEn: label,
+    promptZh: text,
+    promptEn: text,
+  });
+  saveJson(USER_TEMPLATES_KEY, custom.slice(-40));
+  toast(en ? `Saved template: ${label}` : `已保存模板：${label}`, 'ok');
+}
+window.openTemplatesMenu = openTemplatesMenu;
+window.applySessionTemplate = applySessionTemplate;
+
 // ── Welcome ─────────────────────────────────────────────
-function showWelcome(box) {
+async function showWelcome(box) {
   box = box || messagesEl();
   if (!box || box.children.length) return;
   const en = localeIsEn();
+  const templates = await loadSessionTemplates();
+  const quick = templates.slice(0, 8);
   box.innerHTML = `
     <div class="welcome">
       <div class="welcome-hero">
@@ -1110,28 +1234,27 @@ function showWelcome(box) {
       <ol>
         <li>${en ? 'Open a project workspace' : '打开项目，给 Grok 一块能「理解」的代码宇宙'}</li>
         <li>${en ? 'CLI green in title bar = online (else <code>grok login</code>)' : '顶栏 CLI 亮绿 = 已上线（否则 <code>grok login</code>）'}</li>
-        <li>${en ? '<kbd>Ctrl</kbd>+<kbd>Enter</kbd> send · <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Enter</kbd> one-shot Craft' : '当前任务 <kbd>Ctrl</kbd>+<kbd>Enter</kbd> · 一键 Craft 用 <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Enter</kbd>'}</li>
+        <li>${en ? '<kbd>Ctrl</kbd>+<kbd>Enter</kbd> send · <kbd>/</kbd> commands · templates pack below' : '当前任务 <kbd>Ctrl</kbd>+<kbd>Enter</kbd> · <kbd>/</kbd> 命令 · 下方模板包'}</li>
       </ol>
-      <div class="quick-actions">
-        <button type="button" class="quick-btn craft-q" data-q="${en ? 'Summarize this project: structure, stack, rough edges — be sharp' : '用中文、带点锐气地总结这个项目：结构、技术栈、槽点'}">${en ? 'Scout' : '洞察项目'}</button>
-        <button type="button" class="quick-btn craft-q" data-q="${en ? 'Find obvious bugs and security issues like a code review — straight talk' : '像 code review 一样找明显 bug 和安全问题，直接说人话'}">${en ? 'Review' : '挑刺'}</button>
-        <button type="button" class="quick-btn craft-q" data-q="${en ? 'Write a concise, opinionated README.md' : '为项目写一份简洁有态度的 README.md（中文）'}">${en ? 'README' : '写 README'}</button>
-        <button type="button" class="quick-btn craft-q" data-q="${en ? 'Run tests or build, fix failures, no fluff' : '运行测试或构建，修掉失败项，别废话'}">${en ? 'Go green' : '修到绿'}</button>
-        <button type="button" class="quick-btn craft-q" data-q="${en ? 'Pick one high-impact improvement and implement it end-to-end' : '选一个高收益改进点，端到端实现它'}">${en ? 'Ship one' : '落地一改'}</button>
+      <div class="quick-actions" id="welcomeTemplates">
+        ${quick
+          .map(
+            (t) =>
+              `<button type="button" class="quick-btn craft-q" data-tpl="${esc(t.id)}">${esc(
+                en ? t.labelEn || t.id : t.labelZh || t.id
+              )}</button>`
+          )
+          .join('')}
+        <button type="button" class="quick-btn" data-act="more-tpl">${en ? 'More…' : '更多…'}</button>
       </div>
     </div>`;
-  box.querySelectorAll('.quick-btn').forEach((btn) => {
+  box.querySelectorAll('.quick-btn[data-tpl]').forEach((btn) => {
     btn.onclick = () => {
-      // Craft quick actions: ensure flight mode
-      if (btn.classList.contains('craft-q') && state.workMode !== 'craft') {
-        setWorkMode('craft');
-      }
-      $('#prompt').value = btn.dataset.q;
-      autoResizePrompt();
-      updateCharCount();
-      $('#prompt').focus();
+      const t = quick.find((x) => x.id === btn.dataset.tpl);
+      applySessionTemplate(t);
     };
   });
+  box.querySelector('[data-act="more-tpl"]')?.addEventListener('click', () => openTemplatesMenu());
 }
 
 // ── UI bindings ─────────────────────────────────────────
@@ -2088,6 +2211,12 @@ const SLASH_COMMANDS = () => [
       toggleDiffViewMode();
     },
   },
+  {
+    id: 'template',
+    label: '/template',
+    desc: localeIsEn() ? 'Session templates pack' : '会话模板包',
+    run: () => openTemplatesMenu(),
+  },
 ];
 
 let slashIndex = 0;
@@ -2568,6 +2697,7 @@ async function openRulesQuickEdit() {
       </div>
       <div class="gc-modal-actions">
         <button type="button" class="btn small ghost" data-act="sound">${state.notifySound !== false ? (en ? 'Chime on' : '提示音开') : en ? 'Chime off' : '提示音关'}</button>
+        <button type="button" class="btn small ghost" data-act="open-file" ${P() ? '' : 'disabled'}>${en ? 'Open in Code' : '在 Code 打开'}</button>
         <button type="button" class="btn small ghost" data-close="1">${en ? 'Cancel' : '取消'}</button>
         <button type="button" class="btn small primary" data-act="save">${en ? 'Save' : '保存'}</button>
       </div>
@@ -2587,26 +2717,45 @@ async function openRulesQuickEdit() {
       state.notifySound !== false ? (en ? 'Chime on' : '提示音开') : en ? 'Chime off' : '提示音关';
     if (state.notifySound !== false) playCompleteChime();
   };
-  root.querySelector('[data-act="save"]').onclick = async () => {
+  const saveAll = async () => {
     const rules = ta?.value || '';
     const projectText = pta?.value || '';
-    try {
-      await window.grok.setConfig({ rules });
-      const cfgEl = document.getElementById('cfgRules');
-      if (cfgEl) cfgEl.value = rules;
-      if (P()?.path) {
-        await window.grok.projectRulesSet({
-          projectPath: P().path,
-          projectId: pid(),
-          content: projectText,
-        });
-      }
-      setQuietHours({
-        enabled: Boolean(root.querySelector('#quietEnabled')?.checked),
-        start: root.querySelector('#quietStart')?.value || '22:00',
-        end: root.querySelector('#quietEnd')?.value || '08:00',
+    await window.grok.setConfig({ rules });
+    const cfgEl = document.getElementById('cfgRules');
+    if (cfgEl) cfgEl.value = rules;
+    if (P()?.path) {
+      await window.grok.projectRulesSet({
+        projectPath: P().path,
+        projectId: pid(),
+        content: projectText,
       });
-      window.refreshRulesChip?.();
+    }
+    setQuietHours({
+      enabled: Boolean(root.querySelector('#quietEnabled')?.checked),
+      start: root.querySelector('#quietStart')?.value || '22:00',
+      end: root.querySelector('#quietEnd')?.value || '08:00',
+    });
+    window.refreshRulesChip?.();
+  };
+  root.querySelector('[data-act="open-file"]')?.addEventListener('click', async () => {
+    if (!P()) {
+      toast(en ? 'Open a project first' : '请先打开项目', 'err');
+      return;
+    }
+    try {
+      await saveAll();
+      const rel = '.grok/rules.md';
+      close();
+      await openFile(rel, { switchToCode: true });
+      switchTab('editor');
+      toast(en ? 'Opened .grok/rules.md' : '已打开 .grok/rules.md', 'ok');
+    } catch (err) {
+      toast(err.message || 'open failed', 'err');
+    }
+  });
+  root.querySelector('[data-act="save"]').onclick = async () => {
+    try {
+      await saveAll();
       toast(en ? 'Rules saved' : '规则已保存', 'ok');
       close();
     } catch (err) {
@@ -2679,8 +2828,10 @@ function renderAttachBar() {
     state.attachments
       .map(
         (a, i) =>
-          `<span class="attach-chip" title="${esc(a.mime || '')} · ${formatBytes(a.size || 0)}">
-            ${a.kind === 'image' ? '🖼' : a.kind === 'text' ? '📄' : '📎'} ${esc(a.name)}
+          `<span class="attach-chip" title="${esc(a.relPath || a.mime || '')} · ${formatBytes(a.size || 0)}">
+            ${a.kind === 'image' ? '🖼' : a.kind === 'text' ? '📄' : '📎'} ${esc(a.name)}${
+              a.relPath ? ' · saved' : ''
+            }
             <button type="button" data-i="${i}" aria-label="remove">×</button>
           </span>`
       )
@@ -2711,13 +2862,21 @@ function buildAttachmentContextNote() {
     if (a.kind === 'text' && a.text) {
       lines.push(`\n### ${a.name} (${a.mime || 'text'})\n\`\`\`\n${a.text.slice(0, 12000)}\n\`\`\``);
     } else if (a.kind === 'image') {
-      lines.push(
-        `\n### ${a.name} (image/${(a.mime || '').replace('image/', '') || 'png'} · ${formatBytes(a.size || 0)})\n` +
-          (localeIsEn()
-            ? 'User pasted an image in the desktop UI. Image bytes are not sent to CLI; treat as visual intent and follow the user text. Preview data-url length: '
-            : '用户在桌面端粘贴了图片；图片字节未上传 CLI，请结合用户文字理解意图。data-url 长度：') +
-          `${(a.dataUrl || '').length}`
-      );
+      if (a.relPath) {
+        lines.push(
+          `\n### ${a.name} (image · ${formatBytes(a.size || 0)})\n` +
+            (localeIsEn()
+              ? `Saved under workspace: \`${a.relPath}\` — open/read this file if you need the visual reference.`
+              : `已保存到工作区：\`${a.relPath}\` — 如需视觉参考可读取该文件。`)
+        );
+      } else {
+        lines.push(
+          `\n### ${a.name} (image/${(a.mime || '').replace('image/', '') || 'png'} · ${formatBytes(a.size || 0)})\n` +
+            (localeIsEn()
+              ? 'User pasted an image in the desktop UI. Image bytes are not sent to CLI; treat as visual intent and follow the user text.'
+              : '用户在桌面端粘贴了图片；图片字节未上传 CLI，请结合用户文字理解意图。')
+        );
+      }
     } else {
       lines.push(`\n### ${a.name} (${a.mime || 'file'} · ${formatBytes(a.size || 0)})`);
     }
@@ -2781,7 +2940,31 @@ async function addAttachmentFromFile(file) {
       return;
     }
     const dataUrl = await readFileAsDataUrl(file);
-    state.attachments.push({ kind: 'image', name, mime, size, dataUrl });
+    let relPath = null;
+    // Prefer saving into workspace .grok/paste/ so agent can read the file
+    if (P()?.path && pid()) {
+      try {
+        const ext = (mime.split('/')[1] || 'png').replace(/[^a-z0-9]/gi, '') || 'png';
+        const saved = await window.grok.pasteSaveImage({
+          projectId: pid(),
+          projectPath: P().path,
+          base64: dataUrl,
+          ext,
+          name: name.replace(/\.[^.]+$/, '') || 'paste',
+        });
+        relPath = saved?.relPath || null;
+      } catch (err) {
+        console.warn('pasteSaveImage', err);
+      }
+    }
+    state.attachments.push({
+      kind: 'image',
+      name: relPath ? relPath.split('/').pop() : name,
+      mime,
+      size,
+      dataUrl,
+      relPath,
+    });
     return;
   }
   // text-like
@@ -3370,9 +3553,39 @@ function pushFileCheckpoint(entry, meta = {}) {
   entry.viewCheckpoint = -1;
 }
 
+function resolveCheckpointContent(entry, idx) {
+  if (!entry) return null;
+  // -1 = original before, -2 = live after, >=0 = checkpoint
+  if (idx === -1 || idx === 'before') return entry.before ?? '';
+  if (idx == null || idx === -2 || idx === 'live') return entry.after ?? '';
+  const cps = entry.checkpoints || [];
+  const i = Number(idx);
+  if (i < 0 || i >= cps.length) return entry.after ?? '';
+  return cps[i].after ?? '';
+}
+
 function getDiffViewSnapshot(entry) {
   if (!entry) return null;
   const cps = entry.checkpoints || [];
+  // A→B compare mode
+  const a = entry.compareA;
+  const b = entry.compareB;
+  if (a != null && b != null && String(a) !== '' && String(b) !== '') {
+    const left = resolveCheckpointContent(entry, a);
+    const right = resolveCheckpointContent(entry, b);
+    const recomputed = window.DiffUtil.computeLineDiff(left ?? '', right ?? '');
+    const labelA = a === -1 || a === 'before' ? 'before' : a === -2 || a === 'live' ? 'live' : `cp#${Number(a) + 1}`;
+    const labelB = b === -1 || b === 'before' ? 'before' : b === -2 || b === 'live' ? 'live' : `cp#${Number(b) + 1}`;
+    return {
+      ops: recomputed.ops,
+      stats: recomputed.stats,
+      after: right,
+      label: `${labelA}→${labelB}`,
+      checkpoint: typeof b === 'number' && b >= 0 ? cps[b] : null,
+      index: typeof b === 'number' ? b : -1,
+      compare: { a, b, labelA, labelB },
+    };
+  }
   const idx = entry.viewCheckpoint;
   if (idx == null || idx < 0 || idx >= cps.length) {
     return {
@@ -3657,20 +3870,45 @@ function renderDiffPane() {
   }
 
   const cps = cur.checkpoints || [];
+  const cmpOn = cur.compareA != null && cur.compareB != null;
+  const optLabel = (v) => {
+    if (v === -1 || v === 'before') return 'before';
+    if (v === -2 || v === 'live') return 'live';
+    return `cp#${Number(v) + 1}`;
+  };
+  const cpOptions = [
+    `<option value="-1">before</option>`,
+    ...cps.map((_, i) => `<option value="${i}">cp#${i + 1}</option>`),
+    `<option value="-2">live</option>`,
+  ].join('');
   const cpBar =
     cps.length > 0
       ? `<div class="diff-cp-bar">
           <span class="diff-cp-label">Checkpoints</span>
-          <button type="button" class="diff-cp-chip${snap?.index < 0 ? ' active' : ''}" data-cp="-1">Live</button>
+          <button type="button" class="diff-cp-chip${!cmpOn && snap?.index < 0 ? ' active' : ''}" data-cp="-1">Live</button>
           ${cps
             .map((c, i) => {
               const t = c.ts ? new Date(c.ts).toLocaleTimeString() : `#${i + 1}`;
-              return `<button type="button" class="diff-cp-chip${snap?.index === i ? ' active' : ''}" data-cp="${i}" title="${esc(c.taskTitle || '')} · ${esc(String(c.prompt || '').slice(0, 80))}">${esc(t)}</button>`;
+              return `<button type="button" class="diff-cp-chip${!cmpOn && snap?.index === i ? ' active' : ''}" data-cp="${i}" title="${esc(c.taskTitle || '')} · ${esc(String(c.prompt || '').slice(0, 80))}">${esc(t)}</button>`;
             })
             .join('')}
           ${
-            snap?.index >= 0 && !cur.restored
+            snap?.index >= 0 && !cur.restored && !cmpOn
               ? `<button type="button" class="btn small ghost" data-cp-act="restore">${localeIsEn() ? 'Restore this turn' : '还原到此轮'}</button>`
+              : ''
+          }
+          <span class="diff-cp-sep">|</span>
+          <label class="diff-cp-cmp">A
+            <select id="cpCompareA">${cpOptions}</select>
+          </label>
+          <label class="diff-cp-cmp">B
+            <select id="cpCompareB">${cpOptions}</select>
+          </label>
+          <button type="button" class="btn small ghost${cmpOn ? ' active-view' : ''}" data-cp-act="compare">${localeIsEn() ? 'Compare A→B' : '对比 A→B'}</button>
+          ${
+            cmpOn
+              ? `<button type="button" class="link-btn" data-cp-act="clear-cmp">${localeIsEn() ? 'Clear compare' : '清除对比'}</button>
+                 <span class="muted" style="font-size:11px">${esc(snap?.label || '')}</span>`
               : ''
           }
         </div>`
@@ -3714,12 +3952,27 @@ function renderDiffPane() {
 
   bindDiffBlameTooltips(content, blame);
 
+  // init compare selects
+  const selA = content.querySelector('#cpCompareA');
+  const selB = content.querySelector('#cpCompareB');
+  if (selA) {
+    selA.value = String(cur.compareA != null ? cur.compareA : cps.length ? cps.length - 2 : -1);
+    if (cur.compareA == null && cps.length >= 2) selA.value = String(cps.length - 2);
+    else if (cur.compareA == null) selA.value = '-1';
+  }
+  if (selB) {
+    if (cur.compareB != null) selB.value = String(cur.compareB);
+    else selB.value = cps.length ? String(cps.length - 1) : '-2';
+  }
+
   content.querySelectorAll('[data-cp]').forEach((btn) => {
     btn.onclick = () => {
       const path = P() && P().selectedDiffPath;
       const entry = path && changesMap().get(path);
       if (!entry) return;
       entry.viewCheckpoint = Number(btn.dataset.cp);
+      entry.compareA = null;
+      entry.compareB = null;
       changesMap().set(path, entry);
       state.diffHunkCollapsed = new Set();
       renderDiffPane();
@@ -3727,6 +3980,32 @@ function renderDiffPane() {
   });
   content.querySelector('[data-cp-act="restore"]')?.addEventListener('click', () => {
     restoreToCheckpoint();
+  });
+  content.querySelector('[data-cp-act="compare"]')?.addEventListener('click', () => {
+    const path = P() && P().selectedDiffPath;
+    const entry = path && changesMap().get(path);
+    if (!entry) return;
+    const a = Number(content.querySelector('#cpCompareA')?.value);
+    const b = Number(content.querySelector('#cpCompareB')?.value);
+    if (a === b) {
+      toast(localeIsEn() ? 'Pick two different points' : '请选择两个不同的点', 'err');
+      return;
+    }
+    entry.compareA = a;
+    entry.compareB = b;
+    entry.viewCheckpoint = -1;
+    changesMap().set(path, entry);
+    state.diffHunkCollapsed = new Set();
+    renderDiffPane();
+  });
+  content.querySelector('[data-cp-act="clear-cmp"]')?.addEventListener('click', () => {
+    const path = P() && P().selectedDiffPath;
+    const entry = path && changesMap().get(path);
+    if (!entry) return;
+    entry.compareA = null;
+    entry.compareB = null;
+    changesMap().set(path, entry);
+    renderDiffPane();
   });
 
   content.querySelector('[data-diff-act="unified"]')?.addEventListener('click', () => {
