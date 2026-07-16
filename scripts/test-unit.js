@@ -92,8 +92,15 @@ function testModes() {
   const rules = m.buildRules({ baseRules: 'base', workMode: 'ask', stylePack: 'pragmatic' });
   assert.ok(rules.includes('Ask') || rules.includes('只读'));
   assert.ok(m.modePromptPrefix('plan', 'hello').includes('Plan'));
+  const craft = m.modePromptPrefix('craft', 'fix the bug');
+  assert.ok(craft.includes('Craft'), 'craft prefix names Craft');
+  assert.ok(craft.includes('飞行') || craft.includes('直接'), 'craft is flight/act-now');
+  const craftRules = m.buildRules({ workMode: 'craft' });
+  assert.ok(craftRules.includes('Craft'));
   assert.equal(m.listModes().length, 3);
   assert.ok(m.listStyles().length >= 3);
+  // plan execute phrase
+  assert.ok(m.modePromptPrefix('plan', '执行').includes('确认') || m.modePromptPrefix('plan', '执行').includes('动手'));
   console.log('ok  modes / styles');
 }
 

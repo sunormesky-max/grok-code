@@ -346,17 +346,18 @@
         </div>
         <div class="composer">
           <div class="mode-bar" id="modeBar" role="group" aria-label="Work mode">
-            <button type="button" class="mode-chip active" data-mode="craft" title="直接动手">Craft</button>
-            <button type="button" class="mode-chip" data-mode="plan" title="先方案后执行">Plan</button>
-            <button type="button" class="mode-chip" data-mode="ask" title="只读问答">Ask</button>
-            <span class="mode-hint" id="modeHint">直接动手</span>
+            <button type="button" class="mode-chip active" data-mode="craft" title="Craft 飞行模式 · 直接动手 (Ctrl+1)">Craft</button>
+            <button type="button" class="mode-chip" data-mode="plan" title="先方案后执行 (Ctrl+2)">Plan</button>
+            <button type="button" class="mode-chip" data-mode="ask" title="只读问答 (Ctrl+3)">Ask</button>
+            <span class="mode-hint" id="modeHint">飞行模式 · 直接动手</span>
           </div>
           <div class="composer-box">
             <div class="composer-glow" aria-hidden="true"></div>
-            <textarea id="prompt" rows="2" placeholder="对当前任务说… 可开多个任务并行跑" data-i18n-placeholder="chat.placeholder"></textarea>
+            <textarea id="prompt" rows="2" placeholder="Craft · 告诉 Grok 要改什么… Ctrl+Enter 起飞" data-i18n-placeholder="chat.placeholder"></textarea>
             <div class="composer-bar">
               <div class="composer-hints">
                 <span class="hint-chip">Ctrl+Enter</span>
+                <span class="hint-chip" title="不切换模式的单次 Craft">⌃⇧↵ Craft</span>
                 <span class="hint-chip">Ctrl+T 新任务</span>
                 <span class="hint-chip muted" id="charCount">0</span>
               </div>
@@ -381,7 +382,7 @@
       <span id="sbCli">CLI —</span>
       <span class="sep">·</span>
       <span id="sbAgent">待命</span>
-      <span class="ml-auto" id="sbHint">Ctrl+1 Craft · Ctrl+2 Plan · Ctrl+3 Ask · Ctrl+K · Ctrl+/</span>
+      <span class="ml-auto" id="sbHint">Ctrl+1 Craft · ⌃⇧↵ 单次Craft · Ctrl+2 Plan · Ctrl+3 Ask · Ctrl+K</span>
     </footer>
   </div>
 

@@ -101,3 +101,72 @@ body[data-work-mode="ask"] .composer-box:focus-within {
 @media (prefers-reduced-motion: reduce) {
   .mode-chip.active[data-mode="craft"] { animation: none; }
 }
+
+/* Craft flight-deck chrome */
+body[data-work-mode="craft"] .app-shell,
+body[data-work-mode="craft"] #app {
+  box-shadow: inset 3px 0 0 0 rgba(56, 189, 248, 0.55);
+}
+body.craft-inflight .sb-mode[data-mode="craft"],
+body.craft-inflight #sbMode[data-mode="craft"] {
+  animation: craftPulse 1.2s ease-in-out infinite;
+  border-color: rgba(56, 189, 248, 0.75);
+}
+body[data-work-mode="craft"] .composer-box {
+  border-color: rgba(56, 189, 248, 0.22);
+}
+#sbMode {
+  cursor: pointer;
+  user-select: none;
+}
+#sbMode:hover {
+  filter: brightness(1.15);
+}
+#sbMode:focus-visible {
+  outline: 1px solid rgba(125, 211, 252, 0.6);
+  outline-offset: 2px;
+}
+
+/* Craft mission summary after a turn */
+.craft-mission-bar {
+  margin: 8px 12px 12px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  justify-content: space-between;
+  border: 1px solid rgba(56, 189, 248, 0.4);
+  background: linear-gradient(120deg, rgba(56, 189, 248, 0.1), rgba(14, 165, 233, 0.05));
+}
+.craft-mission-label {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  color: #7dd3fc;
+  font-family: var(--mono, monospace);
+}
+.craft-mission-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  flex: 1;
+}
+.craft-mission-stats .cms {
+  font-size: 11.5px;
+  color: var(--muted, #a1a1aa);
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.28);
+  border: 1px solid rgba(125, 211, 252, 0.15);
+  font-family: var(--mono, monospace);
+}
+
+.quick-btn.craft-q {
+  border-color: rgba(56, 189, 248, 0.28);
+}
+.quick-btn.craft-q:hover {
+  border-color: rgba(56, 189, 248, 0.55);
+  box-shadow: 0 0 12px rgba(56, 189, 248, 0.18);
+}

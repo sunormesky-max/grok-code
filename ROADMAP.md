@@ -18,6 +18,7 @@ Living plan for the GrokCode open-source ecosystem. Order may change based on co
 - [x] Craft/Plan/Ask modes · style packs · personal protect / trash delete
 - [x] Ask IPC hard-block · outline · split width persist · skills index inject
 - [x] Plan execute chip · per-project split width · multi-lang outline · skill match chips
+- [x] Craft flight deck (one-shot Craft, mission bar, mode HUD)
 
 ## Next
 

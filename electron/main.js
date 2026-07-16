@@ -782,7 +782,8 @@ ipcMain.handle('agent:run', async (_e, payload) => {
     stylePack,
   });
 
-  // Ask: never auto-approve tools; Plan: keep user setting unless execute phrase
+  // Ask: never auto-approve tools; Plan: fewer turns while planning;
+  // Craft: flight mode — full throttle (user always-approve + maxTurns as configured)
   let alwaysOverride;
   let maxTurnsOverride;
   if (workMode === 'ask') {
@@ -794,6 +795,13 @@ ipcMain.handle('agent:run', async (_e, payload) => {
     if (!exec) {
       // planning turn: fewer tool turns preferred
       maxTurnsOverride = Math.min(Number(store.get('maxTurns') || 30), 16);
+    }
+  } else if (workMode === 'craft') {
+    // Prefer finishing the job; do not artificially cap below user setting
+    alwaysOverride = undefined; // keep user always-approve
+    const base = Number(store.get('maxTurns') || 30);
+    if (store.get('alwaysApprove') !== false && base < 24) {
+      maxTurnsOverride = 24;
     }
   }
 

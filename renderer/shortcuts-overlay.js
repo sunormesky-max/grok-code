@@ -8,9 +8,10 @@
 
   const ROWS = () => [
     { keys: ['Ctrl', 'K'], desc: t('help.cmd', '命令面板') },
-    { keys: ['Ctrl', '1'], desc: t('help.mode.craft', '模式 · Craft') },
+    { keys: ['Ctrl', '1'], desc: t('help.mode.craft', '模式 · Craft 飞行') },
     { keys: ['Ctrl', '2'], desc: t('help.mode.plan', '模式 · Plan') },
     { keys: ['Ctrl', '3'], desc: t('help.mode.ask', '模式 · Ask') },
+    { keys: ['Ctrl', 'Shift', 'Enter'], desc: t('help.send.craft', '单次 Craft 发送（不改模式）') },
     { keys: ['Ctrl', 'P'], desc: t('help.files', '搜索文件') },
     { keys: ['Ctrl', 'Shift', 'F'], desc: t('help.content', '搜索内容') },
     { keys: ['Ctrl', 'O'], desc: t('help.open', '添加项目') },

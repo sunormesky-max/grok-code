@@ -11,6 +11,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 - See [ROADMAP.md](ROADMAP.md)
 
+## [1.3.1] — 2026-07-16
+
+### Craft flight deck
+
+- Stronger Craft rules/prefix (multi-step, short post-flight recap)
+- **Mode-aware** composer placeholder + send label (fixed idle label reset)
+- **Ctrl+Shift+Enter** one-shot Craft without leaving Plan/Ask UI
+- Status **Craft · 飞行中 / Craft 待命**; badge click cycles modes
+- **Mission summary** bar after Craft turns (tools · writes · Diff files)
+- Welcome deck rebranded for Craft + “落地一改” quick action
+- Craft flight: left rail accent, inflight badge pulse, min maxTurns floor when YOLO
+- Command palette: cycle work mode
+
 ## [1.3.0] — 2026-07-16
 
 ### Craft mode polish

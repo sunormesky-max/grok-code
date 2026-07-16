@@ -838,7 +838,7 @@ async function closeTask(id) {
 function syncComposerToTask(t) {
   // 停止按钮随当前任务
   setRunningUi(Boolean(t?.running));
-  $('#sendLabel').textContent = t?.running ? 'grokking' : 'Grok it';
+  applySendLabel();
 }
 
 // ── 无边框窗口控制 ──────────────────────────────────────
@@ -901,27 +901,37 @@ function persistLayout() {
 function showWelcome(box) {
   box = box || messagesEl();
   if (!box || box.children.length) return;
+  const en = localeIsEn();
   box.innerHTML = `
     <div class="welcome">
       <div class="welcome-hero">
-        <div class="welcome-kicker">xAI · MULTI-TASK</div>
+        <div class="welcome-kicker">xAI · CRAFT FLIGHT DECK</div>
         <h3>Not just an IDE assistant.<br><em>Parallel agents that grok.</em></h3>
-        <p>每个任务独立 CLI session，可<strong>同时跑多个</strong>。用 <kbd>Ctrl</kbd>+<kbd>T</kbd> 开新任务。</p>
+        <p>${
+          en
+            ? 'Default mode is <strong>Craft</strong> — act now. Each task has its own CLI session. <kbd>Ctrl</kbd>+<kbd>T</kbd> for parallel.'
+            : '默认 <strong>Craft 飞行模式</strong>：直接动手。每个任务独立 CLI session，可<strong>同时跑多个</strong>。用 <kbd>Ctrl</kbd>+<kbd>T</kbd> 开新任务。'
+        }</p>
       </div>
       <ol>
-        <li>打开项目，给 Grok 一块能「理解」的代码宇宙</li>
-        <li>顶栏 CLI 亮绿 = 已上线（否则 <code>grok login</code>）</li>
-        <li>当前任务 <kbd>Ctrl</kbd>+<kbd>Enter</kbd> · 并行请开新任务</li>
+        <li>${en ? 'Open a project workspace' : '打开项目，给 Grok 一块能「理解」的代码宇宙'}</li>
+        <li>${en ? 'CLI green in title bar = online (else <code>grok login</code>)' : '顶栏 CLI 亮绿 = 已上线（否则 <code>grok login</code>）'}</li>
+        <li>${en ? '<kbd>Ctrl</kbd>+<kbd>Enter</kbd> send · <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Enter</kbd> one-shot Craft' : '当前任务 <kbd>Ctrl</kbd>+<kbd>Enter</kbd> · 一键 Craft 用 <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Enter</kbd>'}</li>
       </ol>
       <div class="quick-actions">
-        <button type="button" class="quick-btn" data-q="用中文、带点锐气地总结这个项目：结构、技术栈、槽点">洞察项目</button>
-        <button type="button" class="quick-btn" data-q="像 code review 一样找明显 bug 和安全问题，直接说人话">挑刺</button>
-        <button type="button" class="quick-btn" data-q="为项目写一份简洁有态度的 README.md（中文）">写 README</button>
-        <button type="button" class="quick-btn" data-q="运行测试或构建，修掉失败项，别废话">修到绿</button>
+        <button type="button" class="quick-btn craft-q" data-q="${en ? 'Summarize this project: structure, stack, rough edges — be sharp' : '用中文、带点锐气地总结这个项目：结构、技术栈、槽点'}">${en ? 'Scout' : '洞察项目'}</button>
+        <button type="button" class="quick-btn craft-q" data-q="${en ? 'Find obvious bugs and security issues like a code review — straight talk' : '像 code review 一样找明显 bug 和安全问题，直接说人话'}">${en ? 'Review' : '挑刺'}</button>
+        <button type="button" class="quick-btn craft-q" data-q="${en ? 'Write a concise, opinionated README.md' : '为项目写一份简洁有态度的 README.md（中文）'}">${en ? 'README' : '写 README'}</button>
+        <button type="button" class="quick-btn craft-q" data-q="${en ? 'Run tests or build, fix failures, no fluff' : '运行测试或构建，修掉失败项，别废话'}">${en ? 'Go green' : '修到绿'}</button>
+        <button type="button" class="quick-btn craft-q" data-q="${en ? 'Pick one high-impact improvement and implement it end-to-end' : '选一个高收益改进点，端到端实现它'}">${en ? 'Ship one' : '落地一改'}</button>
       </div>
     </div>`;
   box.querySelectorAll('.quick-btn').forEach((btn) => {
     btn.onclick = () => {
+      // Craft quick actions: ensure flight mode
+      if (btn.classList.contains('craft-q') && state.workMode !== 'craft') {
+        setWorkMode('craft');
+      }
       $('#prompt').value = btn.dataset.q;
       autoResizePrompt();
       updateCharCount();
@@ -961,7 +971,9 @@ function bindUi() {
   $('#prompt').addEventListener('keydown', (e) => {
     if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
       e.preventDefault();
-      sendPrompt();
+      // Ctrl+Shift+Enter → one-shot Craft without leaving current mode UI
+      if (e.shiftKey) sendPrompt({ forceCraft: true });
+      else sendPrompt();
     }
   });
   $('#prompt').addEventListener('input', () => {
@@ -1493,7 +1505,7 @@ window.renderDiffPane = renderDiffPane;
 
 // ── Work mode Craft / Plan / Ask ────────────────────────
 const MODE_HINTS = {
-  craft: { zh: '直接动手', en: 'Act now' },
+  craft: { zh: '飞行模式 · 直接动手', en: 'Flight mode · act now' },
   plan: { zh: '先方案 · 说「执行」再改代码', en: 'Plan first · say “execute” to act' },
   ask: { zh: '只读问答 · 不改磁盘', en: 'Read-only · no disk writes' },
 };
@@ -1504,6 +1516,52 @@ const MODE_SEND = {
   ask: { zh: '提问', en: 'Ask' },
 };
 
+const MODE_PLACEHOLDER = {
+  craft: {
+    zh: 'Craft · 告诉 Grok 要改什么… Ctrl+Enter 起飞',
+    en: 'Craft · what should we ship? Ctrl+Enter',
+  },
+  plan: {
+    zh: 'Plan · 描述目标，先拿方案…',
+    en: 'Plan · describe the goal, get a plan first…',
+  },
+  ask: {
+    zh: 'Ask · 只读提问，不会改磁盘…',
+    en: 'Ask · read-only questions, no disk writes…',
+  },
+};
+
+const MODE_RUN_STATUS = {
+  craft: { zh: 'Craft · 飞行中', en: 'Craft · in flight' },
+  plan: { zh: 'Plan · 规划中', en: 'Plan · planning' },
+  ask: { zh: 'Ask · 分析中', en: 'Ask · analyzing' },
+};
+
+function localeIsEn() {
+  return (window.GrokI18n?.getLocale?.() || 'zh') === 'en';
+}
+
+function applySendLabel() {
+  const send = document.getElementById('sendLabel');
+  if (!send) return;
+  const task = typeof T === 'function' ? T() : null;
+  if (task?.running) {
+    send.textContent = 'grokking';
+    return;
+  }
+  const m = state.workMode || 'craft';
+  const s = MODE_SEND[m] || MODE_SEND.craft;
+  send.textContent = localeIsEn() ? s.en : s.zh;
+}
+
+function applyModePlaceholder() {
+  const ta = document.getElementById('prompt');
+  if (!ta) return;
+  const m = state.workMode || 'craft';
+  const p = MODE_PLACEHOLDER[m] || MODE_PLACEHOLDER.craft;
+  ta.placeholder = localeIsEn() ? p.en : p.zh;
+}
+
 function setWorkMode(mode, opts = {}) {
   const m = ['craft', 'plan', 'ask'].includes(mode) ? mode : 'craft';
   state.workMode = m;
@@ -1512,17 +1570,12 @@ function setWorkMode(mode, opts = {}) {
   document.querySelectorAll('.mode-chip').forEach((btn) => {
     btn.classList.toggle('active', btn.dataset.mode === m);
   });
-  const loc = window.GrokI18n?.getLocale?.() || 'zh';
+  const loc = localeIsEn() ? 'en' : 'zh';
   const hint = MODE_HINTS[m];
   const el = document.getElementById('modeHint');
   if (el && hint) el.textContent = loc === 'en' ? hint.en : hint.zh;
-  // send button label (when not running)
-  const send = document.getElementById('sendLabel');
-  const task = typeof T === 'function' ? T() : null;
-  if (send && !task?.running) {
-    const s = MODE_SEND[m] || MODE_SEND.craft;
-    send.textContent = loc === 'en' ? s.en : s.zh;
-  }
+  applySendLabel();
+  applyModePlaceholder();
   // status bar mode chip
   let sb = document.getElementById('sbMode');
   if (!sb) {
@@ -1531,6 +1584,8 @@ function setWorkMode(mode, opts = {}) {
       sb = document.createElement('span');
       sb.id = 'sbMode';
       sb.className = 'sb-mode';
+      sb.setAttribute('role', 'button');
+      sb.tabIndex = 0;
       const brand = foot.querySelector('.sb-brand');
       if (brand?.nextSibling) foot.insertBefore(sb, brand.nextSibling);
       else foot.prepend(sb);
@@ -1539,7 +1594,8 @@ function setWorkMode(mode, opts = {}) {
   if (sb) {
     sb.textContent = m.toUpperCase();
     sb.dataset.mode = m;
-    sb.title = (hint && (loc === 'en' ? hint.en : hint.zh)) || m;
+    const tip = hint ? (loc === 'en' ? hint.en : hint.zh) : m;
+    sb.title = (loc === 'en' ? 'Click to cycle mode · ' : '点击切换模式 · ') + tip;
   }
   if (opts.toast) {
     toast(loc === 'en' ? `Mode: ${m}` : `模式：${m.toUpperCase()}`, 'ok');
@@ -1549,15 +1605,21 @@ function setWorkMode(mode, opts = {}) {
   }
 }
 
+function cycleWorkMode() {
+  const order = ['craft', 'plan', 'ask'];
+  const i = order.indexOf(state.workMode || 'craft');
+  setWorkMode(order[(i + 1) % order.length], { toast: true });
+}
+
 function bindWorkModeUi() {
   document.querySelectorAll('.mode-chip').forEach((btn) => {
     btn.onclick = () => setWorkMode(btn.dataset.mode, { toast: true });
   });
   // Ctrl+1/2/3 → Craft / Plan / Ask
   window.addEventListener('keydown', (e) => {
-    if (!(e.ctrlKey || e.metaKey) || e.shiftKey || e.altKey) return;
-    const tag = (e.target && e.target.tagName) || '';
-    // allow even in inputs for quick mode switch
+    if (!(e.ctrlKey || e.metaKey) || e.altKey) return;
+    // Ctrl+Shift+Enter → one-shot Craft (handled on prompt)
+    if (e.shiftKey) return;
     if (e.key === '1') {
       e.preventDefault();
       setWorkMode('craft', { toast: true });
@@ -1569,9 +1631,21 @@ function bindWorkModeUi() {
       setWorkMode('ask', { toast: true });
     }
   });
+  // status badge click cycles mode
+  document.addEventListener('click', (e) => {
+    if (e.target?.id === 'sbMode') cycleWorkMode();
+  });
+  document.addEventListener('keydown', (e) => {
+    if (e.target?.id === 'sbMode' && (e.key === 'Enter' || e.key === ' ')) {
+      e.preventDefault();
+      cycleWorkMode();
+    }
+  });
   setWorkMode(state.workMode || 'craft', { persistRemote: false });
 }
 window.setWorkMode = setWorkMode;
+window.cycleWorkMode = cycleWorkMode;
+window.applySendLabel = applySendLabel;
 
 // ── Live / Diff mission control ─────────────────────────
 function pushLiveEvent({ kind, title, sub, running = false, projectId = null }) {
@@ -2229,6 +2303,7 @@ function bindAgentEvents() {
       task.toolCount += 1;
       const fpath = window.DiffUtil.extractPathFromTool(d.name, d.args || {});
       const write = window.DiffUtil.isWriteTool(d.name);
+      if (write) task.writeCount = (task.writeCount || 0) + 1;
       if (fpath && isActiveTask(task)) cacheFileBefore(fpath);
       pushLiveEvent({
         kind: write ? 'write' : 'tool',
@@ -2402,7 +2477,7 @@ function scheduleTreeRefresh(immediate = false) {
   );
 }
 
-async function sendPrompt() {
+async function sendPrompt(opts = {}) {
   if (!P()) {
     toast(t('chat.needProject', '请先添加项目（可多开并行）'), 'err');
     openProjectFlow();
@@ -2418,14 +2493,14 @@ async function sendPrompt() {
 
   const text = $('#prompt').value.trim();
   if (!text) return;
-  await runTaskPrompt(task, text, { fromComposer: true });
+  await runTaskPrompt(task, text, { fromComposer: true, forceCraft: Boolean(opts.forceCraft) });
 }
 
 /**
- * 执行任务提示（支持重试 / 跳过 resume）
+ * 执行任务提示（支持重试 / 跳过 resume / 单次 Craft）
  * @param {object} task
  * @param {string} text
- * @param {{ fromComposer?: boolean, skipResume?: boolean, resetSession?: boolean }} opts
+ * @param {{ fromComposer?: boolean, skipResume?: boolean, resetSession?: boolean, forceCraft?: boolean, workMode?: string }} opts
  */
 async function runTaskPrompt(task, text, opts = {}) {
   if (!task || !text) return;
@@ -2467,12 +2542,23 @@ async function runTaskPrompt(task, text, opts = {}) {
     updateCharCount();
   }
 
+  const modeUsed =
+    opts.forceCraft || opts.workMode === 'craft'
+      ? 'craft'
+      : opts.workMode || state.workMode || cfg.workMode || 'craft';
+  if (opts.forceCraft && state.workMode !== 'craft') {
+    toast(localeIsEn() ? 'One-shot Craft' : '单次 Craft 起飞', 'ok');
+  }
+
   // 重试时不重复追加相同 user 消息
   const lastUser = [...(task.messages || [])].reverse().find((m) => m.role === 'user');
   const skipUserAppend = opts.skipResume || opts.isRetry;
   if (!skipUserAppend || !lastUser || lastUser.content !== text) {
     appendMessage('user', text, { persist: true }, task);
   }
+
+  const proj = P();
+  const filesBefore = proj?.changes?.size || 0;
 
   task.lastPrompt = text;
   task.running = true;
@@ -2482,9 +2568,14 @@ async function runTaskPrompt(task, text, opts = {}) {
   task.liveAssistantEl = null;
   task.liveThoughtEl = null;
   task.toolCount = 0;
+  task.writeCount = 0;
+  task.turnMode = modeUsed;
   task.lastError = null;
   setRunningUi(true);
-  setAgentStatus('grokking…', true);
+  {
+    const st = MODE_RUN_STATUS[modeUsed] || MODE_RUN_STATUS.craft;
+    setAgentStatus(localeIsEn() ? st.en : st.zh, true);
+  }
   startElapsed(task);
   ensureLiveAssistant(task);
   renderTaskTabs();
@@ -2492,10 +2583,13 @@ async function runTaskPrompt(task, text, opts = {}) {
   if (state.followAgent || state.activeTab === 'live') switchTab('live');
   pushLiveEvent({
     kind: 'status',
-    title: `${task.title} ${opts.isRetry ? '重试' : '开始'}`,
+    title: `${task.title} ${opts.isRetry ? '重试' : modeUsed === 'craft' ? 'Craft' : '开始'}`,
     sub: text.slice(0, 100),
   });
-  setLivePhase('grokking…', `${task.title}: ${text.slice(0, 60)}`);
+  setLivePhase(
+    modeUsed === 'craft' ? (localeIsEn() ? 'Craft flight…' : 'Craft 飞行中…') : 'grokking…',
+    `${task.title}: ${text.slice(0, 60)}`
+  );
   updateLiveStats();
 
   const liveTick = setInterval(updateLiveStats, 500);
@@ -2512,7 +2606,7 @@ async function runTaskPrompt(task, text, opts = {}) {
       messages: task.messages || [],
       prevContext: task.context || null,
       contextMode: cfg.contextMode,
-      workMode: state.workMode || cfg.workMode || 'craft',
+      workMode: modeUsed,
       stylePack: cfg.stylePack || 'default',
     });
     flushStreamPaint(task);
@@ -2536,11 +2630,20 @@ async function runTaskPrompt(task, text, opts = {}) {
     }
     finalizeLiveMessages(task);
     // Plan 模式：非「执行」类消息后，给出一键执行
-    const modeUsed = state.workMode || cfg.workMode || 'craft';
     const wasExec =
       /^(执行|开干|按方案|implement|execute|do it|lgtm|开搞)/i.test(String(text || '').trim());
     if (modeUsed === 'plan' && !wasExec && !result?.stopped && finalText) {
       appendPlanExecuteBar(task);
+    }
+    // Craft mission summary
+    if (modeUsed === 'craft' && !result?.stopped) {
+      const filesAfter = P()?.changes?.size || 0;
+      const filesDelta = Math.max(0, filesAfter - filesBefore);
+      appendCraftMissionBar(task, {
+        tools: task.toolCount || 0,
+        writes: task.writeCount || 0,
+        files: filesDelta || filesAfter,
+      });
     }
     // Skills 匹配提示
     showSkillHints(text, task).catch(() => {});
@@ -2570,7 +2673,15 @@ async function runTaskPrompt(task, text, opts = {}) {
       $('#livePulse')?.classList.toggle('on', anyRunning());
       $('#liveBadge')?.classList.toggle('hidden', !anyRunning());
       if (!$('#agentStatus').classList.contains('error')) {
-        setAgentStatus('待命', false);
+        const idle =
+          (state.workMode || 'craft') === 'craft'
+            ? localeIsEn()
+              ? 'Craft ready'
+              : 'Craft 待命'
+            : localeIsEn()
+              ? 'Ready'
+              : '待命';
+        setAgentStatus(idle, false);
         if ($('#livePhase')?.textContent !== t('live.phase.error', '出错')) {
           const r = window.TaskStore.countRunning();
           setLivePhase(
@@ -2590,6 +2701,36 @@ async function runTaskPrompt(task, text, opts = {}) {
     updateLiveStats();
     scheduleTreeRefresh(true);
   }
+}
+
+/** Craft 回合后：任务简报（工具 / 写入 / Diff 文件） */
+function appendCraftMissionBar(task, stats = {}) {
+  if (!task?.pane) return;
+  const tools = Number(stats.tools) || 0;
+  const writes = Number(stats.writes) || 0;
+  const files = Number(stats.files) || 0;
+  if (tools === 0 && writes === 0 && files === 0) return;
+  task.pane.querySelectorAll('.craft-mission-bar').forEach((el) => el.remove());
+  const bar = document.createElement('div');
+  bar.className = 'craft-mission-bar';
+  const en = localeIsEn();
+  bar.innerHTML = `
+    <span class="craft-mission-label">CRAFT</span>
+    <span class="craft-mission-stats">
+      <span class="cms">${tools} ${en ? 'tools' : '工具'}</span>
+      <span class="cms">${writes} ${en ? 'writes' : '写入'}</span>
+      <span class="cms">${files} ${en ? 'files in Diff' : 'Diff 文件'}</span>
+    </span>
+    <div class="retry-actions">
+      <button type="button" class="btn small ghost" data-act="diff">${en ? 'Open Diff' : '打开 Diff'}</button>
+      <button type="button" class="btn small ghost" data-act="dismiss">OK</button>
+    </div>`;
+  bar.querySelector('[data-act="diff"]').onclick = () => {
+    if (typeof switchTab === 'function') switchTab('diff');
+  };
+  bar.querySelector('[data-act="dismiss"]').onclick = () => bar.remove();
+  task.pane.appendChild(bar);
+  scrollMessages(true, task);
 }
 
 /** Plan 模式：确认后一键执行方案 */
@@ -2751,7 +2892,8 @@ function setRunningUi(on) {
   const running = on || Boolean(task?.running);
   $('#btnSend').disabled = Boolean(task?.running);
   $('#btnStop').classList.toggle('hidden', !task?.running);
-  $('#sendLabel').textContent = task?.running ? 'grokking' : 'Grok it';
+  applySendLabel();
+  document.body.classList.toggle('craft-inflight', Boolean(task?.running && (task.turnMode || state.workMode) === 'craft'));
   if (!running && anyRunning()) {
     // 其他任务还在跑
     $('#liveBadge')?.classList.remove('hidden');

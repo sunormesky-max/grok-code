@@ -294,24 +294,31 @@
       },
       {
         id: 'mode.craft',
-        title: t('cmd.mode.craft', '模式 · Craft'),
-        keywords: 'mode craft 动手',
+        title: t('cmd.mode.craft', '模式 · Craft 飞行'),
+        keywords: 'mode craft 动手 flight 飞行',
         group: 'actions',
-        run: run(() => global.setWorkMode?.('craft')),
+        run: run(() => global.setWorkMode?.('craft', { toast: true })),
       },
       {
         id: 'mode.plan',
         title: t('cmd.mode.plan', '模式 · Plan'),
         keywords: 'mode plan 方案',
         group: 'actions',
-        run: run(() => global.setWorkMode?.('plan')),
+        run: run(() => global.setWorkMode?.('plan', { toast: true })),
       },
       {
         id: 'mode.ask',
         title: t('cmd.mode.ask', '模式 · Ask'),
         keywords: 'mode ask 只读',
         group: 'actions',
-        run: run(() => global.setWorkMode?.('ask')),
+        run: run(() => global.setWorkMode?.('ask', { toast: true })),
+      },
+      {
+        id: 'mode.cycle',
+        title: t('cmd.mode.cycle', '切换工作模式'),
+        keywords: 'mode cycle 切换 模式 craft plan ask',
+        group: 'actions',
+        run: run(() => global.cycleWorkMode?.()),
       }
     );
   }
