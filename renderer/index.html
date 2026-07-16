@@ -12,6 +12,7 @@
   <link rel="stylesheet" href="visual-impact.css" />
   <link rel="stylesheet" href="visual-impact-2.css" />
   <link rel="stylesheet" href="visual-impact-3.css" />
+  <link rel="stylesheet" href="visual-impact-4.css" />
   <link rel="stylesheet" href="help-overlay.css" />
   <link rel="stylesheet" href="tree-polish.css" />
   <link rel="stylesheet" href="search-ui.css" />
@@ -184,8 +185,8 @@
         </div>
         <div class="tree" id="fileTree">
           <div class="empty-hint">
-            <div class="empty-ico grok-eye">◉</div>
-            <p>还没有工作区。<br>Grok 需要点东西才能「grok」。</p>
+            <div class="empty-ico grok-eye" aria-hidden="true">◉</div>
+            <p>还没有工作区。<br><span class="muted">挂载仓库，Grok 才能「grok」真相。</span></p>
             <button class="btn small primary" id="btnOpenEmpty">选择文件夹</button>
           </div>
         </div>
@@ -228,8 +229,9 @@
                 </div>
                 <div class="live-timeline" id="liveTimeline">
                   <div class="live-empty" id="liveEmpty">
-                    <h3>Live</h3>
-                    <p>任务运行时显示思考、读写与命令。<br><span class="muted">需要时点右上「详情」展开焦点文件与上下文</span></p>
+                    <div class="grok-sigil" aria-hidden="true"><span></span><span></span><span></span></div>
+                    <h3>LIVE</h3>
+                    <p>任务运行时显示思考、读写与命令。<br><span class="muted">点右上「详情」展开焦点 · 变更 · 上下文</span></p>
                   </div>
                 </div>
               </div>
@@ -304,9 +306,9 @@
                 </div>
                 <div class="diff-content" id="diffContent">
                   <div class="diff-placeholder">
-                    <h3>Real Diff</h3>
+                    <h3>REAL DIFF</h3>
                     <p>统一 diff · 行级 +/- · 实时捕获 Agent 写入<br>
-                    审阅后可 <strong>还原此文件</strong>（写回改前快照）或 <strong>忽略</strong></p>
+                    审阅后可 <strong>还原</strong> 或 <strong>忽略</strong> · <kbd>j</kbd>/<kbd>k</kbd> 切文件</p>
                   </div>
                 </div>
               </div>

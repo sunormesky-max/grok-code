@@ -46,12 +46,13 @@ Living plan for the GrokCode open-source ecosystem. Order may change based on co
 - [x] Visual impact flight-deck polish (v1.5.4)
 - [x] Chat/Live drama · theme intensity · micro-interactions (v1.5.5)
 - [x] FX toggle · boot refresh · Diff filmstrip HUD parity (v1.5.6)
+- [x] Welcome/empty · toast/modal glass · haptic CSS (v1.5.7)
 
 ## Now (UI / experience)
 
-- [ ] Welcome / empty states cinematic polish
-- [ ] Toast / modal glass consistency pass
-- [ ] Optional soundless “haptic” CSS on critical actions only
+- [ ] Onboarding modal visual align with flight deck
+- [ ] Settings panes section headers / density polish
+- [ ] Optional reduced-motion showcase in docs
 
 ## Deferred (services — not now)
 

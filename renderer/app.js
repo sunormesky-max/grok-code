@@ -2059,8 +2059,8 @@ async function showWelcome(box) {
   box.innerHTML = `
     <div class="welcome">
       <div class="welcome-hero">
-        <div class="welcome-kicker">xAI · CRAFT FLIGHT DECK</div>
-        <h3>Not just an IDE assistant.<br><em>Parallel agents that grok.</em></h3>
+        <div class="welcome-kicker">xAI · CRAFT FLIGHT DECK · v1.5</div>
+        <h3>${en ? 'Not just an IDE assistant.' : '不是又一个 IDE 插件。'}<br><em>${en ? 'Parallel agents that grok.' : '能并行理解的 Agent。'}</em></h3>
         <p>${
           en
             ? 'Default mode is <strong>Craft</strong> — act now. Each task has its own CLI session. <kbd>Ctrl</kbd>+<kbd>T</kbd> for parallel.'
@@ -2240,17 +2240,28 @@ function bindUi() {
   $('#btnCloseSettings').onclick = closeSettings;
   $('#btnSaveSettings').onclick = saveSettings;
   $('#btnProbeCli').onclick = () => refreshCliStatus();
+  /** CSS-only “haptic” flash on critical controls */
+  function haptic(el, cls = 'haptic-tap') {
+    if (!el || window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches) return;
+    el.classList.remove(cls);
+    void el.offsetWidth;
+    el.classList.add(cls);
+    setTimeout(() => el.classList.remove(cls), 360);
+  }
+  window.haptic = haptic;
+
   $('#btnSend').onclick = () => {
     const btn = $('#btnSend');
     if (btn && !btn.disabled) {
       btn.classList.remove('send-pulse');
-      // reflow to retrigger animation
       void btn.offsetWidth;
       btn.classList.add('send-pulse');
+      haptic(btn);
       setTimeout(() => btn.classList.remove('send-pulse'), 500);
     }
     sendPrompt();
   };
+  $('#btnStop')?.addEventListener('click', () => haptic($('#btnStop')));
   $('#btnStop').onclick = stopAgent;
   $('#btnNewChat').onclick = () => addTask();
   $('#btnShareSession')?.addEventListener('click', () => openSessionShareCard());
@@ -2276,10 +2287,13 @@ function bindUi() {
   // 布局预设 Agent / Pilot / Review / Full
   document.querySelectorAll('[data-layout]').forEach((btn) => {
     btn.addEventListener('click', () => {
+      haptic(btn);
       applyLayoutMode(btn.dataset.layout, { toast: true });
     });
   });
   document.getElementById('btnAutoPilot')?.addEventListener('click', () => {
+    const b = document.getElementById('btnAutoPilot');
+    haptic(b);
     setAutoPilotEnabled(!getAutoPilotEnabled());
     toast(
       getAutoPilotEnabled()
@@ -2379,8 +2393,14 @@ function bindUi() {
   $('#btnOpenFromDiff')?.addEventListener('click', () => {
     if ((P() && P().selectedDiffPath)) openFile((P() && P().selectedDiffPath));
   });
-  $('#btnReviewBridge')?.addEventListener('click', () => openReviewBridge());
-  $('#btnDiscussDiff')?.addEventListener('click', () => discussDiffInAgent());
+  $('#btnReviewBridge')?.addEventListener('click', () => {
+    haptic($('#btnReviewBridge'));
+    openReviewBridge();
+  });
+  $('#btnDiscussDiff')?.addEventListener('click', () => {
+    haptic($('#btnDiscussDiff'));
+    discussDiffInAgent();
+  });
   $('#btnRestoreFile')?.addEventListener('click', () => restoreSelectedFile());
   $('#btnRestoreAll')?.addEventListener('click', () => restoreAllFiles());
   $('#btnDismissDiff')?.addEventListener('click', () => dismissSelectedDiff());

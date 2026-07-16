@@ -11,6 +11,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 - See [ROADMAP.md](ROADMAP.md)
 
+## [1.5.7] — 2026-07-16
+
+### Visual impact 4 — empty · glass · haptic
+
+- **Welcome / empty states**: cinematic hero cards for chat welcome, Live, Code, Diff, explorer empty
+- **Toast + modal glass**: unified ice/mars edge glass for toasts, settings, gc-modals, command palette
+- **Haptic CSS**: press-scale on critical controls; `haptic()` helper on send / stop / layout / review bridge
+- New `visual-impact-4.css`
+
 ## [1.5.6] — 2026-07-16
 
 ### Visual impact 3 — FX · boot · filmstrip HUD
