@@ -11,6 +11,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 - See [ROADMAP.md](ROADMAP.md)
 
+## [1.4.1] — 2026-07-16
+
+### Scrub persistence · favorites
+
+- **Diff scrub persisted** per project path (restored on project switch / Diff open)
+- **Keyboard `[` `]`** (and ‹ › buttons) for previous / next agent turn
+- **Template favorites**: ★ pin · filter favorites only · favorites sort first
+
 ## [1.4.0] — 2026-07-16
 
 ### Review cockpit

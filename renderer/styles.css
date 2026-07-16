@@ -2528,6 +2528,22 @@ button.pill:hover {
   text-transform: uppercase;
   color: #7dd3fc;
 }
+.diff-scrub-nav {
+  appearance: none;
+  border: 1px solid rgba(125, 211, 252, 0.3);
+  background: rgba(0, 0, 0, 0.3);
+  color: #7dd3fc;
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+}
+.diff-scrub-nav:hover {
+  border-color: rgba(56, 189, 248, 0.6);
+  background: rgba(56, 189, 248, 0.12);
+}
 #diffScrubRange {
   flex: 1;
   min-width: 80px;
@@ -2609,9 +2625,13 @@ button.pill:hover {
 /* Template search / tags */
 .tpl-search-row {
   padding: 4px 8px 6px;
+  display: flex;
+  gap: 6px;
+  align-items: center;
 }
 .tpl-search {
-  width: 100%;
+  flex: 1;
+  min-width: 0;
   box-sizing: border-box;
   border: 1px solid rgba(125, 211, 252, 0.25);
   background: rgba(0, 0, 0, 0.4);
@@ -2623,6 +2643,63 @@ button.pill:hover {
 }
 .tpl-search:focus {
   border-color: rgba(56, 189, 248, 0.55);
+}
+.tpl-fav-filter {
+  appearance: none;
+  border: 1px solid rgba(251, 191, 36, 0.35);
+  background: rgba(0, 0, 0, 0.35);
+  color: var(--faint);
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 14px;
+}
+.tpl-fav-filter.on,
+.tpl-fav.on {
+  color: #fbbf24;
+  border-color: rgba(251, 191, 36, 0.65);
+  background: rgba(251, 191, 36, 0.12);
+}
+.tpl-row {
+  display: flex !important;
+  flex-direction: row !important;
+  align-items: stretch;
+  gap: 4px;
+  padding: 4px !important;
+}
+.tpl-fav {
+  appearance: none;
+  border: none;
+  background: transparent;
+  color: var(--faint);
+  cursor: pointer;
+  width: 28px;
+  flex: 0 0 auto;
+  font-size: 14px;
+  border-radius: 6px;
+}
+.tpl-fav:hover {
+  background: rgba(251, 191, 36, 0.1);
+  color: #fbbf24;
+}
+.tpl-main {
+  appearance: none;
+  border: none;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  flex: 1;
+  min-width: 0;
+  padding: 6px 8px;
+  border-radius: 8px;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.tpl-main:hover {
+  background: rgba(56, 189, 248, 0.1);
 }
 .tpl-tag-bar {
   display: flex;

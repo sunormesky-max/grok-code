@@ -540,6 +540,9 @@ async function switchProject(id) {
 
   // 恢复该项目的 Live / Code / Diff（三面板跟项目走）
   await restoreProjectView(p);
+  // restore Diff scrub selection for this project
+  restoreScrubSelection();
+  if (state.activeTab === 'diff') renderDiffPane();
 
   await loadTree();
   renderProjectTabs();
@@ -1097,7 +1100,31 @@ function persistLayout() {
 
 // ── Session templates (starters pack) ───────────────────
 const USER_TEMPLATES_KEY = 'grokcode-session-templates';
+const FAV_TEMPLATES_KEY = 'grokcode-template-favorites';
+const SCRUB_KEY = 'grokcode-diff-scrub-v1';
 let _bundledTemplates = null;
+
+function getFavoriteIds() {
+  const arr = loadJson(FAV_TEMPLATES_KEY, []) || [];
+  return new Set(Array.isArray(arr) ? arr : []);
+}
+
+function setFavoriteIds(set) {
+  saveJson(FAV_TEMPLATES_KEY, [...set].slice(0, 80));
+}
+
+function isTemplateFavorite(id) {
+  return getFavoriteIds().has(id);
+}
+
+function toggleTemplateFavorite(id) {
+  if (!id) return false;
+  const set = getFavoriteIds();
+  if (set.has(id)) set.delete(id);
+  else set.add(id);
+  setFavoriteIds(set);
+  return set.has(id);
+}
 
 async function loadSessionTemplates() {
   if (!_bundledTemplates) {
@@ -1114,7 +1141,19 @@ async function loadSessionTemplates() {
   const map = new Map();
   for (const t of bundled) map.set(t.id, { ...t, source: 'bundled' });
   for (const t of custom) if (t?.id) map.set(t.id, { ...t, source: 'user' });
-  return [...map.values()];
+  const fav = getFavoriteIds();
+  const list = [...map.values()].map((t) => ({ ...t, favorite: fav.has(t.id) }));
+  // favorites first, then user, then bundled; stable by label
+  list.sort((a, b) => {
+    const af = a.favorite ? 1 : 0;
+    const bf = b.favorite ? 1 : 0;
+    if (af !== bf) return bf - af;
+    const au = a.source === 'user' ? 1 : 0;
+    const bu = b.source === 'user' ? 1 : 0;
+    if (au !== bu) return bu - au;
+    return String(a.labelZh || a.id).localeCompare(String(b.labelZh || b.id));
+  });
+  return list;
 }
 
 function templatePrompt(t, en) {
@@ -1253,30 +1292,40 @@ async function pullTemplatesSync() {
   }
 }
 
-function renderTemplateListItems(list, en, query) {
+function renderTemplateListItems(list, en, query, { favOnly = false } = {}) {
   const q = String(query || '')
     .trim()
     .toLowerCase();
-  const filtered = !q
-    ? list
-    : list.filter((t) => templateSearchHay(t, en).includes(q) || normalizeTags(t.tags).some((tag) => tag.includes(q)));
+  let filtered = list;
+  if (favOnly) filtered = filtered.filter((t) => t.favorite || isTemplateFavorite(t.id));
+  if (q) {
+    filtered = filtered.filter(
+      (t) => templateSearchHay(t, en).includes(q) || normalizeTags(t.tags).some((tag) => tag.includes(q))
+    );
+  }
   if (!filtered.length) {
     return `<div class="slash-desc" style="padding:10px">${en ? 'No matches' : '无匹配模板'}</div>`;
   }
   return filtered
     .map((t) => {
       const tags = normalizeTags(t.tags);
-      return `<button type="button" class="slash-item" data-id="${esc(t.id)}">
-        <span class="slash-label">${esc(en ? t.labelEn || t.id : t.labelZh || t.id)}${
-          t.source === 'user' ? ' · user' : ''
-        }</span>
-        ${
-          tags.length
-            ? `<span class="tpl-tags">${tags.map((tag) => `<em class="tpl-tag">${esc(tag)}</em>`).join('')}</span>`
-            : ''
-        }
-        <span class="slash-desc">${esc(templatePrompt(t, en).slice(0, 90))}</span>
-      </button>`;
+      const fav = t.favorite || isTemplateFavorite(t.id);
+      return `<div class="slash-item tpl-row" data-id="${esc(t.id)}">
+        <button type="button" class="tpl-fav${fav ? ' on' : ''}" data-fav="${esc(t.id)}" title="${
+          fav ? (en ? 'Unpin' : '取消固定') : en ? 'Pin favorite' : '固定收藏'
+        }">${fav ? '★' : '☆'}</button>
+        <button type="button" class="tpl-main" data-apply="${esc(t.id)}">
+          <span class="slash-label">${esc(en ? t.labelEn || t.id : t.labelZh || t.id)}${
+            t.source === 'user' ? ' · user' : ''
+          }${fav ? ' · ★' : ''}</span>
+          ${
+            tags.length
+              ? `<span class="tpl-tags">${tags.map((tag) => `<em class="tpl-tag">${esc(tag)}</em>`).join('')}</span>`
+              : ''
+          }
+          <span class="slash-desc">${esc(templatePrompt(t, en).slice(0, 90))}</span>
+        </button>
+      </div>`;
     })
     .join('');
 }
@@ -1304,6 +1353,7 @@ async function openTemplatesMenu() {
     <div class="slash-head">${en ? 'Session templates' : '会话模板'}</div>
     <div class="tpl-search-row">
       <input type="search" id="tplSearch" class="tpl-search" placeholder="${en ? 'Search name / tag / prompt…' : '搜索 名称 / 标签 / 内容…'}" autocomplete="off" />
+      <button type="button" class="tpl-fav-filter" id="tplFavFilter" title="${en ? 'Favorites only' : '仅收藏'}">★</button>
     </div>
     ${
       allTags.length
@@ -1331,22 +1381,48 @@ async function openTemplatesMenu() {
 
   const host = menu.querySelector('#tplListHost');
   const search = menu.querySelector('#tplSearch');
+  const favFilterBtn = menu.querySelector('#tplFavFilter');
+  let favOnly = false;
   const bindListClicks = () => {
-    host.querySelectorAll('.slash-item[data-id]').forEach((btn) => {
+    host.querySelectorAll('[data-apply]').forEach((btn) => {
       btn.onclick = () => {
-        const t = list.find((x) => x.id === btn.dataset.id);
+        const t = list.find((x) => x.id === btn.dataset.apply);
         menu.classList.add('hidden');
         applySessionTemplate(t);
       };
     });
+    host.querySelectorAll('[data-fav]').forEach((btn) => {
+      btn.onclick = (e) => {
+        e.stopPropagation();
+        const id = btn.dataset.fav;
+        const on = toggleTemplateFavorite(id);
+        const item = list.find((x) => x.id === id);
+        if (item) item.favorite = on;
+        // re-sort favorites first
+        list.sort((a, b) => {
+          const af = a.favorite || isTemplateFavorite(a.id) ? 1 : 0;
+          const bf = b.favorite || isTemplateFavorite(b.id) ? 1 : 0;
+          if (af !== bf) return bf - af;
+          return 0;
+        });
+        refreshList(search?.value || '');
+        toast(on ? (en ? 'Pinned' : '已固定') : en ? 'Unpinned' : '已取消固定', 'ok');
+      };
+    });
   };
   const refreshList = (q) => {
-    host.innerHTML = renderTemplateListItems(list, en, q);
+    host.innerHTML = renderTemplateListItems(list, en, q, { favOnly });
     bindListClicks();
+    favFilterBtn?.classList.toggle('on', favOnly);
   };
   bindListClicks();
   search?.addEventListener('input', () => refreshList(search.value));
   search?.addEventListener('keydown', (e) => e.stopPropagation());
+  favFilterBtn?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    favOnly = !favOnly;
+    refreshList(search?.value || '');
+  });
   menu.querySelectorAll('.tpl-tag-btn').forEach((btn) => {
     btn.onclick = (e) => {
       e.stopPropagation();
@@ -1781,6 +1857,12 @@ function bindShortcuts() {
         toggleDiffViewMode();
         return;
       }
+      // [ ] previous / next agent turn on scrubber
+      if (e.key === '[' || e.key === ']') {
+        e.preventDefault();
+        navigateScrubTurn(e.key === ']' ? 1 : -1);
+        return;
+      }
     }
     if (e.key === 'Escape') {
       hideSlashMenu();
@@ -2199,6 +2281,9 @@ function switchTab(name, opts = {}) {
     syncGutter();
   }
   if (name === 'diff' || (split && name !== 'live')) {
+    // re-apply persisted scrub when opening Diff (turns may have grown)
+    if (!state.diffScrubTurn) restoreScrubSelection();
+    else restoreScrubSelection(); // validate still exists
     renderDiffPane();
   }
   if (name === 'live') {
@@ -3879,16 +3964,73 @@ function turnKeyOfCheckpoint(cp, fallbackIdx = 0) {
   return cp.turnId || `ts-${cp.ts || fallbackIdx}`;
 }
 
+function scrubProjectKey() {
+  const p = P();
+  return p?.path || p?.id || null;
+}
+
+function saveScrubSelection(turnKey) {
+  const pk = scrubProjectKey();
+  if (!pk) return;
+  const all = loadJson(SCRUB_KEY, {}) || {};
+  if (!turnKey) delete all[pk];
+  else all[pk] = { turnKey, savedAt: Date.now() };
+  // prune old entries (> 40 projects)
+  const keys = Object.keys(all);
+  if (keys.length > 40) {
+    keys
+      .sort((a, b) => (all[a].savedAt || 0) - (all[b].savedAt || 0))
+      .slice(0, keys.length - 40)
+      .forEach((k) => delete all[k]);
+  }
+  saveJson(SCRUB_KEY, all);
+}
+
+function loadScrubSelection() {
+  const pk = scrubProjectKey();
+  if (!pk) return null;
+  const all = loadJson(SCRUB_KEY, {}) || {};
+  return all[pk]?.turnKey || null;
+}
+
+/** Apply stored scrub for current project if turn still exists */
+function restoreScrubSelection() {
+  const saved = loadScrubSelection();
+  if (!saved) {
+    state.diffScrubTurn = null;
+    return false;
+  }
+  const turns = collectGlobalTurns();
+  if (!turns.some((t) => t.key === saved)) {
+    state.diffScrubTurn = null;
+    saveScrubSelection(null);
+    return false;
+  }
+  // apply without re-saving (already persisted)
+  state.diffScrubTurn = saved;
+  for (const [, e] of changesMap()) {
+    const cps = e.checkpoints || [];
+    const idx = cps.findIndex((c, i) => turnKeyOfCheckpoint(c, i) === saved);
+    if (idx >= 0) {
+      e.viewCheckpoint = idx;
+      e.compareA = null;
+      e.compareB = null;
+    }
+  }
+  return true;
+}
+
 /** Scrub all files to checkpoints matching turn key */
-function scrubToTurn(turnKey) {
+function scrubToTurn(turnKey, opts = {}) {
   state.diffScrubTurn = turnKey || null;
+  if (opts.persist !== false) saveScrubSelection(turnKey || null);
   if (!turnKey) {
     for (const [, e] of changesMap()) {
       e.viewCheckpoint = -1;
       e.compareA = null;
       e.compareB = null;
     }
-    renderDiffPane();
+    if (opts.render !== false) renderDiffPane();
     return;
   }
   let firstPath = null;
@@ -3905,8 +4047,38 @@ function scrubToTurn(turnKey) {
   if (firstPath && (!P()?.selectedDiffPath || !fileHasTurn(P().selectedDiffPath, turnKey))) {
     requireProject().selectedDiffPath = firstPath;
   }
-  renderDiffPane();
+  if (opts.render !== false) renderDiffPane();
 }
+
+/** Keyboard [ ] navigation on Diff scrubber */
+function navigateScrubTurn(delta) {
+  const turns = collectGlobalTurns();
+  if (!turns.length) {
+    toast(localeIsEn() ? 'No turns yet' : '暂无 turn', 'err');
+    return;
+  }
+  const cur = state.diffScrubTurn;
+  let idx = cur ? turns.findIndex((t) => t.key === cur) : -1;
+  if (idx < 0) {
+    // from live: [ goes to last turn, ] stays on last / first
+    idx = delta < 0 ? turns.length - 1 : 0;
+  } else {
+    const next = idx + delta;
+    if (next < 0 || next >= turns.length) {
+      // past ends → live
+      scrubToTurn(null);
+      toast(localeIsEn() ? 'Live view' : '回到 Live', 'ok');
+      return;
+    }
+    idx = next;
+  }
+  scrubToTurn(turns[idx].key);
+  const t = turns[idx];
+  const label = t.ts ? new Date(t.ts).toLocaleTimeString() : t.key;
+  toast(`${label} · ${t.files?.size || 0} files`, 'ok');
+}
+window.navigateScrubTurn = navigateScrubTurn;
+window.scrubToTurn = scrubToTurn;
 
 function fileHasTurn(filePath, turnKey) {
   if (!turnKey || !filePath) return true;
@@ -3923,7 +4095,9 @@ function scrubberHtml(turns) {
   return `<div class="diff-scrub-bar" id="diffScrubBar">
     <span class="diff-scrub-label">Turn timeline</span>
     <button type="button" class="diff-cp-chip${!cur ? ' active' : ''}" data-scrub="">${en ? 'All / Live' : '全部 / Live'}</button>
+    <button type="button" class="diff-scrub-nav" data-scrub-nav="-1" title="[">‹</button>
     <input type="range" id="diffScrubRange" min="0" max="${Math.max(0, turns.length - 1)}" value="${idx >= 0 ? idx : turns.length - 1}" ${turns.length < 2 ? 'disabled' : ''} />
+    <button type="button" class="diff-scrub-nav" data-scrub-nav="1" title="]">›</button>
     <div class="diff-scrub-ticks">
       ${turns
         .map((t, i) => {
@@ -3933,6 +4107,7 @@ function scrubberHtml(turns) {
         })
         .join('')}
     </div>
+    <span class="muted" style="font-size:10px"><kbd>[</kbd><kbd>]</kbd></span>
   </div>`;
 }
 
@@ -4396,6 +4571,9 @@ function renderDiffPane() {
   // turn scrubber
   content.querySelectorAll('[data-scrub]').forEach((btn) => {
     btn.onclick = () => scrubToTurn(btn.dataset.scrub || null);
+  });
+  content.querySelectorAll('[data-scrub-nav]').forEach((btn) => {
+    btn.onclick = () => navigateScrubTurn(Number(btn.dataset.scrubNav) || 0);
   });
   const range = content.querySelector('#diffScrubRange');
   if (range && globalTurns.length) {
