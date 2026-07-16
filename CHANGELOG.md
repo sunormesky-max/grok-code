@@ -11,6 +11,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 - See [ROADMAP.md](ROADMAP.md)
 
+## [1.5.1] — 2026-07-16
+
+### Pilot layout · Diff ↔ Agent review bridge
+
+- **Pilot** layout preset: Agent chat **centered** (ultra-wide command deck via flex order)
+- **Review bridge** chip on Agent head when there are changes → jumps to Review + Diff
+- **Diff tab badge** with change count
+- Diff toolbar **@ 讨论**: inject `@path` into composer and focus Agent
+- Ctrl+K: layout Pilot · open review bridge
+
 ## [1.5.0] — 2026-07-16
 
 ### Agent-first layout (Codex / ZCode inspired · Grok sci-fi)

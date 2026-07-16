@@ -1171,15 +1171,21 @@ function restoreLayout() {
 
 /**
  * Agent-first layout presets (Codex / ZCode command-center inspired)
- * - agent: chat primary, files/term tucked
- * - review: explorer open, balanced chat
+ * - agent: chat right (primary)
+ * - pilot: chat center (ultra-wide)
+ * - review: explorer + Diff-friendly
  * - full: classic multi-pane
  */
 function applyLayoutMode(mode, opts = {}) {
-  const m = ['agent', 'review', 'full'].includes(mode) ? mode : 'agent';
+  const m = ['agent', 'pilot', 'review', 'full'].includes(mode) ? mode : 'agent';
   state.layoutMode = m;
   document.body.classList.add('layout-v15');
-  document.body.classList.remove('layout-mode-agent', 'layout-mode-review', 'layout-mode-full');
+  document.body.classList.remove(
+    'layout-mode-agent',
+    'layout-mode-pilot',
+    'layout-mode-review',
+    'layout-mode-full'
+  );
   document.body.classList.add(`layout-mode-${m}`);
 
   document.querySelectorAll('[data-layout]').forEach((btn) => {
@@ -1187,15 +1193,16 @@ function applyLayoutMode(mode, opts = {}) {
   });
 
   if (!opts.skipCollapse) {
-    if (m === 'agent') {
+    if (m === 'agent' || m === 'pilot') {
       state.filesCollapsed = true;
       state.termCollapsed = true;
       state.liveSideCollapsed = true;
+      document.documentElement.style.setProperty('--chat-w', m === 'pilot' ? '520px' : '480px');
+      document.documentElement.style.setProperty('--files-w', '220px');
     } else if (m === 'review') {
       state.filesCollapsed = false;
       state.termCollapsed = true;
       state.liveSideCollapsed = false;
-      // slightly smaller chat so center breathes
       document.documentElement.style.setProperty('--chat-w', '380px');
       document.documentElement.style.setProperty('--files-w', '250px');
     } else if (m === 'full') {
@@ -1206,21 +1213,99 @@ function applyLayoutMode(mode, opts = {}) {
       document.documentElement.style.setProperty('--files-w', '260px');
       document.documentElement.style.setProperty('--term-h', '160px');
     }
-    if (m === 'agent') {
-      document.documentElement.style.setProperty('--chat-w', '480px');
-      document.documentElement.style.setProperty('--files-w', '220px');
-    }
     applyChromeCollapse();
   }
 
   saveJson('grokcode-layout-mode', m);
   if (opts.persist !== false) persistLayout();
   if (opts.toast) {
-    const labels = { agent: 'Agent · 对话主舞台', review: 'Review · 审阅台', full: 'Full · 全面板' };
+    const labels = {
+      agent: 'Agent · 对话在右',
+      pilot: 'Pilot · 对话居中',
+      review: 'Review · 审阅台',
+      full: 'Full · 全面板',
+    };
     toast(labels[m] || m, 'ok');
   }
 }
 window.applyLayoutMode = applyLayoutMode;
+
+/** Open Diff review bridge — layout Review + Diff tab (+ optional path) */
+function openReviewBridge(path) {
+  const n = changesMap().size;
+  if (!n && !path) {
+    toast(localeIsEn() ? 'No changes to review' : '暂无变更可审阅', 'err');
+    return;
+  }
+  if (state.layoutMode === 'agent' || state.layoutMode === 'pilot') {
+    applyLayoutMode('review', { toast: false, persist: true });
+  }
+  if (path && P()) {
+    requireProject().selectedDiffPath = path;
+  } else if (P() && !P().selectedDiffPath) {
+    const first = changesMap().keys().next().value;
+    if (first) requireProject().selectedDiffPath = first;
+  }
+  switchTab('diff');
+  updateReviewBridgeUi();
+  toast(
+    localeIsEn()
+      ? `Review · ${n || 1} file(s)`
+      : `审阅台 · ${n || 1} 个文件`,
+    'ok'
+  );
+}
+window.openReviewBridge = openReviewBridge;
+
+/** Diff → Agent: inject @path into composer and focus chat */
+function discussDiffInAgent(path) {
+  const p = path || (P() && P().selectedDiffPath);
+  if (!p) {
+    toast(localeIsEn() ? 'Pick a file in Diff' : '请先在 Diff 选中文件', 'err');
+    return;
+  }
+  const el = document.getElementById('prompt');
+  if (!el) return;
+  const mention = `@${p}`;
+  const cur = el.value || '';
+  if (!cur.includes(mention)) {
+    el.value = cur.trim() ? `${cur.trim()}\n\n${mention} ` : `${mention} `;
+  } else {
+    el.focus();
+  }
+  autoResizePrompt();
+  updateCharCount();
+  schedulePromptDraftSave();
+  el.focus();
+  // place caret at end
+  try {
+    el.selectionStart = el.selectionEnd = el.value.length;
+  } catch {
+    /* ignore */
+  }
+  toast(localeIsEn() ? `Discuss ${p}` : `讨论 ${p}`, 'ok');
+}
+window.discussDiffInAgent = discussDiffInAgent;
+
+function updateReviewBridgeUi() {
+  const n = changesMap().size;
+  const chip = document.getElementById('btnReviewBridge');
+  const label = document.getElementById('reviewBridgeLabel');
+  const badge = document.getElementById('diffTabBadge');
+  if (chip) {
+    chip.classList.toggle('hidden', n <= 0);
+    if (label) {
+      label.textContent = localeIsEn()
+        ? `${n} change${n === 1 ? '' : 's'}`
+        : `${n} 变更`;
+    }
+  }
+  if (badge) {
+    badge.textContent = String(n);
+    badge.classList.toggle('hidden', n <= 0);
+  }
+}
+window.updateReviewBridgeUi = updateReviewBridgeUi;
 
 function applyChromeCollapse() {
   $('#filesPanel')?.classList.toggle('collapsed', state.filesCollapsed);
@@ -2185,14 +2270,16 @@ function bindUi() {
   });
   $('#btnRevealDiff')?.addEventListener('click', () => {
     if ((P() && P().currentFile) && changesMap().has((P() && P().currentFile))) {
-      requireProject().selectedDiffPath = (P() && P().currentFile);
-      switchTab('diff');
-      renderDiffPane();
+      openReviewBridge(P().currentFile);
+    } else {
+      openReviewBridge();
     }
   });
   $('#btnOpenFromDiff')?.addEventListener('click', () => {
     if ((P() && P().selectedDiffPath)) openFile((P() && P().selectedDiffPath));
   });
+  $('#btnReviewBridge')?.addEventListener('click', () => openReviewBridge());
+  $('#btnDiscussDiff')?.addEventListener('click', () => discussDiffInAgent());
   $('#btnRestoreFile')?.addEventListener('click', () => restoreSelectedFile());
   $('#btnRestoreAll')?.addEventListener('click', () => restoreAllFiles());
   $('#btnDismissDiff')?.addEventListener('click', () => dismissSelectedDiff());
@@ -4131,6 +4218,7 @@ function updateLiveStats() {
   } else if ($('#liveBadge')) {
     $('#liveBadge').textContent = '● LIVE';
   }
+  updateReviewBridgeUi();
 }
 
 function setLiveFocus(path, content, opts = {}) {
@@ -4266,6 +4354,7 @@ async function recordFileChange(path, { reason = 'change' } = {}) {
     if (state.activeTab === 'diff') renderDiffPane();
     updateLiveStats();
     updateEditorChrome();
+    updateReviewBridgeUi();
 
     // 跟随：写文件后可选跳转 Diff
     if (state.followAgent && anyRunning()) {
@@ -6796,6 +6885,7 @@ function updateDiffMultiBar() {
 function setDiffActionsEnabled(on) {
   if ($('#btnOpenFromDiff')) $('#btnOpenFromDiff').disabled = !on;
   if ($('#btnOpenExternal')) $('#btnOpenExternal').disabled = !on;
+  if ($('#btnDiscussDiff')) $('#btnDiscussDiff').disabled = !on;
   if ($('#btnRestoreFile')) $('#btnRestoreFile').disabled = !on;
   if ($('#btnDismissDiff')) $('#btnDismissDiff').disabled = !on;
   if ($('#btnReviewDiff')) $('#btnReviewDiff').disabled = !on;

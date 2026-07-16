@@ -118,10 +118,11 @@
         </div>
       </div>
 
-      <!-- Codex/ZCode 式布局预设：Agent 主对话 · Review 审阅 · Full 全开 -->
+      <!-- 布局预设：Agent · Pilot(居中) · Review · Full -->
       <div class="layout-presets" id="layoutPresets" role="group" aria-label="布局预设">
-        <button type="button" class="layout-preset active" data-layout="agent" title="Agent 优先 · 对话主舞台">Agent</button>
-        <button type="button" class="layout-preset" data-layout="review" title="Review · 资源树 + 中间审阅">Review</button>
+        <button type="button" class="layout-preset active" data-layout="agent" title="Agent · 对话在右（默认）">Agent</button>
+        <button type="button" class="layout-preset" data-layout="pilot" title="Pilot · 对话居中（超宽屏）">Pilot</button>
+        <button type="button" class="layout-preset" data-layout="review" title="Review · 资源树 + Diff 审阅">Review</button>
         <button type="button" class="layout-preset" data-layout="full" title="Full · 全面板">Full</button>
       </div>
 
@@ -193,7 +194,7 @@
           <div class="panel-head tabs" id="editorTabs">
             <button type="button" class="tab active" data-tab="live" title="任务实时动态" data-i18n="tab.live">Live</button>
             <button type="button" class="tab" data-tab="editor" title="代码" data-i18n="tab.code">Code</button>
-            <button type="button" class="tab" data-tab="diff" title="变更 diff" data-i18n="tab.diff">Diff</button>
+            <button type="button" class="tab" data-tab="diff" title="变更 diff" data-i18n="tab.diff">Diff <span class="tab-badge hidden" id="diffTabBadge">0</span></button>
             <button type="button" class="btn small ghost" id="btnSplitLayout" title="Code | Diff 并排" data-i18n-title="split.title" aria-pressed="false">⧉ Split</button>
             <span class="live-badge hidden" id="liveBadge">● LIVE</span>
             <span class="file-path" id="currentPath">—</span>
@@ -291,6 +292,7 @@
                   <div class="diff-actions">
                     <button class="btn small ghost" id="btnOpenFromDiff" disabled data-i18n="diff.openCode">在 Code 打开</button>
                     <button class="btn small primary" id="btnOpenExternal" disabled title="在 VS Code / Cursor 打开" data-i18n="diff.openExt">↗ 外部编辑器</button>
+                    <button class="btn small ghost" id="btnDiscussDiff" disabled title="把路径塞进 Agent 输入框继续讨论">@ 讨论</button>
                     <button class="btn small ghost" id="btnReviewDiff" disabled title="标记已审阅 (a)">已审阅</button>
                     <button class="btn small danger" id="btnRestoreFile" disabled title="用改前快照覆盖当前文件" data-i18n="diff.restore">还原此文件</button>
                     <button class="btn small ghost" id="btnDismissDiff" disabled title="仅从列表移除，不改磁盘" data-i18n="diff.dismiss">忽略</button>
@@ -343,6 +345,10 @@
               <span id="agentStatusText" data-i18n="chat.status">待命</span>
             </span>
             <span class="elapsed hidden" id="elapsedTimer">0s</span>
+            <button type="button" class="review-bridge-chip hidden" id="btnReviewBridge" title="打开 Diff 审阅台">
+              <span class="rb-ico">⊿</span>
+              <span id="reviewBridgeLabel">0 变更</span>
+            </button>
             <button class="icon-btn" id="btnChatSearch" title="搜索本任务消息 (Ctrl+F)">⌕</button>
             <button class="icon-btn" id="btnShareSession" title="导出会话分享卡">⇪</button>
             <button class="icon-btn" id="btnNewChat" title="新任务 (Ctrl+T)">＋</button>
@@ -398,7 +404,7 @@
       <span id="sbCli">CLI —</span>
       <span class="sep">·</span>
       <span id="sbAgent">待命</span>
-      <span class="ml-auto" id="sbHint">Agent/Review/Full · Ctrl+1/2/3 模式 · Ctrl+K · Ctrl+B 树</span>
+      <span class="ml-auto" id="sbHint">Agent/Pilot/Review/Full · Ctrl+1/2/3 · Ctrl+K · Ctrl+B</span>
     </footer>
   </div>
 

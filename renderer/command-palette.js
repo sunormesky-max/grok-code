@@ -187,10 +187,17 @@
       },
       {
         id: 'layout.agent',
-        title: t('cmd.layout.agent', '布局 · Agent 对话主舞台'),
+        title: t('cmd.layout.agent', '布局 · Agent 对话在右'),
         keywords: 'layout agent chat primary 布局 对话',
         group: 'actions',
         run: run(() => global.applyLayoutMode?.('agent', { toast: true })),
+      },
+      {
+        id: 'layout.pilot',
+        title: t('cmd.layout.pilot', '布局 · Pilot 对话居中'),
+        keywords: 'layout pilot center ultrawide 居中 超宽',
+        group: 'actions',
+        run: run(() => global.applyLayoutMode?.('pilot', { toast: true })),
       },
       {
         id: 'layout.review',
@@ -205,6 +212,13 @@
         keywords: 'layout full ide 全面板',
         group: 'actions',
         run: run(() => global.applyLayoutMode?.('full', { toast: true })),
+      },
+      {
+        id: 'diff.review.bridge',
+        title: t('cmd.diff.review.bridge', '打开 Diff 审阅台'),
+        keywords: 'diff review bridge 审阅 变更',
+        group: 'actions',
+        run: run(() => global.openReviewBridge?.()),
       },
       {
         id: 'tree.refresh',
