@@ -11,6 +11,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 - See [ROADMAP.md](ROADMAP.md)
 
+## [1.5.6] — 2026-07-16
+
+### Visual impact 3 — FX · boot · filmstrip HUD
+
+- **FX intensity**: Settings → 外观 → 标准 / 高强度；`body.fx-high` 增强光晕（Ctrl+K 可切换）
+- **Boot**: BIOS v1.5 deck copy, stronger grid/scan/logo/log/progress rail
+- **Diff filmstrip / scrubber**: Agent-grade glass cards, energy strip, active glows (parity with chat HUD)
+- New `fx.js` + `visual-impact-3.css`
+
 ## [1.5.5] — 2026-07-16
 
 ### Visual impact 2 — stream · themes · micro

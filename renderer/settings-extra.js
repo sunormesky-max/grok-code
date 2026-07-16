@@ -30,6 +30,8 @@
     if (th) th.value = window.GrokThemes?.getTheme?.() || cfg.theme || 'grok';
     const dens = $('#cfgDensity');
     if (dens) dens.value = window.GrokDensity?.getDensity?.() || 'comfortable';
+    const fx = $('#cfgFx');
+    if (fx) fx.value = window.GrokFx?.getFx?.() || 'normal';
     const st = $('#cfgStylePack');
     if (st) st.value = cfg.stylePack || 'default';
     const pp = $('#cfgPersonalProtect');
@@ -152,6 +154,8 @@
     }
     const dens = $('#cfgDensity')?.value;
     if (dens) window.GrokDensity?.setDensity?.(dens);
+    const fx = $('#cfgFx')?.value;
+    if (fx) window.GrokFx?.setFx?.(fx);
     await window.grok.setConfig({
       locale: partial.locale,
       theme: partial.theme,
@@ -187,6 +191,13 @@
       window.GrokDensity?.setDensity?.(e.target.value);
       window.toast?.(
         window.GrokI18n?.t?.('toast.density', null, { mode: e.target.value }) || e.target.value,
+        'ok'
+      );
+    });
+    $('#cfgFx')?.addEventListener('change', (e) => {
+      const mode = window.GrokFx?.setFx?.(e.target.value) || e.target.value;
+      window.toast?.(
+        window.GrokI18n?.t?.('toast.fx', null, { mode }) || `FX: ${mode}`,
         'ok'
       );
     });

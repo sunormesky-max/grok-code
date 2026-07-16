@@ -45,12 +45,13 @@ Living plan for the GrokCode open-source ecosystem. Order may change based on co
 - [x] Storyboard disk rehydrate when paths exist (v1.5.3)
 - [x] Visual impact flight-deck polish (v1.5.4)
 - [x] Chat/Live drama · theme intensity · micro-interactions (v1.5.5)
+- [x] FX toggle · boot refresh · Diff filmstrip HUD parity (v1.5.6)
 
 ## Now (UI / experience)
 
-- [ ] Optional fx-high intensity toggle in settings
-- [ ] Boot sequence visual refresh
-- [ ] Diff filmstrip / storyboard visual parity with Agent HUD
+- [ ] Welcome / empty states cinematic polish
+- [ ] Toast / modal glass consistency pass
+- [ ] Optional soundless “haptic” CSS on critical actions only
 
 ## Deferred (services — not now)
 

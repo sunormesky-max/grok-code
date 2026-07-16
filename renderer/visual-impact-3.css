@@ -1,0 +1,272 @@
+/* ═══════════════════════════════════════════════════════
+   GrokCode Visual Impact 3 — boot · filmstrip · fx polish
+   ═══════════════════════════════════════════════════════ */
+
+/* ── Boot sequence: flight systems power-on ──────────── */
+.boot-screen {
+  background:
+    radial-gradient(ellipse 90% 55% at 50% 38%, rgba(20, 50, 90, 0.55), transparent 58%),
+    radial-gradient(ellipse 50% 40% at 85% 15%, rgba(249, 115, 22, 0.12), transparent 50%),
+    radial-gradient(ellipse 40% 30% at 10% 80%, rgba(56, 189, 248, 0.1), transparent 50%),
+    #000 !important;
+}
+.boot-grid {
+  background:
+    linear-gradient(rgba(125, 211, 252, 0.09) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(125, 211, 252, 0.09) 1px, transparent 1px) !important;
+  background-size: 36px 36px !important;
+  opacity: 0.9;
+  animation: bootGridIn 1s var(--ease), bootGridPulse 4s ease-in-out 1s infinite alternate;
+}
+@keyframes bootGridPulse {
+  from {
+    opacity: 0.55;
+  }
+  to {
+    opacity: 0.95;
+  }
+}
+.boot-scan {
+  height: 140px !important;
+  background: linear-gradient(
+    180deg,
+    transparent,
+    rgba(125, 211, 252, 0.12),
+    rgba(249, 115, 22, 0.06),
+    transparent
+  ) !important;
+  box-shadow: 0 0 40px rgba(125, 211, 252, 0.15);
+}
+.boot-inner {
+  width: min(480px, 92vw) !important;
+  padding: 8px 4px 4px;
+}
+.boot-inner::before {
+  content: "";
+  position: absolute;
+  inset: -12px;
+  border-radius: 20px;
+  border: 1px solid rgba(125, 211, 252, 0.15);
+  background: linear-gradient(165deg, rgba(8, 14, 24, 0.35), rgba(0, 0, 0, 0.2));
+  box-shadow:
+    0 0 60px rgba(125, 211, 252, 0.08),
+    inset 0 0 40px rgba(0, 0, 0, 0.3);
+  pointer-events: none;
+  z-index: -1;
+}
+.boot-logo {
+  filter: drop-shadow(0 0 28px rgba(125, 211, 252, 0.65))
+    drop-shadow(0 0 8px rgba(249, 115, 22, 0.25)) !important;
+}
+.boot-title {
+  font-size: 30px !important;
+  letter-spacing: 0.14em !important;
+  text-shadow: 0 0 40px rgba(125, 211, 252, 0.2);
+}
+.bt-g {
+  background: linear-gradient(105deg, #fff 0%, #bae6fd 35%, #7dd3fc 55%, #fb923c 100%) !important;
+  -webkit-background-clip: text !important;
+  background-clip: text !important;
+  filter: drop-shadow(0 0 12px rgba(125, 211, 252, 0.3));
+}
+.boot-sub {
+  letter-spacing: 0.2em !important;
+  color: #71717a !important;
+  text-shadow: 0 0 12px rgba(125, 211, 252, 0.15);
+}
+.boot-log {
+  border: 1px solid rgba(125, 211, 252, 0.28) !important;
+  background: linear-gradient(180deg, rgba(0, 12, 22, 0.85), rgba(0, 0, 0, 0.75)) !important;
+  box-shadow:
+    inset 0 0 50px rgba(125, 211, 252, 0.06),
+    0 0 40px rgba(125, 211, 252, 0.1),
+    0 0 0 1px rgba(249, 115, 22, 0.06) !important;
+  min-height: 160px !important;
+  color: #7dd3fc !important;
+}
+.boot-line {
+  text-shadow: 0 0 12px rgba(125, 211, 252, 0.45) !important;
+}
+.boot-line.final {
+  color: #fbbf24 !important;
+  text-shadow: 0 0 14px rgba(251, 191, 36, 0.45) !important;
+  font-weight: 600;
+}
+.boot-bar {
+  height: 4px !important;
+  background: rgba(255, 255, 255, 0.06) !important;
+  box-shadow: inset 0 0 8px rgba(0, 0, 0, 0.5), 0 0 16px rgba(125, 211, 252, 0.08) !important;
+}
+.boot-bar-fill {
+  background: linear-gradient(90deg, #0ea5e9, #7dd3fc 35%, #fff 55%, #fb923c 85%, #f97316) !important;
+  box-shadow:
+    0 0 16px rgba(125, 211, 252, 0.7),
+    0 0 28px rgba(249, 115, 22, 0.25) !important;
+}
+.boot-skip {
+  border-color: rgba(125, 211, 252, 0.4) !important;
+  box-shadow: 0 0 12px rgba(125, 211, 252, 0.1);
+  letter-spacing: 0.14em !important;
+}
+.boot-skip:hover {
+  box-shadow: 0 0 20px rgba(125, 211, 252, 0.25);
+}
+
+/* ── Diff filmstrip / scrubber = Agent HUD parity ────── */
+body.layout-v15 .diff-scrub-bar {
+  background: linear-gradient(
+    90deg,
+    rgba(125, 211, 252, 0.07),
+    rgba(0, 0, 0, 0.35) 40%,
+    rgba(249, 115, 22, 0.05)
+  );
+  border-bottom: 1px solid rgba(125, 211, 252, 0.12);
+  box-shadow: inset 0 -1px 0 rgba(249, 115, 22, 0.05);
+  padding: 8px 10px;
+  gap: 6px;
+}
+body.layout-v15 .diff-scrub-label {
+  color: #7dd3fc;
+  text-shadow: 0 0 10px rgba(125, 211, 252, 0.3);
+  letter-spacing: 0.1em;
+  font-weight: 700;
+}
+body.layout-v15 .diff-scrub-export,
+body.layout-v15 .diff-scrub-play,
+body.layout-v15 .diff-scrub-loop,
+body.layout-v15 .diff-scrub-nav {
+  border-color: rgba(125, 211, 252, 0.28);
+  background: rgba(0, 0, 0, 0.4);
+  transition: border-color 0.12s, box-shadow 0.15s, color 0.12s, transform 0.1s;
+}
+body.layout-v15 .diff-scrub-export:hover,
+body.layout-v15 .diff-scrub-play:hover,
+body.layout-v15 .diff-scrub-nav:hover {
+  border-color: rgba(125, 211, 252, 0.55);
+  box-shadow: 0 0 14px rgba(125, 211, 252, 0.2);
+  color: #e0f2fe;
+}
+body.layout-v15 .diff-scrub-play.on {
+  border-color: rgba(249, 115, 22, 0.55);
+  color: #fdba74;
+  box-shadow: 0 0 16px rgba(249, 115, 22, 0.3);
+}
+body.layout-v15 .diff-scrub-loop.on {
+  border-color: rgba(52, 211, 153, 0.5);
+  color: #6ee7b7;
+  box-shadow: 0 0 12px rgba(52, 211, 153, 0.25);
+}
+body.layout-v15 .diff-budget-chip.active {
+  box-shadow: 0 0 12px rgba(167, 139, 250, 0.35);
+}
+body.layout-v15 .diff-scrub-speed.active {
+  border-color: rgba(56, 189, 248, 0.55);
+  background: rgba(56, 189, 248, 0.15);
+  color: #7dd3fc;
+  box-shadow: 0 0 10px rgba(56, 189, 248, 0.2);
+}
+body.layout-v15 .diff-scrub-tick {
+  border-color: rgba(125, 211, 252, 0.18);
+  background: rgba(0, 0, 0, 0.4);
+}
+body.layout-v15 .diff-scrub-tick.active {
+  border-color: rgba(56, 189, 248, 0.65);
+  background: linear-gradient(180deg, rgba(56, 189, 248, 0.2), rgba(249, 115, 22, 0.08));
+  color: #e0f2fe;
+  box-shadow:
+    0 0 0 1px rgba(56, 189, 248, 0.2),
+    0 0 16px rgba(56, 189, 248, 0.22);
+}
+
+/* Filmstrip cards — Agent-grade glass chips */
+body.layout-v15 .diff-filmstrip {
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0.45), rgba(4, 8, 16, 0.35));
+  border-bottom: 1px solid rgba(125, 211, 252, 0.1);
+  padding: 10px 12px 12px;
+  gap: 10px;
+  box-shadow: inset 0 1px 0 rgba(125, 211, 252, 0.05);
+}
+body.layout-v15 .diff-film-card {
+  border: 1px solid rgba(125, 211, 252, 0.2);
+  background: linear-gradient(165deg, rgba(12, 18, 30, 0.92), rgba(0, 0, 0, 0.55));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.04),
+    0 4px 16px rgba(0, 0, 0, 0.35);
+  border-radius: 12px;
+  width: 128px;
+}
+body.layout-v15 .diff-film-card:hover {
+  border-color: rgba(56, 189, 248, 0.5);
+  box-shadow:
+    0 0 0 1px rgba(56, 189, 248, 0.15),
+    0 8px 24px rgba(0, 0, 0, 0.4),
+    0 0 20px rgba(56, 189, 248, 0.12);
+  transform: translateY(-2px);
+}
+body.layout-v15 .diff-film-card.active {
+  border-color: rgba(56, 189, 248, 0.65);
+  background: linear-gradient(165deg, rgba(14, 28, 48, 0.95), rgba(8, 12, 20, 0.7));
+  box-shadow:
+    0 0 0 1px rgba(56, 189, 248, 0.25),
+    0 0 28px rgba(56, 189, 248, 0.2),
+    0 0 40px rgba(249, 115, 22, 0.06);
+  color: #e0f2fe;
+}
+body.layout-v15 .diff-film-card .dfc-time {
+  color: #7dd3fc;
+  text-shadow: 0 0 8px rgba(125, 211, 252, 0.35);
+}
+body.layout-v15 .diff-film-card.has-note {
+  border-color: rgba(251, 191, 36, 0.45);
+  box-shadow: 0 0 16px rgba(251, 191, 36, 0.1);
+}
+body.layout-v15 .diff-film-card .dfc-heat.heat-4 {
+  box-shadow: 0 0 10px rgba(249, 115, 22, 0.6);
+}
+body.layout-v15 .diff-film-card .dfc-heat.heat-3 {
+  box-shadow: 0 0 8px rgba(250, 204, 21, 0.45);
+}
+
+/* Note bar parity */
+body.layout-v15 .diff-note-bar {
+  background: linear-gradient(90deg, rgba(251, 191, 36, 0.1), rgba(0, 0, 0, 0.25));
+  border-bottom-color: rgba(251, 191, 36, 0.22);
+  box-shadow: inset 0 1px 0 rgba(251, 191, 36, 0.08);
+}
+body.layout-v15 .diff-note-bar textarea:focus {
+  box-shadow: 0 0 0 1px rgba(251, 191, 36, 0.35), 0 0 16px rgba(251, 191, 36, 0.12);
+}
+
+/* Checkpoint chips in Diff */
+body.layout-v15 .diff-cp-chip.active {
+  border-color: rgba(56, 189, 248, 0.55);
+  background: rgba(56, 189, 248, 0.14);
+  color: #7dd3fc;
+  box-shadow: 0 0 12px rgba(56, 189, 248, 0.2);
+}
+
+/* fx-high extras for filmstrip + boot */
+body.fx-high .diff-film-card.active {
+  box-shadow:
+    0 0 0 1px rgba(56, 189, 248, 0.35),
+    0 0 36px rgba(56, 189, 248, 0.3),
+    0 0 50px rgba(249, 115, 22, 0.1);
+}
+body.fx-high .boot-logo {
+  filter: drop-shadow(0 0 36px rgba(125, 211, 252, 0.8))
+    drop-shadow(0 0 12px rgba(249, 115, 22, 0.35)) !important;
+}
+body.fx-high .boot-log {
+  box-shadow:
+    inset 0 0 60px rgba(125, 211, 252, 0.1),
+    0 0 50px rgba(125, 211, 252, 0.15) !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .boot-grid,
+  .boot-scan,
+  .boot-logo,
+  .boot-rings i {
+    animation: none !important;
+  }
+}

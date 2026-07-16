@@ -4,16 +4,17 @@
  */
 (function () {
   const LINES = [
-    { t: 0, text: '> GROKCODE BIOS v1.0 — xAI FLIGHT SYSTEMS' },
-    { t: 160, text: '> INITIALIZING NEURAL BUS…' },
-    { t: 320, text: '> LINKING LOCAL GROK CLI DRIVER…' },
-    { t: 480, text: '> MOUNTING MULTI-PROJECT SANDBOX…' },
-    { t: 640, text: '> LOADING CONTEXT INHERITANCE (L0–L3)…' },
-    { t: 800, text: '> CALIBRATING MISSION CONTROL HUD…' },
-    { t: 960, text: '> STARFIELD RENDER ONLINE' },
-    { t: 1120, text: '> AGENT CHANNEL: ARMED · PARALLEL TASKS READY' },
+    { t: 0, text: '> GROKCODE BIOS v1.5 — xAI FLIGHT DECK' },
+    { t: 140, text: '> POWER RAIL · ICE CYAN / MARS ORANGE ONLINE' },
+    { t: 280, text: '> INITIALIZING NEURAL BUS…' },
+    { t: 420, text: '> LINKING LOCAL GROK CLI DRIVER…' },
+    { t: 560, text: '> MOUNTING MULTI-PROJECT SANDBOX…' },
+    { t: 700, text: '> CONTEXT L0–L3 · AGENT THREADS READY' },
+    { t: 840, text: '> HUD CALIBRATION · LAYOUT AGENT/PILOT/REVIEW' },
+    { t: 980, text: '> STARFIELD + HOLO BEAM RENDER ONLINE' },
+    { t: 1120, text: '> DIFF FILMSTRIP · STORYBOARD PACK ARMED' },
     { t: 1280, text: '> MAXIMUM TRUTH-SEEKING PROTOCOL: ENABLED' },
-    { t: 1480, text: '> SYSTEMS NOMINAL. WELCOME ABOARD.' },
+    { t: 1460, text: '> SYSTEMS NOMINAL. WELCOME ABOARD, COMMANDER.' },
   ];
 
   const root = document.getElementById('bootScreen');

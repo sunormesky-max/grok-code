@@ -11,6 +11,7 @@
   <link rel="stylesheet" href="layout-agent.css" />
   <link rel="stylesheet" href="visual-impact.css" />
   <link rel="stylesheet" href="visual-impact-2.css" />
+  <link rel="stylesheet" href="visual-impact-3.css" />
   <link rel="stylesheet" href="help-overlay.css" />
   <link rel="stylesheet" href="tree-polish.css" />
   <link rel="stylesheet" href="search-ui.css" />
@@ -47,7 +48,7 @@
       <div class="boot-title">
         <span class="bt-g">GROK</span><span class="bt-c">CODE</span>
       </div>
-      <div class="boot-sub">xAI · MULTI-PROJECT · CONTEXT L0–L3 · FLIGHT DECK</div>
+      <div class="boot-sub">xAI · AGENT DECK · L0–L3 · PILOT / REVIEW · MAXIMUM TRUTH</div>
       <div class="boot-log" id="bootLog"></div>
       <div class="boot-progress">
         <div class="boot-bar"><div class="boot-bar-fill" id="bootBarFill"></div></div>
@@ -624,6 +625,14 @@
           <small data-i18n="density.hint">紧凑模式缩小边距与字号，适合小屏 / 多任务</small>
         </label>
         <label class="field">
+          <span data-i18n="fx.label">视觉强度 FX</span>
+          <select id="cfgFx">
+            <option value="normal" data-i18n="fx.normal">标准</option>
+            <option value="high" data-i18n="fx.high">高强度 · 舰桥全开</option>
+          </select>
+          <small data-i18n="fx.hint">增强光晕、星云与 Agent 边光；低配可关</small>
+        </label>
+        <label class="field">
           <span data-i18n="style.label">对话风格</span>
           <select id="cfgStylePack">
             <option value="default">默认 · Grok</option>
@@ -852,6 +861,7 @@
   <script src="i18n.js"></script>
   <script src="themes.js"></script>
   <script src="density.js"></script>
+  <script src="fx.js"></script>
   <script src="shortcuts-overlay.js"></script>
   <script src="global-search.js"></script>
   <script src="split-layout.js"></script>

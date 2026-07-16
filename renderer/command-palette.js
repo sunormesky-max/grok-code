@@ -360,6 +360,16 @@
         }),
       },
       {
+        id: 'fx.toggle',
+        title: t('cmd.fx.toggle', '切换视觉强度 FX'),
+        keywords: 'fx visual intensity high glow 光晕 强度',
+        group: 'actions',
+        run: run(() => {
+          const next = global.GrokFx?.toggleFx?.() || 'normal';
+          global.toast?.(t('toast.fx', '视觉强度：{mode}', { mode: next }), 'ok');
+        }),
+      },
+      {
         id: 'search.files',
         title: t('cmd.search.files', '搜索文件'),
         hint: 'Ctrl+P',
