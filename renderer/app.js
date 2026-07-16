@@ -1498,10 +1498,17 @@ const MODE_HINTS = {
   ask: { zh: '只读问答 · 不改磁盘', en: 'Read-only · no disk writes' },
 };
 
+const MODE_SEND = {
+  craft: { zh: 'Grok it', en: 'Grok it' },
+  plan: { zh: '规划', en: 'Plan' },
+  ask: { zh: '提问', en: 'Ask' },
+};
+
 function setWorkMode(mode, opts = {}) {
   const m = ['craft', 'plan', 'ask'].includes(mode) ? mode : 'craft';
   state.workMode = m;
   saveJson(MODE_KEY, m);
+  document.body.dataset.workMode = m;
   document.querySelectorAll('.mode-chip').forEach((btn) => {
     btn.classList.toggle('active', btn.dataset.mode === m);
   });
@@ -1509,6 +1516,34 @@ function setWorkMode(mode, opts = {}) {
   const hint = MODE_HINTS[m];
   const el = document.getElementById('modeHint');
   if (el && hint) el.textContent = loc === 'en' ? hint.en : hint.zh;
+  // send button label (when not running)
+  const send = document.getElementById('sendLabel');
+  const task = typeof T === 'function' ? T() : null;
+  if (send && !task?.running) {
+    const s = MODE_SEND[m] || MODE_SEND.craft;
+    send.textContent = loc === 'en' ? s.en : s.zh;
+  }
+  // status bar mode chip
+  let sb = document.getElementById('sbMode');
+  if (!sb) {
+    const foot = document.querySelector('.statusbar');
+    if (foot) {
+      sb = document.createElement('span');
+      sb.id = 'sbMode';
+      sb.className = 'sb-mode';
+      const brand = foot.querySelector('.sb-brand');
+      if (brand?.nextSibling) foot.insertBefore(sb, brand.nextSibling);
+      else foot.prepend(sb);
+    }
+  }
+  if (sb) {
+    sb.textContent = m.toUpperCase();
+    sb.dataset.mode = m;
+    sb.title = (hint && (loc === 'en' ? hint.en : hint.zh)) || m;
+  }
+  if (opts.toast) {
+    toast(loc === 'en' ? `Mode: ${m}` : `模式：${m.toUpperCase()}`, 'ok');
+  }
   if (opts.persistRemote !== false) {
     window.grok.setConfig({ workMode: m }).catch(() => {});
   }
@@ -1516,7 +1551,23 @@ function setWorkMode(mode, opts = {}) {
 
 function bindWorkModeUi() {
   document.querySelectorAll('.mode-chip').forEach((btn) => {
-    btn.onclick = () => setWorkMode(btn.dataset.mode);
+    btn.onclick = () => setWorkMode(btn.dataset.mode, { toast: true });
+  });
+  // Ctrl+1/2/3 → Craft / Plan / Ask
+  window.addEventListener('keydown', (e) => {
+    if (!(e.ctrlKey || e.metaKey) || e.shiftKey || e.altKey) return;
+    const tag = (e.target && e.target.tagName) || '';
+    // allow even in inputs for quick mode switch
+    if (e.key === '1') {
+      e.preventDefault();
+      setWorkMode('craft', { toast: true });
+    } else if (e.key === '2') {
+      e.preventDefault();
+      setWorkMode('plan', { toast: true });
+    } else if (e.key === '3') {
+      e.preventDefault();
+      setWorkMode('ask', { toast: true });
+    }
   });
   setWorkMode(state.workMode || 'craft', { persistRemote: false });
 }

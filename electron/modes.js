@@ -168,7 +168,12 @@ function modePromptPrefix(workMode, userMessage) {
   if (workMode === 'ask') {
     return '【Ask 模式 · 只读】只分析与回答；不要写文件、不要删文件、不要跑修改性命令。\n\n';
   }
-  return '';
+  // Craft — default flight mode
+  return (
+    '【工作模式：Craft】直接完成用户请求。' +
+    '优先改代码与跑必要命令；少寒暄；改动聚焦；完成后做简短自检。' +
+    '工作区外危险操作要先说明风险。\n\n'
+  );
 }
 
 function listModes() {

@@ -11,6 +11,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 - See [ROADMAP.md](ROADMAP.md)
 
+## [1.3.0] — 2026-07-16
+
+### Craft mode polish
+
+- Explicit **Craft** prompt prefix (act-now flight mode)
+- **Ctrl+1 / 2 / 3** switch Craft / Plan / Ask (with toast)
+- Send button label follows mode: `Grok it` / `规划` / `提问`
+- Status bar **mode badge** + composer focus color by mode
+- Craft chip subtle pulse
+
 ## [1.2.9] — 2026-07-16
 
 ### Added
@@ -162,7 +172,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Requires installed Grok CLI + auth (`grok login` or `XAI_API_KEY`)
 - YOLO / always-approve is full workspace trust
 
-[Unreleased]: https://github.com/sunormesky-max/grok-code/compare/v1.2.9...HEAD
+[Unreleased]: https://github.com/sunormesky-max/grok-code/compare/v1.3.0...HEAD
+[1.3.0]: https://github.com/sunormesky-max/grok-code/compare/v1.2.9...v1.3.0
 [1.2.9]: https://github.com/sunormesky-max/grok-code/compare/v1.2.8...v1.2.9
 [1.2.8]: https://github.com/sunormesky-max/grok-code/compare/v1.2.7...v1.2.8
 [1.2.7]: https://github.com/sunormesky-max/grok-code/compare/v1.2.6...v1.2.7

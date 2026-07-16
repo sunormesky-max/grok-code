@@ -48,3 +48,56 @@
   color: var(--faint, #71717a);
   margin-left: 4px;
 }
+
+/* body accent by mode */
+body[data-work-mode="craft"] .composer-box:focus-within {
+  border-color: rgba(56, 189, 248, 0.55) !important;
+  box-shadow: 0 0 0 1px rgba(56, 189, 248, 0.2), 0 0 36px rgba(56, 189, 248, 0.14) !important;
+}
+body[data-work-mode="plan"] .composer-box:focus-within {
+  border-color: rgba(249, 115, 22, 0.55) !important;
+  box-shadow: 0 0 0 1px rgba(249, 115, 22, 0.2), 0 0 36px rgba(249, 115, 22, 0.14) !important;
+}
+body[data-work-mode="ask"] .composer-box:focus-within {
+  border-color: rgba(167, 139, 250, 0.55) !important;
+  box-shadow: 0 0 0 1px rgba(167, 139, 250, 0.2), 0 0 36px rgba(167, 139, 250, 0.14) !important;
+}
+
+.sb-mode {
+  font-family: var(--mono, monospace);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  padding: 1px 8px;
+  border-radius: 999px;
+  margin: 0 6px;
+  border: 1px solid rgba(125, 211, 252, 0.25);
+  color: var(--ice, #7dd3fc);
+}
+.sb-mode[data-mode="craft"] {
+  border-color: rgba(56, 189, 248, 0.45);
+  color: #7dd3fc;
+  background: rgba(56, 189, 248, 0.1);
+}
+.sb-mode[data-mode="plan"] {
+  border-color: rgba(249, 115, 22, 0.45);
+  color: #fdba74;
+  background: rgba(249, 115, 22, 0.1);
+}
+.sb-mode[data-mode="ask"] {
+  border-color: rgba(167, 139, 250, 0.45);
+  color: #c4b5fd;
+  background: rgba(167, 139, 250, 0.12);
+}
+
+/* Craft: pulse the active chip slightly */
+.mode-chip.active[data-mode="craft"] {
+  animation: craftPulse 2.4s ease-in-out infinite;
+}
+@keyframes craftPulse {
+  0%, 100% { box-shadow: 0 0 14px rgba(56, 189, 248, 0.35); }
+  50% { box-shadow: 0 0 22px rgba(56, 189, 248, 0.55); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .mode-chip.active[data-mode="craft"] { animation: none; }
+}
