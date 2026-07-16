@@ -73,7 +73,12 @@ Use after UI/visual changes. Prefer a **wide window (≥1600px)** and **Normal F
 
 - [ ] OS **Reduce motion** → no boot rings / send pulse spam
 - [ ] App **强制减少动效** → same, independent of OS
-- [ ] Keyboard focus-visible still visible on tabs / buttons
+- [ ] Keyboard **focus-visible** ring on tabs / buttons / mode chips
+- [ ] **Tab** from top: skip link appears → focuses `#prompt`
+- [ ] **Ctrl+K** palette: focus trapped; Esc restores previous focus
+- [ ] **Settings** (Ctrl+,): focus trapped; Esc / close restores focus
+- [ ] Toast errors announced (assertive); agent status polite announcements
+- [ ] Live / Code / Diff tabs expose `aria-selected`
 
 ## Regression smoke
 

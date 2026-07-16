@@ -795,17 +795,23 @@
     const root = $('#commandPalette');
     root?.classList.remove('hidden');
     activeIdx = 0;
+    const card = root?.querySelector('.cmd-card');
     const input = $('#cmdInput');
     if (input) {
       input.value = '';
       input.placeholder = t('cmd.placeholder', '输入命令…');
-      input.focus();
+      input.setAttribute('aria-controls', 'cmdList');
+      input.setAttribute('aria-autocomplete', 'list');
     }
     renderList();
+    // Focus trap after list is ready
+    global.GrokA11y?.trapFocus?.(card || root);
+    input?.focus();
   }
 
   function close() {
     $('#commandPalette')?.classList.add('hidden');
+    global.GrokA11y?.releaseTrap?.();
   }
 
   function toggle() {

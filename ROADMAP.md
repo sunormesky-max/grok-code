@@ -82,7 +82,8 @@ Living plan for the GrokCode open-source ecosystem. Order may change based on co
 ## Later
 
 - [x] Storyboard: reconstruct before from mini-diff when possible
-- [ ] Full accessibility audit (screen readers)
+- [x] Accessibility pass: focus trap, live regions, landmarks (v1.9.5)
+- [ ] Deeper screen-reader audit (NVDA/VoiceOver full walkthrough)
 - [x] Plugin marketplace filters parity with every TUI flag
 
 ## How to influence

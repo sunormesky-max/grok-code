@@ -1,0 +1,81 @@
+/* ═══════════════════════════════════════════════════════
+   GrokCode a11y — focus · live regions · landmarks
+   ═══════════════════════════════════════════════════════ */
+
+/* Skip link: jump past chrome to composer */
+.skip-link {
+  position: absolute;
+  left: -9999px;
+  top: 8px;
+  z-index: 10050;
+  background: linear-gradient(105deg, #7dd3fc, #bae6fd);
+  color: #041018;
+  padding: 8px 14px;
+  border-radius: 8px;
+  font-weight: 700;
+  text-decoration: none;
+  font-size: 13px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+}
+.skip-link:focus,
+.skip-link:focus-visible {
+  left: 12px;
+  outline: 2px solid #fff;
+  outline-offset: 2px;
+}
+
+/* Screen-reader only */
+.sr-only {
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  padding: 0 !important;
+  margin: -1px !important;
+  overflow: hidden !important;
+  clip: rect(0, 0, 0, 0) !important;
+  white-space: nowrap !important;
+  border: 0 !important;
+}
+
+/* Stronger focus ring across interactive controls */
+:focus {
+  outline: none;
+}
+:focus-visible {
+  outline: 2px solid var(--ice, #7dd3fc) !important;
+  outline-offset: 2px !important;
+  box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.25);
+}
+.btn:focus-visible,
+.icon-btn:focus-visible,
+.win-btn:focus-visible,
+.tab:focus-visible,
+.stab:focus-visible,
+.mode-chip:focus-visible,
+.layout-preset:focus-visible,
+.task-tab:focus-visible,
+.project-tab:focus-visible,
+.tree-item:focus-visible,
+.plugin-chip:focus-visible,
+.link-btn:focus-visible,
+.cmd-item:focus-visible,
+.gsearch-item:focus-visible {
+  outline: 2px solid var(--ice, #7dd3fc) !important;
+  outline-offset: 2px !important;
+  z-index: 1;
+}
+
+/* Modal open: hide skip until trap released */
+body.a11y-modal-open .skip-link {
+  visibility: hidden;
+}
+
+/* Reduced motion: already partially handled; reinforce focus not animated away */
+@media (prefers-reduced-motion: reduce) {
+  :focus-visible {
+    transition: none !important;
+  }
+  .toast {
+    animation: none !important;
+  }
+}

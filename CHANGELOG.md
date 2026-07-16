@@ -11,6 +11,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 - See [ROADMAP.md](ROADMAP.md)
 
+## [1.9.5] — 2026-07-16
+
+### A11y — keyboard & screen reader pass
+
+- **`a11y.js` / `a11y.css`**: focus trap for Settings + Command palette; restore focus on close
+- **Live regions**: polite/assertive announcers; toast `role=status|alert`; agent status announced
+- **Landmarks**: main / Explorer / Agent / Workspace / conversation log; tablists for Live·Code·Diff & tasks
+- **Skip link** → `#prompt` composer; stronger `:focus-visible` rings
+- Mode chips already use `aria-pressed`; editor tabs sync `aria-selected`
+- docs/VISUAL-QA a11y checklist expanded
+
 ## [1.9.4] — 2026-07-16
 
 ### Core — Plan → Craft execute chain

@@ -3032,6 +3032,7 @@ function switchTab(name, opts = {}) {
     P().activeTab = name;
   }
   $$('#editorTabs .tab').forEach((t) => t.classList.toggle('active', t.dataset.tab === name));
+  window.GrokA11y?.syncTabSelection?.();
   syncCenterTabChrome(name);
 
   const split = window.GrokSplit?.isSplit?.();
@@ -9435,7 +9436,12 @@ function setAgentStatus(text, busy, isError) {
   chip.classList.toggle('busy', Boolean(busy));
   chip.classList.toggle('error', Boolean(isError));
   chip.title = text;
+  chip.setAttribute('aria-busy', busy ? 'true' : 'false');
   $('#sbAgent').textContent = text;
+  // Announce phase changes to screen readers (polite; errors assertive)
+  if (text) {
+    window.GrokA11y?.announce?.(text, { assertive: Boolean(isError) });
+  }
 }
 
 function startElapsed(task) {
@@ -9710,11 +9716,18 @@ function openSettings() {
   document.querySelectorAll('.stab').forEach((b) => b.classList.toggle('active', b.dataset.stab === 'general'));
   document.querySelectorAll('.settings-pane').forEach((p) => p.classList.add('hidden'));
   $('#stab-general')?.classList.remove('hidden');
-  $('#settingsModal').classList.remove('hidden');
+  const modal = $('#settingsModal');
+  modal?.classList.remove('hidden');
+  modal?.setAttribute('role', 'dialog');
+  modal?.setAttribute('aria-modal', 'true');
+  modal?.setAttribute('aria-label', localeIsEn() ? 'Settings' : '设置');
+  const card = modal?.querySelector('.modal-card, .settings-card, .settings-body') || modal;
+  window.GrokA11y?.trapFocus?.(card || modal);
 }
 
 function closeSettings() {
-  $('#settingsModal').classList.add('hidden');
+  $('#settingsModal')?.classList.add('hidden');
+  window.GrokA11y?.releaseTrap?.();
 }
 
 async function refreshCliStatus() {

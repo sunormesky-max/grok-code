@@ -78,8 +78,15 @@
     }
     const el = document.createElement('div');
     el.className = 'toast' + (type ? ' ' + type : '');
+    el.setAttribute('role', type === 'err' ? 'alert' : 'status');
+    el.setAttribute('aria-live', type === 'err' ? 'assertive' : 'polite');
     el.textContent = msg;
     host.appendChild(el);
+    try {
+      global.GrokA11y?.announce?.(msg, { assertive: type === 'err' });
+    } catch {
+      /* optional */
+    }
     setTimeout(() => {
       el.classList.add('out');
       setTimeout(() => el.remove(), 250);
