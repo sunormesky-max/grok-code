@@ -2555,10 +2555,140 @@ button.pill:hover {
   background: rgba(249, 115, 22, 0.15);
   animation: craftPulse 1.2s ease-in-out infinite;
 }
+.diff-scrub-loop {
+  appearance: none;
+  border: 1px solid rgba(125, 211, 252, 0.3);
+  background: rgba(0, 0, 0, 0.3);
+  color: var(--faint);
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 14px;
+}
+.diff-scrub-loop:hover {
+  border-color: rgba(167, 139, 250, 0.5);
+  color: #c4b5fd;
+}
+.diff-scrub-loop.on {
+  border-color: rgba(167, 139, 250, 0.65);
+  color: #c4b5fd;
+  background: rgba(167, 139, 250, 0.15);
+}
 .diff-scrub-speeds {
   display: inline-flex;
   gap: 2px;
   margin: 0 2px;
+}
+
+/* Diff filmstrip */
+.diff-filmstrip {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding: 8px 10px 10px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(0, 0, 0, 0.22);
+  scrollbar-width: thin;
+}
+.diff-film-card {
+  flex: 0 0 auto;
+  width: 120px;
+  text-align: left;
+  appearance: none;
+  border: 1px solid rgba(125, 211, 252, 0.18);
+  background: rgba(0, 0, 0, 0.35);
+  color: var(--muted);
+  border-radius: 10px;
+  padding: 8px 8px 6px;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  position: relative;
+  overflow: hidden;
+}
+.diff-film-card:hover {
+  border-color: rgba(56, 189, 248, 0.45);
+  color: #e4e4e7;
+}
+.diff-film-card.active {
+  border-color: rgba(56, 189, 248, 0.65);
+  box-shadow: 0 0 0 1px rgba(56, 189, 248, 0.25);
+  color: #e0f2fe;
+}
+.diff-film-card .dfc-heat {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+}
+.diff-film-card .dfc-heat.heat-0 { background: rgba(52, 211, 153, 0.35); }
+.diff-film-card .dfc-heat.heat-1 { background: rgba(52, 211, 153, 0.55); }
+.diff-film-card .dfc-heat.heat-2 { background: rgba(52, 211, 153, 0.8); }
+.diff-film-card .dfc-heat.heat-3 { background: #facc15; }
+.diff-film-card .dfc-heat.heat-4 { background: #f97316; }
+.diff-film-card .dfc-time {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: #7dd3fc;
+  padding-left: 4px;
+}
+.diff-film-card .dfc-title {
+  font-size: 11.5px;
+  font-weight: 600;
+  padding-left: 4px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.diff-film-card .dfc-meta {
+  font-family: var(--mono);
+  font-size: 10px;
+  opacity: 0.7;
+  padding-left: 4px;
+}
+.diff-film-card .dfc-files {
+  font-size: 10px;
+  opacity: 0.55;
+  padding-left: 4px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Welcome context menu */
+.welcome-ctx-menu {
+  position: fixed;
+  z-index: 14000;
+  min-width: 160px;
+  padding: 4px;
+  border-radius: 10px;
+  border: 1px solid rgba(125, 211, 252, 0.3);
+  background: rgba(8, 10, 18, 0.97);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.55);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.welcome-ctx-menu.hidden {
+  display: none;
+}
+.welcome-ctx-menu button {
+  appearance: none;
+  border: none;
+  background: transparent;
+  color: #e4e4e7;
+  text-align: left;
+  font-size: 12.5px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.welcome-ctx-menu button:hover {
+  background: rgba(56, 189, 248, 0.12);
+  color: #7dd3fc;
 }
 .diff-scrub-speed {
   appearance: none;

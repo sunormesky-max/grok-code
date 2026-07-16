@@ -77,6 +77,8 @@ const state = {
   diffScrubPlayMs: 1400,
   /** playback speed multiplier 0.5 | 1 | 1.5 | 2 */
   diffScrubPlaySpeed: loadJson('grokcode-diff-scrub-speed', 1) || 1,
+  /** loop playback when scrubbing turns */
+  diffScrubLoop: loadJson('grokcode-diff-scrub-loop', false) === true,
 };
 
 /** 当前激活任务 */
@@ -1777,6 +1779,12 @@ async function showWelcome(box) {
       const t = quick.find((x) => x.id === btn.dataset.tpl);
       applySessionTemplate(t);
     };
+    btn.oncontextmenu = (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const t = quick.find((x) => x.id === btn.dataset.tpl);
+      if (t) showWelcomeChipMenu(e.clientX, e.clientY, t, quick);
+    };
   });
   box.querySelectorAll('[data-tpl-send]').forEach((btn) => {
     btn.onclick = (e) => {
@@ -1790,8 +1798,115 @@ async function showWelcome(box) {
       }
       applySessionTemplate(t, { send: true });
     };
+    btn.oncontextmenu = (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const t = quick.find((x) => x.id === btn.dataset.tplSend);
+      if (t) showWelcomeChipMenu(e.clientX, e.clientY, t, quick);
+    };
   });
   box.querySelector('[data-act="more-tpl"]')?.addEventListener('click', () => openTemplatesMenu());
+}
+
+/** Right-click menu on welcome template chips */
+function showWelcomeChipMenu(x, y, t, quickList) {
+  if (!t) return;
+  const en = localeIsEn();
+  let menu = document.getElementById('welcomeCtxMenu');
+  if (!menu) {
+    menu = document.createElement('div');
+    menu.id = 'welcomeCtxMenu';
+    menu.className = 'welcome-ctx-menu';
+    document.body.appendChild(menu);
+  }
+  const fav = t.favorite || isTemplateFavorite(t.id);
+  menu.innerHTML = `
+    <button type="button" data-act="fill">${en ? 'Fill composer' : '填入输入框'}</button>
+    <button type="button" data-act="send">${en ? 'Apply & send' : '应用并发送'}</button>
+    <button type="button" data-act="pin">${fav ? (en ? 'Unpin favorite' : '取消收藏') : en ? 'Pin favorite' : '固定收藏'}</button>
+    <button type="button" data-act="edit">${en ? 'Edit prompt…' : '编辑提示…'}</button>
+    <button type="button" data-act="more">${en ? 'Open template pack…' : '打开模板包…'}</button>`;
+  menu.style.left = `${Math.min(x, window.innerWidth - 200)}px`;
+  menu.style.top = `${Math.min(y, window.innerHeight - 180)}px`;
+  menu.classList.remove('hidden');
+  menu.querySelectorAll('button').forEach((btn) => {
+    btn.onclick = async () => {
+      menu.classList.add('hidden');
+      const act = btn.dataset.act;
+      if (act === 'fill') applySessionTemplate(t);
+      else if (act === 'send') {
+        if (!P()) {
+          toast(en ? 'Open a project first' : '请先打开项目', 'err');
+          openProjectFlow();
+          return;
+        }
+        applySessionTemplate(t, { send: true });
+      } else if (act === 'pin') {
+        const on = toggleTemplateFavorite(t.id);
+        t.favorite = on;
+        if (Array.isArray(quickList)) {
+          const q = quickList.find((x) => x.id === t.id);
+          if (q) q.favorite = on;
+        }
+        // refresh welcome if still visible
+        const pane = T()?.pane;
+        if (pane?.querySelector('.welcome')) {
+          pane.innerHTML = '';
+          showWelcome(pane);
+        }
+        toast(on ? (en ? 'Pinned' : '已固定') : en ? 'Unpinned' : '已取消固定', 'ok');
+      } else if (act === 'edit') {
+        const cur = templatePrompt(t, en);
+        const next = prompt(en ? 'Edit template prompt' : '编辑模板内容', cur);
+        if (next == null || next === cur) return;
+        // user templates: update storage; project: write project; bundled: save as user override
+        if (t.source === 'user' || !t.source) {
+          const custom = getUserTemplates();
+          const i = custom.findIndex((x) => x.id === t.id);
+          const entry = {
+            id: t.id,
+            labelZh: t.labelZh || t.id,
+            labelEn: t.labelEn || t.id,
+            promptZh: next,
+            promptEn: next,
+            tags: normalizeTags(t.tags),
+          };
+          if (i >= 0) custom[i] = entry;
+          else custom.push(entry);
+          setUserTemplates(custom);
+        } else if (t.source === 'project' && P()?.path) {
+          await saveTemplateToProject({
+            ...t,
+            promptZh: next,
+            promptEn: next,
+          });
+        } else {
+          // bundled → user override
+          const custom = getUserTemplates();
+          custom.push({
+            id: t.id,
+            labelZh: t.labelZh || t.id,
+            labelEn: t.labelEn || t.id,
+            promptZh: next,
+            promptEn: next,
+            tags: normalizeTags(t.tags),
+          });
+          setUserTemplates(custom);
+        }
+        t.promptZh = next;
+        t.promptEn = next;
+        applySessionTemplate(t);
+        toast(en ? 'Template updated' : '模板已更新', 'ok');
+      } else if (act === 'more') openTemplatesMenu();
+    };
+  });
+  const close = (e) => {
+    if (!menu.contains(e.target)) {
+      menu.classList.add('hidden');
+      document.removeEventListener('mousedown', close);
+    }
+  };
+  setTimeout(() => document.addEventListener('mousedown', close), 0);
 }
 
 // ── UI bindings ─────────────────────────────────────────
@@ -4289,6 +4404,10 @@ function startScrubPlay(opts = {}) {
     if (idx < 0) idx = 0;
     else idx += 1;
     if (idx >= list.length) {
+      if (state.diffScrubLoop) {
+        scrubToTurn(list[0].key);
+        return;
+      }
       // end → live and stop
       stopScrubPlay();
       scrubToTurn(null);
@@ -4307,6 +4426,9 @@ function startScrubPlay(opts = {}) {
     document.querySelectorAll('.diff-scrub-speed').forEach((b) => {
       b.classList.toggle('active', Number(b.dataset.speed) === Number(state.diffScrubPlaySpeed));
     });
+    document.querySelectorAll('[data-scrub-loop]').forEach((b) => {
+      b.classList.toggle('on', state.diffScrubLoop);
+    });
   }
 }
 
@@ -4318,15 +4440,66 @@ function toggleScrubPlay() {
   } else {
     startScrubPlay();
     const sp = state.diffScrubPlaySpeed || 1;
+    const loop = state.diffScrubLoop ? ' · loop' : '';
     toast(
-      localeIsEn() ? `Playing turns… ${sp}x` : `正在播放 turn… ${sp}x`,
+      localeIsEn() ? `Playing turns… ${sp}x${loop}` : `正在播放 turn… ${sp}x${loop}`,
       'ok'
     );
   }
 }
+
+function toggleScrubLoop() {
+  state.diffScrubLoop = !state.diffScrubLoop;
+  saveJson('grokcode-diff-scrub-loop', state.diffScrubLoop);
+  document.querySelectorAll('[data-scrub-loop]').forEach((b) => {
+    b.classList.toggle('on', state.diffScrubLoop);
+  });
+  toast(
+    state.diffScrubLoop
+      ? localeIsEn()
+        ? 'Loop on'
+        : '循环开'
+      : localeIsEn()
+        ? 'Loop off'
+        : '循环关',
+    'ok'
+  );
+}
 window.toggleScrubPlay = toggleScrubPlay;
 window.stopScrubPlay = stopScrubPlay;
 window.setScrubPlaySpeed = setScrubPlaySpeed;
+window.toggleScrubLoop = toggleScrubLoop;
+
+/** Filmstrip cards for each turn (file count + heat) */
+function filmstripHtml(turns) {
+  if (!turns.length) return '';
+  const cur = state.diffScrubTurn;
+  const heatFn =
+    typeof window.DiffUtil?.heatFromTs === 'function'
+      ? window.DiffUtil.heatFromTs
+      : () => 0;
+  return `<div class="diff-filmstrip" id="diffFilmstrip">
+    ${turns
+      .map((t) => {
+        const heat = heatFn(t.ts);
+        const n = t.files?.size || 0;
+        const names = [...(t.files || [])]
+          .slice(0, 4)
+          .map((p) => String(p).split(/[/\\]/).pop())
+          .join(', ');
+        const time = t.ts ? new Date(t.ts).toLocaleTimeString() : '—';
+        const title = t.taskTitle || 'turn';
+        return `<button type="button" class="diff-film-card heat-${heat}${cur === t.key ? ' active' : ''}" data-scrub="${esc(t.key)}" title="${esc(title)} · ${n} files · ${esc(String(t.prompt || '').slice(0, 100))}">
+          <span class="dfc-heat heat-${heat}"></span>
+          <span class="dfc-time">${esc(time)}</span>
+          <span class="dfc-title">${esc(String(title).slice(0, 18))}</span>
+          <span class="dfc-meta">${n} files</span>
+          <span class="dfc-files">${esc(names)}${n > 4 ? '…' : ''}</span>
+        </button>`;
+      })
+      .join('')}
+  </div>`;
+}
 
 function scrubberHtml(turns) {
   if (!turns.length) return '';
@@ -4335,10 +4508,12 @@ function scrubberHtml(turns) {
   const idx = cur ? turns.findIndex((t) => t.key === cur) : -1;
   const playing = state.diffScrubPlaying;
   const speed = Number(state.diffScrubPlaySpeed) || 1;
+  const loop = state.diffScrubLoop;
   return `<div class="diff-scrub-bar" id="diffScrubBar">
     <span class="diff-scrub-label">Turn timeline</span>
     <button type="button" class="diff-cp-chip${!cur ? ' active' : ''}" data-scrub="">${en ? 'All / Live' : '全部 / Live'}</button>
     <button type="button" class="diff-scrub-play${playing ? ' on' : ''}" data-scrub-play="1" title="${en ? 'Play / pause auto-scrub' : '播放 / 暂停自动 scrub'}">${playing ? '❚❚' : '▶'}</button>
+    <button type="button" class="diff-scrub-loop${loop ? ' on' : ''}" data-scrub-loop="1" title="${en ? 'Loop playback' : '循环播放'}">↻</button>
     <span class="diff-scrub-speeds" title="${en ? 'Playback speed' : '播放倍速'}">
       ${SCRUB_SPEEDS.map(
         (s) =>
@@ -4357,8 +4532,8 @@ function scrubberHtml(turns) {
         })
         .join('')}
     </div>
-    <span class="muted" style="font-size:10px"><kbd>[</kbd><kbd>]</kbd> · ▶ · ${speed}x</span>
-  </div>`;
+    <span class="muted" style="font-size:10px"><kbd>[</kbd><kbd>]</kbd> · ▶ · ${speed}x${loop ? ' · ↻' : ''}</span>
+  </div>${filmstripHtml(turns)}`;
 }
 
 function heatLegendHtml() {
@@ -4829,6 +5004,7 @@ function renderDiffPane() {
     };
   });
   content.querySelector('[data-scrub-play]')?.addEventListener('click', () => toggleScrubPlay());
+  content.querySelector('[data-scrub-loop]')?.addEventListener('click', () => toggleScrubLoop());
   content.querySelectorAll('[data-speed]').forEach((btn) => {
     btn.onclick = (e) => {
       e.stopPropagation();
@@ -4836,6 +5012,7 @@ function renderDiffPane() {
       toast(`${btn.dataset.speed}x`, 'ok');
     };
   });
+  // filmstrip cards share data-scrub
   const range = content.querySelector('#diffScrubRange');
   if (range && globalTurns.length) {
     range.oninput = () => {

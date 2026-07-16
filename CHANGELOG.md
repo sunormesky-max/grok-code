@@ -11,6 +11,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 - See [ROADMAP.md](ROADMAP.md)
 
+## [1.4.4] — 2026-07-16
+
+### Loop · context menu · filmstrip
+
+- **Scrub loop**: ↻ toggle — playback wraps to first turn instead of stopping on Live
+- **Welcome right-click**: pin / apply / send / edit prompt / open pack
+- **Diff filmstrip**: per-turn cards with heat bar, file count, sample names
+
 ## [1.4.3] — 2026-07-16
 
 ### Playback speed · project templates in Code · apply & send

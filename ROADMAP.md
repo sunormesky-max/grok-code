@@ -31,12 +31,13 @@ Living plan for the GrokCode open-source ecosystem. Order may change based on co
 - [x] Scrub persist · [ ] keys · template favorites (v1.4.1)
 - [x] Diff play scrub · welcome ★ · `.grok/templates.json` (v1.4.2)
 - [x] Scrub speed · open templates in Code · welcome apply&send (v1.4.3)
+- [x] Loop scrub · welcome context menu · Diff filmstrip (v1.4.4)
 
 ## Next
 
-- [ ] Loop playback mode for scrub
-- [ ] Right-click welcome chip → pin / send / edit
-- [ ] Diff filmstrip thumbnails per turn (file count + heat)
+- [ ] Filmstrip hover preview of top changed file paths
+- [ ] Keyboard shortcut for loop toggle
+- [ ] Export filmstrip storyboard as PNG/markdown
 - [ ] Optional true cloud template vault (accounted service)
 
 ## Later
