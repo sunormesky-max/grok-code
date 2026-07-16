@@ -11,6 +11,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 - See [ROADMAP.md](ROADMAP.md)
 
+## [1.9.1] — 2026-07-16
+
+### Core — stop / resume + turn markers
+
+- **Stop**: user interrupt resolves cleanly (`agent:done` + `stopped`); keeps partial stream text
+- **Stop bar**: Continue (resume session) · Retry prompt · Fresh session
+- **Turn markers** in chat: mode chip · time · prompt snippet · done/stopped/error stamp
+- `task.turns[]` recent history for timeline metadata
+- Retry bar also shows error snippet; clearer stop Live phase
+
 ## [1.9.0] — 2026-07-16
 
 ### Core — task flow & streaming pipeline

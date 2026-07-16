@@ -45,6 +45,9 @@
       toolCount: 0,
       turnId: null,
       lastUsage: null,
+      /** recent turns for timeline markers */
+      turns: Array.isArray(opts.turns) ? opts.turns.slice(-40) : [],
+      stopRequested: false,
       liveAssistantEl: null,
       liveThoughtEl: null,
       elapsedStart: 0,

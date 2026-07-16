@@ -8076,6 +8076,18 @@ function bindAgentEvents() {
       if (d?.sessionId) task.sessionId = d.sessionId;
       if (d?.usage) task.lastUsage = d.usage;
       flushStreamPaint(task);
+      // User stop: leave finalize / stop-bar to runTaskPrompt stopped branch
+      if (d?.stopped || task.stopRequested) {
+        task.phase = 'stopped';
+        task.phaseDetail = '';
+        // Do not set running=false here if runTaskPrompt still awaiting — it will
+        // but if stop raced after await, safe to clear
+        if (task.running) {
+          /* runTaskPrompt owns finalize */
+        }
+        renderTaskTabs();
+        return;
+      }
       finalizeLiveMessages(task);
       task.running = false;
       task.phase = 'done';
@@ -8273,6 +8285,7 @@ async function runTaskPrompt(task, text, opts = {}) {
 
   task.lastPrompt = text;
   task.running = true;
+  task.stopRequested = Boolean(opts.isStopCleanup);
   task.phase = 'boot';
   task.phaseDetail = 'booting CLI…';
   task.turnId = `turn-${Date.now()}`;
@@ -8285,6 +8298,25 @@ async function runTaskPrompt(task, text, opts = {}) {
   task.writeCount = 0;
   task.turnMode = modeUsed;
   task.lastError = null;
+  if (!Array.isArray(task.turns)) task.turns = [];
+  task.turns.push({
+    id: task.turnId,
+    mode: modeUsed,
+    prompt: String(text || '').slice(0, 500),
+    startedAt: Date.now(),
+    continueFrom: Boolean(opts.isContinue),
+  });
+  if (task.turns.length > 40) task.turns = task.turns.slice(-40);
+  // Remove prior action bars for a clean turn
+  task.pane?.querySelectorAll?.('.retry-bar, .stop-bar, .turn-marker-pending')?.forEach((el) => el.remove());
+  if (!opts.skipTurnMarker) {
+    appendTurnMarker(task, {
+      mode: modeUsed,
+      prompt: text,
+      continueFrom: Boolean(opts.isContinue),
+      retry: Boolean(opts.isRetry),
+    });
+  }
   setRunningUi(true);
   {
     const st = MODE_RUN_STATUS[modeUsed] || MODE_RUN_STATUS.craft;
@@ -8335,21 +8367,59 @@ async function runTaskPrompt(task, text, opts = {}) {
     if (result?.resumedFallback) {
       toast(t('chat.resumeFallback'), 'ok');
     }
+    // User stop: keep partial stream, offer continue / retry
+    if (result?.stopped || task.stopRequested) {
+      const partial = finalText || task.streamBuf || '';
+      if (partial) {
+        task.streamBuf = partial;
+        upsertAssistant(partial, true, task);
+        if (!Array.isArray(task.messages)) task.messages = [];
+        const last = task.messages[task.messages.length - 1];
+        if (!last || last.role !== 'assistant' || last.content !== partial) {
+          task.messages.push({
+            role: 'assistant',
+            content: partial,
+            ts: Date.now(),
+            stopped: true,
+          });
+        }
+      }
+      finalizeLiveMessages(task);
+      markTurnEnded(task, { stopped: true, tools: task.toolCount || 0 });
+      appendStopBar(task, text, { partial: Boolean(partial) });
+      pushLiveEvent({
+        kind: 'signal',
+        title: `${task.title} 已停止`,
+        sub: partial ? `已保留 ${partial.length} 字部分输出` : '无文本输出',
+        projectId: task.projectId,
+      });
+      if (isActiveTask(task)) {
+        setLivePhase(localeIsEn() ? 'Stopped' : '已停止', task.title);
+        setAgentStatus(localeIsEn() ? 'Stopped' : '已停止', false);
+      }
+      schedulePersist(true);
+      return;
+    }
+
     if (finalText) {
       task.streamBuf = finalText;
       upsertAssistant(finalText, true, task);
       if (!Array.isArray(task.messages)) task.messages = [];
       task.messages.push({ role: 'assistant', content: finalText, ts: Date.now() });
-    } else if (!result?.stopped) {
+    } else {
       upsertAssistant('（无文本输出 — 可能只做了工具操作，请看资源管理器 / Diff）', true, task);
     }
     finalizeLiveMessages(task);
+    markTurnEnded(task, {
+      stopped: false,
+      tools: task.toolCount || 0,
+      usage: result?.usage || task.lastUsage,
+    });
     // Plan：模式标志 或 回复像可执行方案 → 一键执行条
     const wasExec =
       /^(执行|开干|按方案|implement|execute|do it|lgtm|开搞)/i.test(String(text || '').trim());
     if (
       !wasExec &&
-      !result?.stopped &&
       finalText &&
       modeUsed !== 'ask' &&
       (modeUsed === 'plan' || looksLikePlan(finalText))
@@ -8359,7 +8429,7 @@ async function runTaskPrompt(task, text, opts = {}) {
       });
     }
     // Craft mission summary
-    if (modeUsed === 'craft' && !result?.stopped) {
+    if (modeUsed === 'craft') {
       const filesAfter = P()?.changes?.size || 0;
       const filesDelta = Math.max(0, filesAfter - filesBefore);
       appendCraftMissionBar(task, {
@@ -8375,9 +8445,27 @@ async function runTaskPrompt(task, text, opts = {}) {
     if (isActiveTask(task)) renderContextTiers(task);
   } catch (err) {
     const msg = err.message || String(err);
+    // Stop can race as error depending on kill timing — treat as stop when requested
+    if (task.stopRequested || /已由用户停止|aborted|AbortError/i.test(msg)) {
+      const partial = task.streamBuf || '';
+      if (partial) {
+        finalizeLiveMessages(task);
+        if (!Array.isArray(task.messages)) task.messages = [];
+        task.messages.push({ role: 'assistant', content: partial, ts: Date.now(), stopped: true });
+      }
+      markTurnEnded(task, { stopped: true, tools: task.toolCount || 0 });
+      appendStopBar(task, text, { partial: Boolean(partial) });
+      if (isActiveTask(task)) {
+        setLivePhase(localeIsEn() ? 'Stopped' : '已停止', task.title);
+        setAgentStatus(localeIsEn() ? 'Stopped' : '已停止', false);
+      }
+      schedulePersist(true);
+      return;
+    }
     task.lastError = msg;
     upsertAssistant(t('chat.error', `错误：${msg}`, { msg }), true, task);
     finalizeLiveMessages(task);
+    markTurnEnded(task, { error: msg, tools: task.toolCount || 0 });
     appendRetryBar(task, text, msg);
     if (isActiveTask(task)) {
       setAgentStatus(t('live.phase.error', '出错'), false, true);
@@ -8386,8 +8474,11 @@ async function runTaskPrompt(task, text, opts = {}) {
     toast(msg || t('live.phase.error'), 'err');
   } finally {
     clearInterval(liveTick);
+    const wasStopped = task.stopRequested || task.phase === 'stopped';
     task.running = false;
-    if (task.phase !== 'error') task.phase = 'idle';
+    task.stopRequested = false;
+    if (task.phase !== 'error' && task.phase !== 'stopped') task.phase = 'idle';
+    if (wasStopped) task.phase = 'stopped';
     task.phaseDetail = '';
     task.liveAssistantEl = null;
     task.liveThoughtEl = null;
@@ -8399,27 +8490,38 @@ async function runTaskPrompt(task, text, opts = {}) {
       $('#livePulse')?.classList.toggle('on', anyRunning());
       $('#liveBadge')?.classList.toggle('hidden', !anyRunning());
       if (!$('#agentStatus').classList.contains('error')) {
-        const idle =
-          (state.workMode || 'craft') === 'craft'
-            ? localeIsEn()
-              ? 'Craft ready'
-              : 'Craft 待命'
-            : localeIsEn()
-              ? 'Ready'
-              : '待命';
-        setAgentStatus(idle, false);
+        if (wasStopped) {
+          setAgentStatus(localeIsEn() ? 'Stopped' : '已停止', false);
+        } else {
+          const idle =
+            (state.workMode || 'craft') === 'craft'
+              ? localeIsEn()
+                ? 'Craft ready'
+                : 'Craft 待命'
+              : localeIsEn()
+                ? 'Ready'
+                : '待命';
+          setAgentStatus(idle, false);
+        }
         if ($('#livePhase')?.textContent !== t('live.phase.error', '出错')) {
           const r = window.TaskStore.countRunning();
-          setLivePhase(
-            r > 0 ? t('live.running', `${r} 个任务运行中`, { n: r }) : t('live.idle', '待命'),
-            changesMap().size
-              ? t('live.changes.hint', `累计 ${changesMap().size} 文件变更 · 去 Diff`, {
-                  n: changesMap().size,
-                })
-              : r > 0
-                ? t('live.running', `${r} 个任务运行中`, { n: r })
-                : t('live.readyNext', '准备下一条 / 开新任务并行')
-          );
+          if (wasStopped && r === 0) {
+            setLivePhase(
+              localeIsEn() ? 'Stopped' : '已停止',
+              localeIsEn() ? 'Continue or retry from the bar above' : '可从上方操作条续跑 / 重试'
+            );
+          } else {
+            setLivePhase(
+              r > 0 ? t('live.running', `${r} 个任务运行中`, { n: r }) : t('live.idle', '待命'),
+              changesMap().size
+                ? t('live.changes.hint', `累计 ${changesMap().size} 文件变更 · 去 Diff`, {
+                    n: changesMap().size,
+                  })
+                : r > 0
+                  ? t('live.running', `${r} 个任务运行中`, { n: r })
+                  : t('live.readyNext', '准备下一条 / 开新任务并行')
+            );
+          }
         }
       }
     }
@@ -8814,18 +8916,70 @@ async function openSessionShareCard(task) {
 window.openSessionShareCard = openSessionShareCard;
 window.openSkillPreview = openSkillPreview;
 
+/** Chat turn divider — mode · time · prompt snippet */
+function appendTurnMarker(task, opts = {}) {
+  if (!task?.pane) return;
+  const en = localeIsEn();
+  const mode = (opts.mode || task.turnMode || 'craft').toUpperCase();
+  const when = new Date().toLocaleTimeString();
+  const snippet = String(opts.prompt || '').replace(/\s+/g, ' ').slice(0, 72);
+  const tags = [];
+  if (opts.continueFrom) tags.push(en ? 'continue' : '续跑');
+  if (opts.retry) tags.push(en ? 'retry' : '重试');
+  const div = document.createElement('div');
+  div.className = 'turn-marker';
+  if (task.turnId) div.dataset.turn = task.turnId;
+  div.innerHTML = `
+    <span class="tm-line" aria-hidden="true"></span>
+    <span class="tm-chip mode-${esc((opts.mode || 'craft').toLowerCase())}">${esc(mode)}</span>
+    <span class="tm-time">${esc(when)}</span>
+    ${tags.map((x) => `<span class="tm-tag">${esc(x)}</span>`).join('')}
+    <span class="tm-prompt" title="${esc(String(opts.prompt || ''))}">${esc(snippet || (en ? '(no text)' : '（无文本）'))}</span>`;
+  task.pane.appendChild(div);
+  scrollMessages(true, task);
+}
+
+function markTurnEnded(task, meta = {}) {
+  if (!task || !Array.isArray(task.turns) || !task.turns.length) return;
+  const last = task.turns[task.turns.length - 1];
+  if (!last || last.id !== task.turnId) return;
+  last.endedAt = Date.now();
+  last.stopped = Boolean(meta.stopped);
+  last.error = meta.error || null;
+  last.tools = meta.tools || 0;
+  last.usage = meta.usage || null;
+  // Stamp marker
+  const marker = task.pane?.querySelector?.(`.turn-marker[data-turn="${cssEscape(task.turnId)}"]`);
+  if (marker && !marker.querySelector('.tm-end')) {
+    const end = document.createElement('span');
+    end.className = 'tm-end' + (meta.stopped ? ' stopped' : meta.error ? ' error' : ' ok');
+    end.textContent = meta.stopped
+      ? localeIsEn()
+        ? 'stopped'
+        : '已停'
+      : meta.error
+        ? localeIsEn()
+          ? 'error'
+          : '失败'
+        : localeIsEn()
+          ? 'done'
+          : '完成';
+    marker.appendChild(end);
+  }
+}
+
 /** 失败后可一键重试 / 清空 session 重试 / 导出诊断 */
 function appendRetryBar(task, promptText, errMsg) {
   if (!task?.pane) return;
-  task.pane.querySelectorAll('.retry-bar').forEach((el) => el.remove());
+  task.pane.querySelectorAll('.retry-bar, .stop-bar').forEach((el) => el.remove());
   const bar = document.createElement('div');
   bar.className = 'retry-bar';
   bar.innerHTML = `
-    <span class="retry-hint">${esc(t('chat.retryHint'))}</span>
+    <span class="retry-hint">${esc(t('chat.retryHint', '任务失败 — 可重试或新开会话'))}${errMsg ? ` · ${esc(String(errMsg).slice(0, 80))}` : ''}</span>
     <div class="retry-actions">
-      <button type="button" class="btn small primary" data-act="retry">${esc(t('chat.retry'))}</button>
-      <button type="button" class="btn small ghost" data-act="fresh">${esc(t('chat.retryFresh'))}</button>
-      <button type="button" class="btn small ghost" data-act="diag">${esc(t('chat.exportDiag'))}</button>
+      <button type="button" class="btn small primary" data-act="retry">${esc(t('chat.retry', '重试'))}</button>
+      <button type="button" class="btn small ghost" data-act="fresh">${esc(t('chat.retryFresh', '新会话重试'))}</button>
+      <button type="button" class="btn small ghost" data-act="diag">${esc(t('chat.exportDiag', '导出诊断'))}</button>
     </div>`;
   bar.querySelector('[data-act="retry"]').onclick = () => {
     bar.remove();
@@ -8848,17 +9002,85 @@ function appendRetryBar(task, promptText, errMsg) {
   scrollMessages(true, task);
 }
 
+/** After user stop: continue (resume) / retry same / fresh session */
+function appendStopBar(task, promptText, opts = {}) {
+  if (!task?.pane) return;
+  task.pane.querySelectorAll('.retry-bar, .stop-bar').forEach((el) => el.remove());
+  const en = localeIsEn();
+  const bar = document.createElement('div');
+  bar.className = 'stop-bar';
+  bar.innerHTML = `
+    <span class="retry-hint">${
+      opts.partial
+        ? en
+          ? 'Stopped · partial output kept · resume session or retry'
+          : '已停止 · 已保留部分输出 · 可续跑或重试'
+        : en
+          ? 'Stopped · continue or retry'
+          : '已停止 · 可续跑或重试'
+    }</span>
+    <div class="retry-actions">
+      <button type="button" class="btn small primary" data-act="continue">${en ? 'Continue' : '续跑'}</button>
+      <button type="button" class="btn small ghost" data-act="retry">${en ? 'Retry prompt' : '重试原提示'}</button>
+      <button type="button" class="btn small ghost" data-act="fresh">${en ? 'Fresh session' : '新会话'}</button>
+    </div>`;
+  const continuePrompt = en
+    ? 'Continue from where you stopped. Finish the remaining work without redoing completed steps.'
+    : '从刚才中断处继续，完成剩余工作，不要重复已完成步骤。';
+  bar.querySelector('[data-act="continue"]').onclick = () => {
+    bar.remove();
+    runTaskPrompt(task, continuePrompt, {
+      isContinue: true,
+      fromComposer: false,
+      skipResume: false,
+    });
+  };
+  bar.querySelector('[data-act="retry"]').onclick = () => {
+    bar.remove();
+    runTaskPrompt(task, promptText || task.lastPrompt || continuePrompt, {
+      isRetry: true,
+      skipResume: false,
+    });
+  };
+  bar.querySelector('[data-act="fresh"]').onclick = async () => {
+    bar.remove();
+    try {
+      await window.grok.clearSession({ projectId: task.projectId, taskId: task.id });
+    } catch {
+      /* ignore */
+    }
+    task.sessionId = null;
+    runTaskPrompt(task, promptText || task.lastPrompt || continuePrompt, {
+      isRetry: true,
+      skipResume: true,
+      resetSession: true,
+    });
+  };
+  task.pane.appendChild(bar);
+  scrollMessages(true, task);
+}
+
 async function stopAgent() {
   const task = T();
   if (!task) return;
-  await window.grok.stopAgent({ projectId: pid(), taskId: task.id });
-  task.running = false;
-  if (isActiveTask(task)) {
-    setAgentStatus('已停止', false);
-    setRunningUi(false);
-    stopElapsed(task);
+  if (!task.running) {
+    toast(localeIsEn() ? 'Nothing running' : '当前没有运行中的任务', 'ok');
+    return;
   }
+  task.stopRequested = true;
+  task.phase = 'stopped';
+  task.phaseDetail = localeIsEn() ? 'stopping…' : '停止中…';
   renderTaskTabs();
+  try {
+    await window.grok.stopAgent({ projectId: task.projectId || pid(), taskId: task.id });
+  } catch (e) {
+    toast(e.message || 'stop failed', 'err');
+  }
+  // runTaskPrompt finally / stopped branch will finalize UI;
+  // do not force-clear stream here (keep partial tokens)
+  if (isActiveTask(task)) {
+    setAgentStatus(localeIsEn() ? 'Stopping…' : '停止中…', false);
+  }
   toast(t('chat.stopped', `已停止：${task.title}`, { title: task.title }));
 }
 

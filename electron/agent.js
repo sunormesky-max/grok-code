@@ -194,10 +194,27 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
       };
 
       const onAbort = () => {
+        // User stop: resolve cleanly with partial text (not an error path)
         stop(taskId);
-        emitT('agent:error', { error: '已由用户停止' });
+        if (finalText) {
+          emitT('agent:text', { text: finalText, delta: '', partial: false });
+        }
+        emitT('agent:done', {
+          text: finalText,
+          sessionId: newSessionId,
+          stopped: true,
+          thought: thoughtText || undefined,
+          usage,
+        });
         setPhase('stopped', '已停止');
-        finish({ text: finalText, stopped: true, sessionId: newSessionId, taskId, usage });
+        finish({
+          text: finalText,
+          stopped: true,
+          sessionId: newSessionId,
+          taskId,
+          usage,
+          thought: thoughtText || undefined,
+        });
       };
 
       if (signal) {
