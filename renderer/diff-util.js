@@ -341,10 +341,49 @@
     return /read|cat|open|view/.test(n);
   }
 
+  /**
+   * Plain-text unified snippet for storyboard / export (size-capped).
+   */
+  function toUnifiedText(ops, { context = 2, maxRows = 40 } = {}) {
+    const show = new Array(ops.length).fill(false);
+    for (let i = 0; i < ops.length; i++) {
+      if (ops[i].type !== 'same') {
+        for (let k = Math.max(0, i - context); k <= Math.min(ops.length - 1, i + context); k++) {
+          show[k] = true;
+        }
+      }
+    }
+    const lines = [];
+    let rows = 0;
+    let gap = false;
+    for (let i = 0; i < ops.length; i++) {
+      const o = ops[i];
+      if (!show[i]) {
+        gap = true;
+        continue;
+      }
+      if (gap) {
+        lines.push('···');
+        gap = false;
+      }
+      if (rows >= maxRows) {
+        lines.push('… (truncated)');
+        break;
+      }
+      if (o.type === 'same') lines.push('  ' + o.text);
+      else if (o.type === 'del') lines.push('- ' + o.text);
+      else lines.push('+ ' + o.text);
+      rows++;
+    }
+    if (!lines.length) lines.push('(no line diff)');
+    return lines.join('\n');
+  }
+
   global.DiffUtil = {
     computeLineDiff,
     toUnifiedHtml,
     toSideBySideHtml,
+    toUnifiedText,
     extractPathFromTool,
     isWriteTool,
     isReadTool,

@@ -11,6 +11,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 - See [ROADMAP.md](ROADMAP.md)
 
+## [1.4.7] — 2026-07-16
+
+### Review handoff pack
+
+- **Mini diffs** embedded in HTML/Markdown storyboard (per-file, size-capped from checkpoints)
+- **PNG overview**: canvas raster of the turn filmstrip
+- **Review folder**: pick directory → `storyboard.html` + `.md` + `.json` + `.png` and open folder
+
 ## [1.4.6] — 2026-07-16
 
 ### Storyboard HTML pack · open from tip

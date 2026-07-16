@@ -4597,12 +4597,49 @@ function bindFilmstripHover(root) {
   });
 }
 
-function buildStoryboardData() {
+/**
+ * Attach size-capped mini unified diffs per turn file (from checkpoints).
+ */
+function enrichStoryboardDiffs(data, { maxFiles = 6, maxRows = 36 } = {}) {
+  if (!data?.turns || !window.DiffUtil?.computeLineDiff) return data;
+  for (const turn of data.turns) {
+    const diffs = [];
+    const paths = (turn.files || []).slice(0, maxFiles);
+    for (const filePath of paths) {
+      const entry = changesMap().get(filePath);
+      if (!entry) continue;
+      const cps = entry.checkpoints || [];
+      const idx = cps.findIndex((c, i) => turnKeyOfCheckpoint(c, i) === turn.key);
+      if (idx < 0) continue;
+      const after = cps[idx].after ?? '';
+      const before =
+        idx > 0 ? cps[idx - 1].after ?? entry.before ?? '' : entry.before ?? '';
+      try {
+        const recomputed = window.DiffUtil.computeLineDiff(before, after);
+        const text =
+          typeof window.DiffUtil.toUnifiedText === 'function'
+            ? window.DiffUtil.toUnifiedText(recomputed.ops, { context: 2, maxRows })
+            : '';
+        diffs.push({
+          path: filePath,
+          stats: recomputed.stats || { adds: 0, dels: 0 },
+          text: String(text || '').slice(0, 8000),
+        });
+      } catch {
+        /* skip file */
+      }
+    }
+    turn.diffs = diffs;
+  }
+  return data;
+}
+
+function buildStoryboardData({ withDiffs = true } = {}) {
   const turns = collectGlobalTurns();
   const proj = P();
   const heatFn =
     typeof window.DiffUtil?.heatFromTs === 'function' ? window.DiffUtil.heatFromTs : () => 0;
-  return {
+  const data = {
     format: 'grokcode-storyboard-v1',
     project: { name: proj?.name || null, path: proj?.path || null },
     exportedAt: new Date().toISOString(),
@@ -4616,6 +4653,8 @@ function buildStoryboardData() {
       files: [...(t.files || [])],
     })),
   };
+  if (withDiffs) enrichStoryboardDiffs(data);
+  return data;
 }
 
 function buildStoryboardMarkdown(data) {
@@ -4639,6 +4678,19 @@ function buildStoryboardMarkdown(data) {
     if (t.prompt) lines.push(`- **Prompt**: ${String(t.prompt).replace(/\n/g, ' ').slice(0, 300)}`);
     lines.push(`- **Files** (${(t.files || []).length}):`);
     (t.files || []).forEach((p) => lines.push(`  - \`${p}\``));
+    if (Array.isArray(t.diffs) && t.diffs.length) {
+      lines.push('');
+      lines.push('### Mini diffs');
+      t.diffs.forEach((d) => {
+        lines.push('');
+        lines.push(
+          `#### \`${d.path}\` (+${d.stats?.adds ?? 0}/-${d.stats?.dels ?? 0})`
+        );
+        lines.push('```diff');
+        lines.push(d.text || '');
+        lines.push('```');
+      });
+    }
     lines.push('');
   });
   lines.push('---');
@@ -4647,7 +4699,7 @@ function buildStoryboardMarkdown(data) {
   return lines.join('\n');
 }
 
-/** Self-contained HTML review pack (shareable offline) */
+/** Self-contained HTML review pack (shareable offline, optional mini diffs) */
 function buildStoryboardHtml(data) {
   const en = localeIsEn();
   const turnsJson = JSON.stringify(data.turns || []);
@@ -4659,7 +4711,7 @@ function buildStoryboardHtml(data) {
 <meta name="viewport" content="width=device-width, initial-scale=1"/>
 <title>${esc(title)}</title>
 <style>
-  :root { color-scheme: dark; --bg:#0a0c12; --card:#12161f; --ice:#7dd3fc; --muted:#a1a1aa; --faint:#71717a; --ok:#34d399; --warn:#fbbf24; --hot:#f97316; }
+  :root { color-scheme: dark; --bg:#0a0c12; --card:#12161f; --ice:#7dd3fc; --muted:#a1a1aa; --faint:#71717a; --ok:#34d399; --hot:#f97316; --del:#f87171; }
   * { box-sizing: border-box; }
   body { margin:0; font-family: ui-sans-serif, system-ui, sans-serif; background: var(--bg); color:#e4e4e7; line-height:1.45; }
   header { padding: 20px 24px 12px; border-bottom: 1px solid rgba(125,211,252,.15); background: linear-gradient(120deg, rgba(56,189,248,.08), rgba(249,115,22,.06)); }
@@ -4673,13 +4725,18 @@ function buildStoryboardHtml(data) {
   .card .t { font-family: ui-monospace, monospace; font-size:10px; color:var(--ice); padding-left:6px; }
   .card .n { font-size:13px; font-weight:600; padding:2px 0 2px 6px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   .card .m { font-size:11px; color:var(--faint); padding-left:6px; }
-  main { display:grid; grid-template-columns: 1fr 1fr; gap:16px; padding: 16px 20px 40px; max-width: 1100px; }
-  @media (max-width: 800px) { main { grid-template-columns: 1fr; } }
+  main { display:grid; grid-template-columns: 1fr 1.2fr; gap:16px; padding: 16px 20px 40px; max-width: 1200px; }
+  @media (max-width: 900px) { main { grid-template-columns: 1fr; } }
   section { background: var(--card); border:1px solid rgba(125,211,252,.12); border-radius: 12px; padding: 14px 16px; min-height: 200px; }
   section h2 { margin:0 0 8px; font-size: 14px; color: var(--ice); font-family: ui-monospace, monospace; letter-spacing:.06em; text-transform:uppercase; }
   .prompt { white-space: pre-wrap; word-break: break-word; font-size: 13px; color: var(--muted); margin-bottom: 12px; }
-  ul.files { margin:0; padding-left: 18px; font-family: ui-monospace, monospace; font-size: 12px; }
+  ul.files { margin:0 0 12px; padding-left: 18px; font-family: ui-monospace, monospace; font-size: 12px; }
   ul.files li { margin: 3px 0; word-break: break-all; }
+  .diff-block { margin: 10px 0 14px; border:1px solid rgba(255,255,255,.08); border-radius: 8px; overflow:hidden; }
+  .diff-block h3 { margin:0; padding:6px 10px; font-size:11px; font-family: ui-monospace, monospace; background:rgba(0,0,0,.35); color:var(--ice); }
+  .diff-block pre { margin:0; padding:8px 10px; font-size:11px; font-family: ui-monospace, monospace; white-space:pre-wrap; word-break:break-all; max-height:220px; overflow:auto; background:rgba(0,0,0,.25); }
+  .diff-block .add { color: var(--ok); }
+  .diff-block .del { color: var(--del); }
   footer { padding: 12px 20px 24px; font-size: 11px; color: var(--faint); font-family: ui-monospace, monospace; }
 </style>
 </head>
@@ -4695,25 +4752,45 @@ function buildStoryboardHtml(data) {
   <section>
     <h2>${en ? 'Prompt' : '提示'}</h2>
     <div class="prompt" id="prompt">—</div>
-  </section>
-  <section>
     <h2>${en ? 'Files' : '文件'}</h2>
     <ul class="files" id="files"></ul>
   </section>
+  <section>
+    <h2>${en ? 'Mini diffs' : '迷你 Diff'}</h2>
+    <div id="diffs"></div>
+  </section>
 </main>
-<footer>GrokCode Diff storyboard · offline review pack · heat 0–4 (hotter = more recent)</footer>
+<footer>GrokCode Diff storyboard · offline review pack · heat 0–4 · mini diffs size-capped</footer>
 <script>
 const TURNS = ${turnsJson};
 const strip = document.getElementById('strip');
 const promptEl = document.getElementById('prompt');
 const filesEl = document.getElementById('files');
+const diffsEl = document.getElementById('diffs');
+function escHtml(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function colorDiff(text){
+  return escHtml(text).split('\\n').map(function(line){
+    if (line.charAt(0)==='+') return '<span class="add">'+line+'</span>';
+    if (line.charAt(0)==='-') return '<span class="del">'+line+'</span>';
+    return line;
+  }).join('\\n');
+}
 function show(i) {
   const t = TURNS[i];
   if (!t) return;
   [...strip.children].forEach((c, j) => c.classList.toggle('active', j === i));
   promptEl.textContent = t.prompt || '(no prompt captured)';
-  filesEl.innerHTML = (t.files || []).map(p => '<li>' + p.replace(/</g,'&lt;') + '</li>').join('')
+  filesEl.innerHTML = (t.files || []).map(p => '<li>' + escHtml(p) + '</li>').join('')
     || '<li style="color:#71717a">(none)</li>';
+  const diffs = t.diffs || [];
+  if (!diffs.length) {
+    diffsEl.innerHTML = '<div style="color:#71717a;font-size:12px">${en ? 'No mini diffs captured for this turn' : '该轮无迷你 diff 快照'}</div>';
+  } else {
+    diffsEl.innerHTML = diffs.map(function(d){
+      const st = d.stats || {};
+      return '<div class="diff-block"><h3>' + escHtml(d.path) + '  +' + (st.adds||0) + ' −' + (st.dels||0) + '</h3><pre>' + colorDiff(d.text||'') + '</pre></div>';
+    }).join('');
+  }
 }
 TURNS.forEach((t, i) => {
   const b = document.createElement('button');
@@ -4734,7 +4811,79 @@ if (TURNS.length) show(0);
 </html>`;
 }
 
-/** Export turn filmstrip as Markdown and/or HTML review pack */
+/** Raster PNG overview of the filmstrip (canvas) */
+function renderStoryboardPngDataUrl(data) {
+  const turns = data.turns || [];
+  const cardW = 150;
+  const cardH = 96;
+  const pad = 16;
+  const gap = 10;
+  const headerH = 56;
+  const cols = Math.min(turns.length || 1, 6);
+  const rows = Math.max(1, Math.ceil((turns.length || 1) / cols));
+  const w = pad * 2 + cols * cardW + (cols - 1) * gap;
+  const h = pad * 2 + headerH + rows * cardH + (rows - 1) * gap;
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.max(480, w);
+  canvas.height = Math.max(200, h);
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return null;
+  // bg
+  ctx.fillStyle = '#0a0c12';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  // header
+  ctx.fillStyle = '#7dd3fc';
+  ctx.font = 'bold 16px sans-serif';
+  ctx.fillText('GrokCode Storyboard · ' + (data.project?.name || 'session'), pad, 28);
+  ctx.fillStyle = '#71717a';
+  ctx.font = '11px monospace';
+  ctx.fillText((data.turns?.length || 0) + ' turns · ' + (data.exportedAt || ''), pad, 46);
+  const heats = ['#34d39955', '#34d39988', '#34d399', '#facc15', '#f97316'];
+  turns.forEach((t, i) => {
+    const col = i % cols;
+    const row = Math.floor(i / cols);
+    const x = pad + col * (cardW + gap);
+    const y = pad + headerH + row * (cardH + gap);
+    ctx.fillStyle = '#12161f';
+    ctx.strokeStyle = '#7dd3fc33';
+    ctx.lineWidth = 1;
+    roundRect(ctx, x, y, cardW, cardH, 10);
+    ctx.fill();
+    ctx.stroke();
+    const heat = Math.max(0, Math.min(4, t.heat || 0));
+    ctx.fillStyle = heats[heat];
+    ctx.fillRect(x, y, 4, cardH);
+    ctx.fillStyle = '#7dd3fc';
+    ctx.font = '10px monospace';
+    const time = t.ts ? new Date(t.ts).toLocaleTimeString() : '—';
+    ctx.fillText(time, x + 10, y + 18);
+    ctx.fillStyle = '#e4e4e7';
+    ctx.font = 'bold 12px sans-serif';
+    const name = String(t.taskTitle || 'Turn ' + (i + 1)).slice(0, 16);
+    ctx.fillText(name, x + 10, y + 38);
+    ctx.fillStyle = '#a1a1aa';
+    ctx.font = '11px monospace';
+    ctx.fillText((t.files || []).length + ' files · H' + heat, x + 10, y + 58);
+    if (t.prompt) {
+      ctx.fillStyle = '#71717a';
+      ctx.font = '10px sans-serif';
+      ctx.fillText(String(t.prompt).slice(0, 22), x + 10, y + 78);
+    }
+  });
+  return canvas.toDataURL('image/png');
+}
+
+function roundRect(ctx, x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
+}
+
+/** Export turn filmstrip as Markdown / HTML / PNG / folder pack */
 async function exportFilmstripStoryboard(opts = {}) {
   const turns = collectGlobalTurns();
   if (!turns.length) {
@@ -4742,13 +4891,53 @@ async function exportFilmstripStoryboard(opts = {}) {
     return;
   }
   const en = localeIsEn();
-  const data = buildStoryboardData();
+  const data = buildStoryboardData({ withDiffs: true });
   const markdown = buildStoryboardMarkdown(data);
   const html = buildStoryboardHtml(data);
-  const format = opts.format || 'auto'; // auto | md | html
+  const format = opts.format || 'auto'; // auto | md | html | png | folder
   const safe = String(data.project?.name || 'session')
     .replace(/[^\w\u4e00-\u9fff.-]+/g, '-')
     .slice(0, 40);
+
+  if (format === 'folder') {
+    try {
+      const png = renderStoryboardPngDataUrl(data);
+      const r = await window.grok.reviewExportFolder({
+        folderName: `grok-review-${safe}`,
+        html,
+        markdown,
+        json: JSON.stringify(data, null, 2),
+        pngBase64: png || '',
+      });
+      if (r?.canceled) return;
+      if (r?.ok) toast((en ? 'Review folder: ' : '审阅包：') + (r.dir || ''), 'ok');
+      else toast(r?.error || 'export failed', 'err');
+    } catch (e) {
+      toast(e.message || 'export failed', 'err');
+    }
+    return;
+  }
+
+  if (format === 'png') {
+    try {
+      const png = renderStoryboardPngDataUrl(data);
+      if (!png) {
+        toast('PNG render failed', 'err');
+        return;
+      }
+      const folder = await window.grok.reviewExportFolder({
+        folderName: `grok-storyboard-png-${safe}`,
+        pngBase64: png,
+      });
+      if (folder?.canceled) return;
+      if (folder?.ok) toast((en ? 'PNG saved in: ' : 'PNG 已保存：') + folder.dir, 'ok');
+      else toast(folder?.error || 'export failed', 'err');
+    } catch (e) {
+      toast(e.message || 'PNG export failed', 'err');
+    }
+    return;
+  }
+
   const defaultName =
     format === 'html'
       ? `grok-storyboard-${safe}.html`
@@ -4775,6 +4964,8 @@ async function exportFilmstripStoryboard(opts = {}) {
 }
 window.exportFilmstripStoryboard = exportFilmstripStoryboard;
 window.exportFilmstripHtml = () => exportFilmstripStoryboard({ format: 'html' });
+window.exportFilmstripPng = () => exportFilmstripStoryboard({ format: 'png' });
+window.exportReviewFolder = () => exportFilmstripStoryboard({ format: 'folder' });
 
 function scrubberHtml(turns) {
   if (!turns.length) return '';
@@ -4789,8 +4980,10 @@ function scrubberHtml(turns) {
     <button type="button" class="diff-cp-chip${!cur ? ' active' : ''}" data-scrub="">${en ? 'All / Live' : '全部 / Live'}</button>
     <button type="button" class="diff-scrub-play${playing ? ' on' : ''}" data-scrub-play="1" title="${en ? 'Play / pause auto-scrub' : '播放 / 暂停自动 scrub'}">${playing ? '❚❚' : '▶'}</button>
     <button type="button" class="diff-scrub-loop${loop ? ' on' : ''}" data-scrub-loop="1" title="${en ? 'Loop playback (L)' : '循环播放 (L)'}">↻</button>
-    <button type="button" class="diff-scrub-export" data-scrub-export="1" title="${en ? 'Export storyboard (MD/HTML)' : '导出 storyboard（MD/HTML）'}">⬇</button>
+    <button type="button" class="diff-scrub-export" data-scrub-export="1" title="${en ? 'Export Markdown' : '导出 Markdown'}">⬇</button>
     <button type="button" class="diff-scrub-export html" data-scrub-export-html="1" title="${en ? 'Export HTML review pack' : '导出 HTML 审阅包'}">HTML</button>
+    <button type="button" class="diff-scrub-export html" data-scrub-export-png="1" title="${en ? 'Export PNG overview' : '导出 PNG 总览'}">PNG</button>
+    <button type="button" class="diff-scrub-export html" data-scrub-export-folder="1" title="${en ? 'Export review folder (HTML+MD+JSON+PNG)' : '导出审阅文件夹'}">📁</button>
     <span class="diff-scrub-speeds" title="${en ? 'Playback speed' : '播放倍速'}">
       ${SCRUB_SPEEDS.map(
         (s) =>
@@ -5287,6 +5480,12 @@ function renderDiffPane() {
   });
   content.querySelector('[data-scrub-export-html]')?.addEventListener('click', () => {
     exportFilmstripStoryboard({ format: 'html' });
+  });
+  content.querySelector('[data-scrub-export-png]')?.addEventListener('click', () => {
+    exportFilmstripStoryboard({ format: 'png' });
+  });
+  content.querySelector('[data-scrub-export-folder]')?.addEventListener('click', () => {
+    exportFilmstripStoryboard({ format: 'folder' });
   });
   content.querySelectorAll('[data-speed]').forEach((btn) => {
     btn.onclick = (e) => {

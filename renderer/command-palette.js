@@ -488,6 +488,26 @@
         }),
       },
       {
+        id: 'diff.storyboard.png',
+        title: t('cmd.diff.storyboard.png', '导出 Diff storyboard PNG'),
+        keywords: 'diff export storyboard png',
+        group: 'actions',
+        run: run(() => {
+          global.switchTab?.('diff');
+          global.exportFilmstripPng?.();
+        }),
+      },
+      {
+        id: 'diff.review.folder',
+        title: t('cmd.diff.review.folder', '导出 Diff 审阅文件夹'),
+        keywords: 'diff export review folder handoff 审阅 文件夹',
+        group: 'actions',
+        run: run(() => {
+          global.switchTab?.('diff');
+          global.exportReviewFolder?.();
+        }),
+      },
+      {
         id: 'diff.restoreTurn',
         title: t('cmd.diff.restoreTurn', 'Diff 整轮还原'),
         keywords: 'diff restore turn 整轮 还原 checkpoint',

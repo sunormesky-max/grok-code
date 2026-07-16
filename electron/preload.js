@@ -115,6 +115,7 @@ contextBridge.exposeInMainWorld('grok', {
 
   // Session share card
   sessionExportShare: (payload) => ipcRenderer.invoke('session:exportShare', payload || {}),
+  reviewExportFolder: (payload) => ipcRenderer.invoke('review:exportFolder', payload || {}),
 
   // Telemetry
   telemetryReport: (payload) => ipcRenderer.invoke('telemetry:report', payload || {}),

@@ -1338,6 +1338,43 @@ ipcMain.handle('session:exportShare', async (e, payload = {}) => {
   }
 });
 
+/** Export a review folder: html + md + json + optional png */
+ipcMain.handle('review:exportFolder', async (e, payload = {}) => {
+  const win = BrowserWindow.fromWebContents(e.sender);
+  const open = await dialog.showOpenDialog(win, {
+    title: '选择审阅包输出目录',
+    properties: ['openDirectory', 'createDirectory'],
+  });
+  if (open.canceled || !open.filePaths[0]) return { ok: false, canceled: true };
+  const root = open.filePaths[0];
+  const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+  const folderName = String(payload.folderName || `grok-review-${stamp}`).replace(/[<>:"|?*]/g, '-');
+  const dir = path.join(root, folderName);
+  try {
+    fs.mkdirSync(dir, { recursive: true });
+    const written = [];
+    const write = (name, content) => {
+      if (content == null || content === '') return;
+      const fp = path.join(dir, name);
+      fs.writeFileSync(fp, content, typeof content === 'string' ? 'utf8' : undefined);
+      written.push(fp);
+    };
+    if (payload.html) write('storyboard.html', String(payload.html));
+    if (payload.markdown) write('storyboard.md', String(payload.markdown));
+    if (payload.json) write('storyboard.json', String(payload.json));
+    if (payload.pngBase64) {
+      const b64 = String(payload.pngBase64).replace(/^data:image\/png;base64,/, '');
+      fs.writeFileSync(path.join(dir, 'storyboard.png'), Buffer.from(b64, 'base64'));
+      written.push(path.join(dir, 'storyboard.png'));
+    }
+    // open folder
+    shell.openPath(dir);
+    return { ok: true, dir, files: written };
+  } catch (err) {
+    return { ok: false, error: err.message || String(err) };
+  }
+});
+
 // ── Telemetry ───────────────────────────────────────────
 ipcMain.handle('telemetry:report', (_e, payload = {}) => {
   return reportIfEnabled(payload.message || payload.error || 'renderer-error', {
