@@ -8,6 +8,8 @@ const {
   pickToolInfo,
   pickChunkText,
   pickToolResultText,
+  slimToolArgs,
+  safeIpc,
 } = require('./acp-client');
 
 /**
@@ -281,7 +283,13 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
     }
     acpArgs.push('stdio');
 
-    const emitT = (event, payload) => emit(event, { ...payload, taskId });
+    const emitT = (event, payload) => {
+      try {
+        emit(event, safeIpc({ ...payload, taskId }));
+      } catch (err) {
+        streamDebug(`task=${taskId} emit fail ${event}: ${err.message}`, { force: true });
+      }
+    };
     emitT('agent:phase', {
       phase: 'boot',
       detail: sessionId ? 'ACP resuming…' : 'ACP booting…',
@@ -315,6 +323,8 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
       let usage = null;
       let stopReason = null;
       let numTurns = 0;
+      let textChunks = 0;
+      let thoughtChunks = 0;
       /** @type {Set<string>} */
       const openTools = new Set();
 
@@ -393,6 +403,11 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
         }
       };
 
+      const plainUsage = (u) => {
+        if (!u || typeof u !== 'object') return null;
+        return safeIpc(u);
+      };
+
       const cleanup = () => {
         if (signal) signal.removeEventListener?.('abort', onAbort);
         const child = children.get(taskId);
@@ -434,27 +449,62 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
         env,
         autoApprove: alwaysApprove,
         onUpdate: (update) => {
+          // AcpClient already gates on .streaming (active prompt only)
           if (!update || settled) return;
           const kind = String(update.sessionUpdate || update.type || '');
 
           if (kind === 'agent_message_chunk' || kind === 'agent_message') {
             const chunk = pickChunkText(update);
             if (chunk) finalText += chunk;
-            emitTextStream({
-              text: finalText,
-              delta: chunk || '',
-              partial: true,
-              phase: 'streaming',
-            });
+            textChunks += 1;
+            if (textChunks === 1) {
+              streamDebug(
+                `task=${taskId} acp first text chunk len=${chunk.length} total=${finalText.length}`,
+                { force: true }
+              );
+              // First token: immediate IPC so UI is never blank
+              emitTextStream(
+                {
+                  text: finalText,
+                  delta: chunk || '',
+                  partial: true,
+                  phase: 'streaming',
+                },
+                true
+              );
+            } else {
+              emitTextStream({
+                text: finalText,
+                delta: chunk || '',
+                partial: true,
+                phase: 'streaming',
+              });
+            }
             if (toolDepth <= 0) setPhase('streaming', 'speaking…');
           } else if (kind === 'agent_thought_chunk' || kind === 'agent_thought') {
             const chunk = pickChunkText(update);
             if (chunk) thoughtText += chunk;
-            emitThoughtStream({
-              text: thoughtText,
-              delta: chunk || '',
-              phase: 'thinking',
-            });
+            thoughtChunks += 1;
+            if (thoughtChunks === 1) {
+              streamDebug(
+                `task=${taskId} acp first thought chunk len=${chunk.length}`,
+                { force: true }
+              );
+              emitThoughtStream(
+                {
+                  text: thoughtText,
+                  delta: chunk || '',
+                  phase: 'thinking',
+                },
+                true
+              );
+            } else {
+              emitThoughtStream({
+                text: thoughtText,
+                delta: chunk || '',
+                phase: 'thinking',
+              });
+            }
             if (toolDepth <= 0) setPhase('thinking', 'thinking…');
           } else if (kind === 'tool_call') {
             flushStreamIpc();
@@ -465,11 +515,11 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
               emitT('agent:tool_start', {
                 id: info.id,
                 name: info.name,
-                args: info.args,
+                args: slimToolArgs(info.args),
               });
               setPhase('tool', `${info.name}…`);
               streamDebug(
-                `task=${taskId} acp tool_call name=${info.name} id=${info.id}`,
+                `task=${taskId} acp tool_call name=${info.name} id=${info.id} depth=${toolDepth}`,
                 { force: true }
               );
             }
@@ -477,13 +527,18 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
             const info = pickToolInfo(update);
             const status = String(update.status || '').toLowerCase();
             // Mid-flight updates (title/locations) — keep phase, don't double-start
-            if (!openTools.has(info.id) && status !== 'completed' && status !== 'failed') {
+            if (
+              !openTools.has(info.id) &&
+              status !== 'completed' &&
+              status !== 'failed' &&
+              status !== 'cancelled'
+            ) {
               openTools.add(info.id);
               toolDepth += 1;
               emitT('agent:tool_start', {
                 id: info.id,
                 name: info.name,
-                args: info.args,
+                args: slimToolArgs(info.args),
               });
               setPhase('tool', `${info.name}…`);
             }
@@ -496,7 +551,7 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
               emitT('agent:tool_end', {
                 id: info.id,
                 name: info.name,
-                args: info.args,
+                args: slimToolArgs(info.args),
                 result: pickToolResultText(update),
                 ok: status === 'completed',
               });
@@ -629,14 +684,15 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
           // Normalize usage keys for UI (headless snake_case + ACP camelCase)
           if (usage && !usage.input_tokens && usage.inputTokens != null) {
             usage = {
-              ...usage,
               input_tokens: usage.inputTokens,
               output_tokens: usage.outputTokens,
               total_tokens: usage.totalTokens,
               cache_read_input_tokens: usage.cachedReadTokens,
               reasoning_tokens: usage.reasoningTokens,
+              modelCalls: usage.modelCalls,
             };
           }
+          usage = plainUsage(usage);
 
           if (finalText) {
             emitTextStream({ text: finalText, delta: '', partial: false }, true);
@@ -682,7 +738,7 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
           });
           setPhase('done', 'done');
           streamDebug(
-            `=== RUN end task=${taskId} transport=acp code=0 finalTextLen=${finalText.length} thoughtLen=${thoughtText.length}`,
+            `=== RUN end task=${taskId} transport=acp code=0 finalTextLen=${finalText.length} thoughtLen=${thoughtText.length} textChunks=${textChunks} thoughtChunks=${thoughtChunks} tools=${toolDepth}`,
             { force: true }
           );
           finish({

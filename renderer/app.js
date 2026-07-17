@@ -8692,8 +8692,14 @@ function bindAgentEvents() {
       if (d?.text && d.text.length > (task.streamBuf || '').length) {
         task.streamBuf = d.text;
       }
+      if (typeof d?.thought === 'string' && d.thought.length > (task.thoughtBuf || '').length) {
+        task.thoughtBuf = d.thought;
+      }
       if (d?.sessionId) task.sessionId = d.sessionId;
       if (d?.usage) task.lastUsage = d.usage;
+      // Always paint whatever we have so a finished turn never looks blank
+      if (task.streamBuf) upsertAssistant(task.streamBuf, true, task);
+      if (task.thoughtBuf) upsertThought(task.thoughtBuf, false, task);
       flushStreamPaint(task);
       // User stop: leave finalize / stop-bar to runTaskPrompt stopped branch
       if (d?.stopped || task.stopRequested) {
@@ -10081,21 +10087,30 @@ function appendToolStart(d, task) {
   task = task || T();
   if (!task) return;
   const box = task.pane;
+  if (!box) return;
+  // Dedupe (ACP may re-send tool_call + tool_call_update)
+  if (d?.id && box.querySelector(`.msg.tool[data-tool-id="${cssEscape(d.id)}"]`)) return;
   const div = document.createElement('div');
   div.className = 'msg tool running';
   div.dataset.toolId = d.id;
   if (task.turnId) div.dataset.turn = task.turnId;
+  let argsPreview = '';
+  try {
+    argsPreview = JSON.stringify(summarizeArgs(d.name, d.args), null, 0);
+  } catch {
+    argsPreview = '';
+  }
   div.innerHTML = `
     <div class="role">Tool</div>
     <div class="body">
       <div class="name">⚙ ${esc(d.name)}</div>
-      <div class="args">${esc(JSON.stringify(summarizeArgs(d.name, d.args), null, 0))}</div>
+      <div class="args">${esc(argsPreview)}</div>
       <div class="result">running…</div>
     </div>`;
   const asst = task.liveAssistantEl;
   if (asst?.parentNode === box) box.insertBefore(div, asst);
   else box.appendChild(div);
-  scrollMessages(false, task);
+  scrollMessages(true, task);
 }
 
 function appendToolEnd(d, task) {

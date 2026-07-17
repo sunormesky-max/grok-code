@@ -40,6 +40,12 @@ class AcpClient {
     this.pending = new Map();
     this.alive = false;
     this.stderrBuf = '';
+    /**
+     * Only true while session/prompt is in flight.
+     * session/load replays history as session/update — must be ignored or UI
+     * floods with old tools and looks blank / frozen during the real turn.
+     */
+    this.streaming = false;
   }
 
   start() {
@@ -132,6 +138,8 @@ class AcpClient {
     if (msg.method) {
       const params = msg.params || {};
       if (msg.method === 'session/update') {
+        // Drop history replay & idle notifications outside an active prompt
+        if (!this.streaming) return;
         const update = params.update || params;
         try {
           this.onUpdate(update, params);
@@ -211,7 +219,7 @@ class AcpClient {
       'initialize',
       {
         protocolVersion: 1,
-        clientInfo: { name: 'GrokCode', version: '1.10.4' },
+        clientInfo: { name: 'GrokCode', version: '1.10.5' },
         // Do not advertise fs/terminal — agent executes tools itself; we only observe.
         clientCapabilities: {},
       },
@@ -234,14 +242,19 @@ class AcpClient {
   async prompt(sessionId, text, timeoutMs = 0) {
     // 0 = no extra timeout beyond very long agent runs (2h)
     const ms = timeoutMs > 0 ? timeoutMs : 2 * 60 * 60 * 1000;
-    return this.request(
-      'session/prompt',
-      {
-        sessionId,
-        prompt: [{ type: 'text', text: String(text || '') }],
-      },
-      ms
-    );
+    this.streaming = true;
+    try {
+      return await this.request(
+        'session/prompt',
+        {
+          sessionId,
+          prompt: [{ type: 'text', text: String(text || '') }],
+        },
+        ms
+      );
+    } finally {
+      this.streaming = false;
+    }
   }
 
   async cancel(sessionId) {
@@ -342,9 +355,54 @@ function pickToolResultText(update) {
   return '';
 }
 
+/** Slim tool args for IPC (avoid huge file bodies / non-cloneable values). */
+function slimToolArgs(args) {
+  if (!args || typeof args !== 'object') return {};
+  const out = {};
+  const keys = [
+    'path',
+    'file_path',
+    'target_file',
+    'command',
+    'query',
+    'pattern',
+    'glob',
+    'old_string',
+    'new_string',
+    'content',
+    'description',
+  ];
+  for (const k of keys) {
+    if (args[k] == null) continue;
+    let v = args[k];
+    if (typeof v === 'string' && v.length > 240) v = `${v.slice(0, 240)}…`;
+    out[k] = v;
+  }
+  if (!Object.keys(out).length) {
+    try {
+      const s = JSON.stringify(args);
+      return { preview: s.length > 300 ? `${s.slice(0, 300)}…` : s };
+    } catch {
+      return {};
+    }
+  }
+  return out;
+}
+
+/** Structured-clone-safe plain object for Electron IPC. */
+function safeIpc(obj) {
+  try {
+    return JSON.parse(JSON.stringify(obj));
+  } catch {
+    return { taskId: obj?.taskId, _ipcError: 'unserializable' };
+  }
+}
+
 module.exports = {
   AcpClient,
   pickToolInfo,
   pickChunkText,
   pickToolResultText,
+  slimToolArgs,
+  safeIpc,
 };

@@ -11,6 +11,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 - See [ROADMAP.md](ROADMAP.md)
 
+## [1.10.5] — 2026-07-17
+
+### Fix — ACP session/load history replay made UI look blank
+
+- **Root cause**: `session/load` replays old `tool_call` / message updates before the new prompt. GrokCode treated them as live → 60+ tools in 1ms, chat/Live flooded or stuck, looked like “running with no output”.
+- **Gate**: only forward `session/update` while `session/prompt` is in flight.
+- **IPC**: `safeIpc` + slim tool args so Electron structured-clone never drops payloads.
+- **UI**: force paint on first thought/text token and on `agent:done`; tool rows deduped + force-scroll.
+
 ## [1.10.4] — 2026-07-17
 
 ### Fix — wire real agent transport (ACP), not headless-only stream
