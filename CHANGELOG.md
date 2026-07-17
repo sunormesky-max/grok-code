@@ -11,6 +11,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 - See [ROADMAP.md](ROADMAP.md)
 
+## [1.10.2] — 2026-07-17
+
+### Fix / harden — security & process hygiene (audit follow-up)
+
+- **`shell:openExternal` whitelist**: only `http` / `https` / `mailto` (blocks `file://`, `javascript:`, custom schemes, CRLF injection). Shared helper `electron/shell-safe.js` + unit tests.
+- **Orphan Grok CLI cleanup**: track spawned PIDs; stop/close/quit runs `taskkill /T /F` (Windows) with a second-pass reap so zombie `grok.exe` trees do not linger after stop or app exit.
+- **Ask mode**: UI mutation hard-block uses `normalizeWorkMode`; agent path still forces `alwaysApprove=false` (no YOLO in Ask even when Settings YOLO is on).
+
 ## [1.10.1] — 2026-07-16
 
 ### Fix — stop/kill no longer surfaces fake `4294967295`

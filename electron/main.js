@@ -16,6 +16,7 @@ const plugins = require('./plugins');
 const profiles = require('./profiles');
 const telemetry = require('./telemetry');
 const modes = require('./modes');
+const { openExternalSafe } = require('./shell-safe');
 
 const persist = createPersist();
 
@@ -284,9 +285,14 @@ function openProject(dirPath) {
 function closeProject(projectId) {
   const p = projects.get(projectId);
   if (!p) return false;
-  // 停掉该项目所有 agent
+  // 停掉该项目所有 agent + 清 orphan grok 树
   try {
     p.agent.stop();
+  } catch {
+    /* ignore */
+  }
+  try {
+    p.agent.reapTracked?.();
   } catch {
     /* ignore */
   }
@@ -430,6 +436,17 @@ app.whenReady().then(() => {
 app.on('window-all-closed', () => {
   for (const id of [...projects.keys()]) closeProject(id);
   if (process.platform !== 'darwin') app.quit();
+});
+
+/** Ensure every spawned grok tree dies with the app (no orphan CLI zombies). */
+app.on('before-quit', () => {
+  for (const id of [...projects.keys()]) {
+    try {
+      closeProject(id);
+    } catch {
+      /* ignore */
+    }
+  }
 });
 
 // ── Config ──────────────────────────────────────────────
@@ -738,10 +755,10 @@ function resolveProjectId(payload, fallback) {
 
 /** Ask 模式：UI 层禁止写/删/跑命令（硬拦，不只靠 prompt） */
 function assertMutationsAllowed(action = 'write') {
-  const mode = store.get('workMode') || 'craft';
+  const mode = modes.normalizeWorkMode(store.get('workMode'));
   if (mode === 'ask') {
     throw new Error(
-      `当前为 Ask 模式（只读），已拦截「${action}」。请切换到 Craft 或 Plan 后再操作。`
+      `当前为 Ask 模式（只读），已拦截「${action}」。请切换到 Craft、Plan 或 Goal 后再操作。`
     );
   }
 }
@@ -996,6 +1013,7 @@ ipcMain.handle('agent:run', async (_e, payload) => {
     workMode === 'plan' && modes.isPlanExecutePhrase(message);
   const effectiveMode = planExec || payload?.forceCraft ? 'craft' : workMode;
   if (workMode === 'ask') {
+    // Hard: never pass --always-approve in Ask (YOLO off even if settings YOLO is on)
     alwaysOverride = false;
     maxTurnsOverride = Math.min(Number(store.get('maxTurns') || 30), 12);
   } else if (workMode === 'plan' && !planExec) {
@@ -1135,7 +1153,13 @@ ipcMain.handle('agent:running', () => {
   return out;
 });
 
-ipcMain.handle('shell:openExternal', (_e, url) => shell.openExternal(url));
+ipcMain.handle('shell:openExternal', async (_e, url) => {
+  const result = await openExternalSafe(shell, url);
+  if (!result.ok) {
+    throw new Error(result.error || '无法打开链接');
+  }
+  return true;
+});
 
 // ── 持久化 & 四档上下文 ─────────────────────────────────
 ipcMain.handle('persist:save', (_e, snapshot) => {

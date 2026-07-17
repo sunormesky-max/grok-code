@@ -283,6 +283,64 @@ function testToolsSearchExports() {
   console.log('ok  searchPaths / searchFiles');
 }
 
+function testShellSafe() {
+  const { isSafeExternalUrl, openExternalSafe } = require(path.join(
+    root,
+    'electron',
+    'shell-safe.js'
+  ));
+  assert.ok(isSafeExternalUrl('https://console.x.ai'));
+  assert.ok(isSafeExternalUrl('http://localhost:5173/docs'));
+  assert.ok(isSafeExternalUrl('mailto:dev@example.com'));
+  assert.ok(!isSafeExternalUrl('file:///C:/Windows/System32/cmd.exe'));
+  assert.ok(!isSafeExternalUrl('javascript:alert(1)'));
+  assert.ok(!isSafeExternalUrl('ms-settings:bluetooth'));
+  assert.ok(!isSafeExternalUrl('https://evil.com\nfile://x'));
+  assert.ok(!isSafeExternalUrl(''));
+  assert.ok(!isSafeExternalUrl(null));
+  // openExternalSafe should reject without calling shell for bad urls
+  let called = false;
+  return openExternalSafe(
+    {
+      openExternal: async () => {
+        called = true;
+      },
+    },
+    'file:///etc/passwd'
+  ).then((r) => {
+    assert.equal(r.ok, false);
+    assert.ok(!called, 'must not open blocked schemes');
+    return openExternalSafe(
+      {
+        openExternal: async () => {
+          called = true;
+        },
+      },
+      'https://github.com/sunormesky-max/grok-code'
+    ).then((r2) => {
+      assert.equal(r2.ok, true);
+      assert.ok(called, 'https should open');
+      console.log('ok  shell-safe openExternal whitelist');
+    });
+  });
+}
+
+function testAgentExports() {
+  const { createAgent } = require(path.join(root, 'electron', 'agent.js'));
+  const agent = createAgent({
+    getConfig: () => ({}),
+    workspaceRoot: root,
+    emit: () => {},
+  });
+  assert.equal(typeof agent.run, 'function');
+  assert.equal(typeof agent.stop, 'function');
+  assert.equal(typeof agent.reapTracked, 'function');
+  assert.equal(typeof agent.listTrackedPids, 'function');
+  assert.deepEqual(agent.listTrackedPids(), []);
+  agent.reapTracked();
+  console.log('ok  agent stop/reap exports');
+}
+
 try {
   testCompress();
   testExtractJson();
@@ -297,7 +355,15 @@ try {
   testOutlineExtract();
   testDiffHunks();
   testToolsSearchExports();
-  console.log('\nAll unit tests passed');
+  testAgentExports();
+  Promise.resolve(testShellSafe())
+    .then(() => {
+      console.log('\nAll unit tests passed');
+    })
+    .catch((err) => {
+      console.error('FAIL', err);
+      process.exit(1);
+    });
 } catch (err) {
   console.error('FAIL', err);
   process.exit(1);

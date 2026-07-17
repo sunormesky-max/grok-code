@@ -17,20 +17,78 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
    * @type {Set<string>}
    */
   const intentionalStops = new Set();
+  /**
+   * PIDs we spawned (survives map delete after kill) — reaped on stop / quit.
+   * @type {Set<number>}
+   */
+  const trackedPids = new Set();
 
-  function killProc(child) {
-    if (!child || child.killed) return;
+  function killPidTree(pid) {
+    if (!pid || pid <= 0) return;
     try {
-      if (process.platform === 'win32' && child.pid) {
-        spawn('taskkill', ['/pid', String(child.pid), '/T', '/F'], {
+      if (process.platform === 'win32') {
+        spawn('taskkill', ['/pid', String(pid), '/T', '/F'], {
           windowsHide: true,
           stdio: 'ignore',
         });
       } else {
-        child.kill('SIGTERM');
+        try {
+          process.kill(pid, 'SIGTERM');
+        } catch {
+          /* already dead */
+        }
+        setTimeout(() => {
+          try {
+            process.kill(pid, 'SIGKILL');
+          } catch {
+            /* ignore */
+          }
+        }, 1200);
       }
     } catch {
       /* ignore */
+    }
+  }
+
+  function killProc(child) {
+    if (!child) return;
+    const pid = child.pid;
+    if (pid) trackedPids.add(pid);
+    try {
+      if (process.platform === 'win32' && pid) {
+        killPidTree(pid);
+      } else if (!child.killed) {
+        try {
+          child.kill('SIGTERM');
+        } catch {
+          /* ignore */
+        }
+        setTimeout(() => {
+          try {
+            if (!child.killed) child.kill('SIGKILL');
+          } catch {
+            /* ignore */
+          }
+        }, 1200);
+      }
+    } catch {
+      /* ignore */
+    }
+    // Second pass: tree may respawn helpers briefly after first taskkill
+    if (pid) {
+      setTimeout(() => killPidTree(pid), 400);
+      setTimeout(() => {
+        killPidTree(pid);
+        trackedPids.delete(pid);
+      }, 1600);
+    }
+  }
+
+  /** Force-kill every PID we ever spawned that may still be alive */
+  function reapTracked() {
+    for (const pid of [...trackedPids]) {
+      killPidTree(pid);
+      trackedPids.delete(pid);
     }
   }
 
@@ -49,6 +107,8 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
       killProc(child);
       children.delete(id);
     }
+    // Catch orphans not currently mapped (race after crash mid-spawn)
+    reapTracked();
   }
 
   function isRunning(taskId) {
@@ -57,6 +117,10 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
 
   function listRunning() {
     return [...children.keys()];
+  }
+
+  function listTrackedPids() {
+    return [...trackedPids];
   }
 
   function takeIntentionalStop(taskId) {
@@ -286,6 +350,7 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
       }
 
       children.set(taskId, child);
+      if (child.pid) trackedPids.add(child.pid);
       try {
         child.stdout.setEncoding('utf8');
       } catch {
@@ -615,7 +680,7 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
     });
   }
 
-  return { run, stop, isRunning, listRunning };
+  return { run, stop, isRunning, listRunning, listTrackedPids, reapTracked };
 }
 
 module.exports = { createAgent };

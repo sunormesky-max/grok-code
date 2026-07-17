@@ -67,6 +67,7 @@ Living plan for the GrokCode open-source ecosystem. Order may change based on co
 - [x] Plan → Craft execute chain (v1.9.4)
 - [x] Real-time stream (no black box) (v1.9.6)
 - [x] **Goal mode** + LiveBatcher perf + arch doc (v1.10.0)
+- [x] openExternal whitelist · orphan grok reap · Ask YOLO hard-off (v1.10.2)
 
 ## Now (UI / experience)
 
