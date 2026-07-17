@@ -33,7 +33,8 @@ GrokCode is a thin **desktop control plane** over the local **Grok Build CLI**.
                             │   headless streaming-json fallback)
 ┌───────────────────────────▼──────────────────────────────┐
 │ grok CLI  (user install)                                 │
-│  --prompt-file · --cwd · streaming-json · --resume       │
+│  primary: grok agent stdio (ACP session/update + tools)  │
+│  fallback: --prompt-file streaming-json (text only)      │
 │  --always-approve · MCP · Skills · same as TUI           │
 └──────────────────────────────────────────────────────────┘
 ```
