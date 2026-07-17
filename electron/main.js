@@ -168,7 +168,17 @@ function reportIfEnabled(err, extra) {
   }
 }
 
+/**
+ * Context compress for agent prompt.
+ * Always builds heuristic immediately. LLM enrich (if enabled) is budgeted so a
+ * slow/walled xAI call cannot hold spawn for the full TIMEOUT_MS.
+ *
+ * @param {object} [opts.onProgress] (phase, detail) => void
+ * @param {number} [opts.llmBudgetMs] max wait for LLM enrich (default 3500)
+ */
 async function compressWithMode(messages, opts = {}) {
+  const onProgress = typeof opts.onProgress === 'function' ? opts.onProgress : null;
+  onProgress?.('compress', '启发式压缩…');
   let context = compressContext(messages, {
     prev: opts.prevContext || {},
     projectName: opts.projectName || '',
@@ -181,15 +191,37 @@ async function compressWithMode(messages, opts = {}) {
   const mode = opts.contextMode || store.get('contextMode') || 'heuristic';
   if (mode === 'llm') {
     const cfg = getConfig();
-    context = await enrichContextWithLlm(context, {
-      apiKey: cfg.apiKey,
-      model: opts.llmModel || cfg.model || undefined,
-      projectName: opts.projectName,
-      taskTitle: opts.taskTitle,
-    });
+    const budget = Math.max(800, Number(opts.llmBudgetMs) || 3500);
+    onProgress?.('compress', `LLM 摘要（≤${Math.round(budget / 1000)}s）…`);
+    try {
+      const enriched = await Promise.race([
+        enrichContextWithLlm(context, {
+          apiKey: cfg.apiKey,
+          model: opts.llmModel || cfg.model || undefined,
+          projectName: opts.projectName,
+          taskTitle: opts.taskTitle,
+        }),
+        new Promise((_, reject) =>
+          setTimeout(() => reject(new Error(`LLM 摘要超时 ${budget}ms`)), budget)
+        ),
+      ]);
+      context = enriched;
+    } catch (err) {
+      // Keep heuristic prompt so agent can start; mark why LLM was skipped
+      context = {
+        ...context,
+        mode: 'heuristic',
+        llm: {
+          used: false,
+          reason: err?.message || String(err),
+          budgetMs: budget,
+        },
+      };
+    }
   } else {
     context.mode = 'heuristic';
   }
+  onProgress?.('compress', '压缩完成');
   return context;
 }
 
@@ -947,6 +979,18 @@ ipcMain.handle('agent:run', async (_e, payload) => {
   const turns = Array.isArray(payload?.turns) ? payload.turns : [];
   const lastStopped = Boolean(payload?.lastStopped || payload?.isContinue);
 
+  // Immediate UI feedback — before compress / spawn (eliminates silent wait)
+  const tRun0 = Date.now();
+  const emitPrep = (phase, detail) => {
+    try {
+      emit('agent:phase', { phase, detail, taskId: tid, projectId });
+      emit('agent:status', { status: phase, detail, taskId: tid, projectId });
+    } catch {
+      /* ignore */
+    }
+  };
+  emitPrep('boot', '准备上下文…');
+
   let context;
   try {
     context = await compressWithMode(history, {
@@ -958,6 +1002,9 @@ ipcMain.handle('agent:run', async (_e, payload) => {
       turns,
       changedFiles,
       lastStopped,
+      // Never block spawn for full LLM timeout (default 25s) — budget ~3.5s
+      llmBudgetMs: 3500,
+      onProgress: (phase, detail) => emitPrep(phase || 'compress', detail || ''),
     });
   } catch (err) {
     context = compressContext(history, {
@@ -1059,12 +1106,18 @@ ipcMain.handle('agent:run', async (_e, payload) => {
     _maxTurnsOverride: maxTurnsOverride,
   };
 
+  emitPrep(
+    'boot',
+    `启动 Agent…（准备 ${Date.now() - tRun0}ms）`
+  );
+
   try {
     const result = await p.agent.run({
       message: fullPrompt,
       sessionId: effectiveSession,
       signal: ac.signal,
       taskId: tid,
+      prepMs: Date.now() - tRun0,
     });
     if (result?.resumedFallback) {
       setTaskSession(p.path, tid, null);

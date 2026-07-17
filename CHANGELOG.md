@@ -11,6 +11,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 - See [ROADMAP.md](ROADMAP.md)
 
+## [1.10.6] — 2026-07-17
+
+### Fix — kill pre-stream silence (compress + ACP handshake)
+
+Diagnosis (full pipeline review):
+1. `compressWithMode` awaited LLM enrich **before** spawn (up to ~25s, no progress events).
+2. ACP `initialize → session/new|load → prompt` was a black-box boot with no phased status.
+3. Streaming path itself was OK after first token; silence felt like "not streaming".
+
+Changes:
+- **Compress**: heuristic always first; LLM enrich budgeted to **3.5s** then fall back to heuristic (prompt never waits full API timeout).
+- **Prep phases**: emit `agent:phase` from the moment of Send (准备上下文 → 压缩 → 启动 Agent).
+- **ACP handshake phases**: initialize / session/load|new / 等待首包, with `FIRST_TOKEN` + timing lines in `grokcode-stream.log`.
+
 ## [1.10.5] — 2026-07-17
 
 ### Fix — ACP session/load history replay made UI look blank

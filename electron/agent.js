@@ -11,6 +11,13 @@ const {
   slimToolArgs,
   safeIpc,
 } = require('./acp-client');
+const {
+  isKnownHeadlessType,
+  createStreamState,
+  parseNdjsonLine,
+  reduceHeadlessEvent,
+  reduceNonJsonLine,
+} = require('./agent-stream');
 
 /**
  * Stream diagnostic log (async, batched — never block IPC hot path).
@@ -244,6 +251,7 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
     signal,
     taskId = 'default',
     _resumeRetried = false,
+    prepMs = 0,
   }) {
     const cfg = getConfig();
     const cwd = workspaceRoot;
@@ -290,13 +298,22 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
         streamDebug(`task=${taskId} emit fail ${event}: ${err.message}`, { force: true });
       }
     };
+    const t0 = Date.now();
+    const mark = (label) => {
+      const ms = Date.now() - t0;
+      streamDebug(
+        `task=${taskId} timing ${label} +${ms}ms prep=${prepMs || 0}ms`,
+        { force: true }
+      );
+      return ms;
+    };
     emitT('agent:phase', {
       phase: 'boot',
-      detail: sessionId ? 'ACP resuming…' : 'ACP booting…',
+      detail: sessionId ? 'spawn ACP（resume）…' : 'spawn ACP…',
     });
     emitT('agent:status', {
       status: 'boot',
-      detail: sessionId ? 'ACP resuming…' : 'ACP booting…',
+      detail: sessionId ? 'spawn ACP（resume）…' : 'spawn ACP…',
     });
     emitT('agent:cli', {
       binary: grokBin,
@@ -325,8 +342,22 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
       let numTurns = 0;
       let textChunks = 0;
       let thoughtChunks = 0;
+      let firstTokenAt = 0;
       /** @type {Set<string>} */
       const openTools = new Set();
+      const noteFirstToken = (kind) => {
+        if (firstTokenAt) return;
+        firstTokenAt = Date.now();
+        const sinceSpawn = firstTokenAt - t0;
+        streamDebug(
+          `task=${taskId} FIRST_TOKEN kind=${kind} sinceSpawn=${sinceSpawn}ms prep=${prepMs || 0}ms totalSilent=${sinceSpawn + (prepMs || 0)}ms`,
+          { force: true }
+        );
+        setPhase(
+          kind === 'tool' ? 'tool' : kind === 'thought' ? 'thinking' : 'streaming',
+          `首包 ${sinceSpawn}ms`
+        );
+      };
 
       const STREAM_IPC_MS = 16;
       let pendingTextPayload = null;
@@ -458,6 +489,7 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
             if (chunk) finalText += chunk;
             textChunks += 1;
             if (textChunks === 1) {
+              noteFirstToken('text');
               streamDebug(
                 `task=${taskId} acp first text chunk len=${chunk.length} total=${finalText.length}`,
                 { force: true }
@@ -486,6 +518,7 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
             if (chunk) thoughtText += chunk;
             thoughtChunks += 1;
             if (thoughtChunks === 1) {
+              noteFirstToken('thought');
               streamDebug(
                 `task=${taskId} acp first thought chunk len=${chunk.length}`,
                 { force: true }
@@ -512,6 +545,7 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
             if (!openTools.has(info.id)) {
               openTools.add(info.id);
               toolDepth += 1;
+              if (textChunks === 0 && thoughtChunks === 0) noteFirstToken('tool');
               emitT('agent:tool_start', {
                 id: info.id,
                 name: info.name,
@@ -579,11 +613,13 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
       }
       // session id filled after new/load — stop() cancel uses it when present
 
+      mark('spawned');
       streamDebug(
-        `=== RUN start task=${taskId} transport=acp pid=${client.pid || '?'} cwd=${cwd} resume=${sessionId || '-'} bin=${grokBin}`,
+        `=== RUN start task=${taskId} transport=acp pid=${client.pid || '?'} cwd=${cwd} resume=${sessionId || '-'} bin=${grokBin} prepMs=${prepMs || 0}`,
         { force: true }
       );
       streamDebug(`task=${taskId} acp-args=${acpArgs.join(' ')}`, { force: true });
+      setPhase('boot', 'ACP initialize…');
 
       const onAbort = () => {
         intentionalStops.add(String(taskId));
@@ -626,8 +662,10 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
 
       (async () => {
         try {
+          setPhase('boot', 'ACP initialize…');
           await client.initialize();
-          setPhase('boot', 'session…');
+          mark('initialized');
+          setPhase('boot', sessionId ? 'session/load…' : 'session/new…');
 
           const meta = {};
           if (rules) meta.rules = String(rules);
@@ -638,6 +676,7 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
           if (sessionId) {
             try {
               sess = await client.loadSession(sessionId, cwd, meta);
+              mark('session_loaded');
             } catch (loadErr) {
               streamDebug(
                 `task=${taskId} session/load failed: ${loadErr.message}; new session`,
@@ -646,18 +685,23 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
               if (!_resumeRetried) {
                 // one soft retry as new session
               }
+              setPhase('boot', 'session/new（load 失败）…');
               sess = await client.newSession(cwd, meta);
+              mark('session_new_after_load_fail');
             }
           } else {
             sess = await client.newSession(cwd, meta);
+            mark('session_new');
           }
 
           newSessionId = sess?.sessionId || sess?.session_id || newSessionId;
           if (client.child) client.child.__acpSessionId = newSessionId;
-          setPhase('running', 'prompt…');
+          setPhase('running', '已发送 prompt，等待首包…');
+          mark('prompt_send');
 
           const result = await client.prompt(newSessionId, message);
           if (settled) return;
+          mark('prompt_done');
 
           // Close any tools that never got completed updates
           for (const id of openTools) {
@@ -738,7 +782,7 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
           });
           setPhase('done', 'done');
           streamDebug(
-            `=== RUN end task=${taskId} transport=acp code=0 finalTextLen=${finalText.length} thoughtLen=${thoughtText.length} textChunks=${textChunks} thoughtChunks=${thoughtChunks} tools=${toolDepth}`,
+            `=== RUN end task=${taskId} transport=acp code=0 finalTextLen=${finalText.length} thoughtLen=${thoughtText.length} textChunks=${textChunks} thoughtChunks=${thoughtChunks} firstTokenMs=${firstTokenAt ? firstTokenAt - t0 : -1} totalMs=${Date.now() - t0} prepMs=${prepMs || 0}`,
             { force: true }
           );
           finish({
@@ -1107,147 +1151,37 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
         /* ignore */
       }
 
-      const pickChunk = (ev) => {
-        if (ev == null) return '';
-        if (typeof ev.data === 'string') return ev.data;
-        if (typeof ev.delta === 'string') return ev.delta;
-        if (typeof ev.text === 'string' && !ev.accumulated) return ev.text;
-        if (typeof ev.content === 'string') return ev.content;
-        if (Array.isArray(ev.content)) {
-          return ev.content
-            .map((c) => (typeof c === 'string' ? c : c?.text || c?.data || ''))
-            .join('');
+      /** Pure reducer state (agent-stream.js) — mirrors finalText/thoughtText locals. */
+      const streamState = createStreamState({ sessionId: newSessionId });
+
+      const applyStreamActions = (actions) => {
+        for (const a of actions) {
+          if (a.op === 'flush') {
+            flushStreamIpc();
+          } else if (a.op === 'phase') {
+            setPhase(a.phase, a.detail);
+          } else if (a.op === 'emit') {
+            if (a.channel === 'agent:text') {
+              emitTextStream(a.payload, Boolean(a.immediate));
+            } else if (a.channel === 'agent:thought') {
+              emitThoughtStream(a.payload, Boolean(a.immediate));
+            } else {
+              emitT(a.channel, a.payload);
+            }
+          }
         }
-        return '';
+        finalText = streamState.finalText;
+        thoughtText = streamState.thoughtText;
+        toolDepth = streamState.toolDepth;
+        if (streamState.sessionId) newSessionId = streamState.sessionId;
+        if (streamState.usage) usage = streamState.usage;
+        if (streamState.stopReason != null) stopReason = streamState.stopReason;
+        if (streamState.numTurns) numTurns = streamState.numTurns;
       };
 
       const handleEvent = (ev) => {
-        if (!ev || typeof ev !== 'object') return;
-        const type = String(ev.type || '').toLowerCase();
-
-        // Session id may appear mid-stream
-        if (ev.sessionId && typeof ev.sessionId === 'string') {
-          newSessionId = ev.sessionId;
-        }
-
-        if (
-          type === 'text' ||
-          type === 'message' ||
-          type === 'assistant' ||
-          type === 'content' ||
-          type === 'response_text' ||
-          type === 'output_text'
-        ) {
-          const chunk = pickChunk(ev);
-          // Accumulated full text from CLI
-          if (
-            typeof ev.text === 'string' &&
-            ev.text.length > finalText.length &&
-            !ev.data &&
-            !ev.delta &&
-            (ev.accumulated || ev.full)
-          ) {
-            finalText = ev.text;
-          } else if (
-            typeof ev.text === 'string' &&
-            ev.text.length > finalText.length &&
-            !ev.data &&
-            !ev.delta
-          ) {
-            // Some builds send full text each time
-            if (ev.text.startsWith(finalText)) finalText = ev.text;
-            else if (chunk) finalText += chunk;
-            else finalText = ev.text;
-          } else if (chunk) {
-            finalText += chunk;
-          }
-          emitTextStream({
-            text: finalText,
-            delta: chunk || '',
-            partial: true,
-            phase: 'streaming',
-          });
-          if (toolDepth <= 0) setPhase('streaming', 'speaking…');
-        } else if (
-          type === 'thought' ||
-          type === 'reasoning' ||
-          type === 'thinking' ||
-          type === 'reasoning_text'
-        ) {
-          const chunk = pickChunk(ev);
-          if (chunk) thoughtText += chunk;
-          else if (typeof ev.text === 'string' && ev.text.length > thoughtText.length) {
-            thoughtText = ev.text;
-          }
-          emitThoughtStream({
-            text: thoughtText,
-            delta: chunk || '',
-            phase: 'thinking',
-          });
-          if (toolDepth <= 0) setPhase('thinking', 'thinking…');
-        } else if (
-          type === 'tool' ||
-          type === 'tool_call' ||
-          type === 'tool_start' ||
-          type === 'tool_use' ||
-          type === 'function_call'
-        ) {
-          // Flush stream before tool so chat order is correct
-          flushStreamIpc();
-          toolDepth += 1;
-          const name = ev.name || ev.tool || ev.function?.name || 'tool';
-          emitT('agent:tool_start', {
-            id: ev.id || ev.tool_call_id || ev.call_id || `tool-${Date.now()}`,
-            name,
-            args: ev.args || ev.input || ev.function?.arguments || {},
-          });
-          setPhase('tool', `${name}…`);
-        } else if (
-          type === 'tool_result' ||
-          type === 'tool_end' ||
-          type === 'tool_result_end' ||
-          type === 'function_result'
-        ) {
-          flushStreamIpc();
-          toolDepth = Math.max(0, toolDepth - 1);
-          emitT('agent:tool_end', {
-            id: ev.id || ev.tool_call_id || ev.call_id || '',
-            name: ev.name || ev.tool || 'tool',
-            args: ev.args || {},
-            result:
-              typeof ev.result === 'string'
-                ? ev.result
-                : JSON.stringify(ev.result ?? ev.output ?? ''),
-            ok: ev.ok !== false && ev.is_error !== true,
-          });
-          if (toolDepth <= 0 && finalText) setPhase('streaming', 'speaking…');
-          else if (toolDepth <= 0) setPhase('running', 'working…');
-        } else if (type === 'end' || type === 'result' || type === 'done') {
-          if (ev.sessionId) newSessionId = ev.sessionId;
-          if (ev.usage) usage = ev.usage;
-          if (ev.stopReason) stopReason = ev.stopReason;
-          if (typeof ev.num_turns === 'number') numTurns = ev.num_turns;
-          if (typeof ev.numTurns === 'number') numTurns = ev.numTurns;
-          if (typeof ev.text === 'string' && ev.text.length > finalText.length) {
-            finalText = ev.text;
-          }
-          flushStreamIpc();
-          if (finalText) {
-            emitTextStream(
-              { text: finalText, delta: '', partial: false },
-              true
-            );
-          }
-          if (usage) emitT('agent:usage', { usage, stopReason, numTurns, sessionId: newSessionId });
-          setPhase('done', 'done');
-        } else if (type === 'error') {
-          flushStreamIpc();
-          emitT('agent:error', { error: ev.message || ev.error || 'Grok CLI error' });
-        } else if (type === 'max_turns_reached') {
-          setPhase('max_turns', 'max turns');
-        } else if (type === 'status' && ev.status) {
-          setPhase(String(ev.status), ev.detail || ev.message || String(ev.status));
-        }
+        const { actions } = reduceHeadlessEvent(streamState, ev);
+        applyStreamActions(actions);
       };
 
       let lineSeq = 0;
@@ -1278,61 +1212,29 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
         return `type=${type} known=${recognizedFlag ? 1 : 0} keys=[${keys}] sample="${sample}" finalTextLen=${finalText.length} thoughtLen=${thoughtText.length} toolDepth=${toolDepth}`;
       };
 
-      const isKnownType = (type) =>
-        [
-          'text',
-          'message',
-          'assistant',
-          'content',
-          'response_text',
-          'output_text',
-          'thought',
-          'reasoning',
-          'thinking',
-          'reasoning_text',
-          'tool',
-          'tool_call',
-          'tool_start',
-          'tool_use',
-          'function_call',
-          'tool_result',
-          'tool_end',
-          'tool_result_end',
-          'function_result',
-          'end',
-          'result',
-          'done',
-          'error',
-          'max_turns_reached',
-          'status',
-        ].includes(type);
-
       const consumeLine = (line) => {
-        const trimmed = line.trim();
-        if (!trimmed) return;
+        const parsed = parseNdjsonLine(line);
+        if (parsed.kind === 'empty') return;
         lineSeq += 1;
-        try {
-          const ev = JSON.parse(trimmed);
-          const type = String(ev?.type || '').toLowerCase();
-          const known = isKnownType(type);
-          if (known) recognized += 1;
-          else unrecognized += 1;
-          streamDebug(
-            `task=${taskId} line#${lineSeq} ${summarizeEvent(ev, known)}${
-              !known ? ` raw=${trimmed.slice(0, 240)}` : ''
-            }`
-          );
-          handleEvent(ev);
-        } catch {
+        if (parsed.kind === 'non_json') {
           nonJson += 1;
           streamDebug(
-            `task=${taskId} line#${lineSeq} NON_JSON len=${trimmed.length} raw=${trimmed.slice(0, 200)}`
+            `task=${taskId} line#${lineSeq} NON_JSON len=${parsed.text.length} raw=${parsed.text.slice(0, 200)}`
           );
-          // Non-JSON fallback: treat as plain text stream
-          finalText += (finalText && !finalText.endsWith('\n') ? '\n' : '') + trimmed;
-          emitTextStream({ text: finalText, delta: trimmed, partial: true });
-          setPhase('streaming', 'speaking…');
+          const { actions } = reduceNonJsonLine(streamState, parsed.text);
+          applyStreamActions(actions);
+          return;
         }
+        const type = String(parsed.event?.type || '').toLowerCase();
+        const known = isKnownHeadlessType(type);
+        if (known) recognized += 1;
+        else unrecognized += 1;
+        streamDebug(
+          `task=${taskId} line#${lineSeq} ${summarizeEvent(parsed.event, known)}${
+            !known ? ` raw=${JSON.stringify(parsed.event).slice(0, 240)}` : ''
+          }`
+        );
+        handleEvent(parsed.event);
       };
 
       streamDebug(
