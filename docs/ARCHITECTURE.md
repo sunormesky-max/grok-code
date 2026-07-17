@@ -29,7 +29,8 @@ GrokCode is a thin **desktop control plane** over the local **Grok Build CLI**.
 │  electron/context-compress.js  L0–L3 heuristics          │
 │  electron/mcp-skills.js  grok mcp + ~/.grok/skills       │
 └───────────────────────────┬──────────────────────────────┘
-                            │ child_process (streaming-json)
+                            │ child_process (ACP stdio primary;
+                            │   headless streaming-json fallback)
 ┌───────────────────────────▼──────────────────────────────┐
 │ grok CLI  (user install)                                 │
 │  --prompt-file · --cwd · streaming-json · --resume       │

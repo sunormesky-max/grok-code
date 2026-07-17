@@ -11,6 +11,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 - See [ROADMAP.md](ROADMAP.md)
 
+## [1.10.4] — 2026-07-17
+
+### Fix — wire real agent transport (ACP), not headless-only stream
+
+**Root cause:** Grok headless `--output-format streaming-json` officially emits only `text` / `thought` / `end` (plus error). **Tool calls and execution progress are never on that stream.** GrokCode was spawning headless and expecting `tool_*` events that the CLI never sends — so the UI looked black-box / dumped a final reply after silent tool work.
+
+**Fix:**
+- Primary transport is now **ACP**: `grok agent --always-approve --no-leader stdio`
+- Maps `session/update` → UI: `agent_message_chunk` → stream, `agent_thought_chunk` → thought, `tool_call` / `tool_call_update` → tool start/end
+- Auto-answers `session/request_permission` when YOLO/always-approve
+- Headless `streaming-json` kept as emergency fallback (`GROKCODE_AGENT_TRANSPORT=headless`)
+
 ## [1.10.3] — 2026-07-17
 
 ### Fix — real-time stream paint (no sudden full dump)
