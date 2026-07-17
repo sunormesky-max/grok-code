@@ -8180,8 +8180,9 @@ const StreamFair = {
   BG_MS: 100,
   TAB_MS: 280,
   LIVE_BG_MS: 400,
-  LIVE_MIRROR_MS: 48,
-  MAX_PAINT_PER_TICK: 3,
+  /** Live mirror ~30fps is enough; chat body still paints every frame via markStream */
+  LIVE_MIRROR_MS: 32,
+  MAX_PAINT_PER_TICK: 4,
   /** @type {Map<string, { task: object, streamDirty: boolean, thoughtDirty: boolean, lastStream: number, lastThought: number }>} */
   q: new Map(),
   raf: 0,
@@ -8534,18 +8535,23 @@ function bindAgentEvents() {
       const task = taskFromEvent(d);
       if (!task) return;
       const prevLen = (task.streamBuf || '').length;
+      // Prefer full text snapshot (main coalesces ~60fps); delta only as fallback
       if (typeof d.text === 'string') task.streamBuf = d.text;
       else if (d.delta) task.streamBuf = (task.streamBuf || '') + d.delta;
       if (task.running) setTaskPhase(task, 'streaming', 'speaking…');
-      // Always schedule fair paint; active is zero-delay next frame
+      // Active: paint every frame with latest buf (true stream). Never wait for done.
       scheduleStreamPaint(task);
       if (isActiveTask(task) && task.running) {
-        // First token: immediate paint so UI never stays blank until done
         if (prevLen === 0 && task.streamBuf) {
           StreamFair.flushTask(task);
           setLivePhase('streaming…', `${task.title} · ${task.streamBuf.length} 字`);
         } else {
-          setLivePhase('streaming…', `${task.title} · ${(task.streamBuf || '').length} 字`);
+          // Throttle status label only — body paints via StreamFair/rAF
+          const now = performance.now();
+          if (!task._lastStreamPhaseAt || now - task._lastStreamPhaseAt > 100) {
+            task._lastStreamPhaseAt = now;
+            setLivePhase('streaming…', `${task.title} · ${(task.streamBuf || '').length} 字`);
+          }
           StreamFair.scheduleLiveMirror(task);
         }
       }
@@ -8559,7 +8565,11 @@ function bindAgentEvents() {
       if (task.running) setTaskPhase(task, 'thinking', 'thinking…');
       scheduleThoughtPaint(task);
       if (isActiveTask(task) && task.running) {
-        setLivePhase('thinking…', `${task.title} · ${(task.thoughtBuf || '').length} 字`);
+        const now = performance.now();
+        if (!task._lastThoughtPhaseAt || now - task._lastThoughtPhaseAt > 100) {
+          task._lastThoughtPhaseAt = now;
+          setLivePhase('thinking…', `${task.title} · ${(task.thoughtBuf || '').length} 字`);
+        }
         if (prevLen === 0 && task.thoughtBuf) StreamFair.flushTask(task);
         else StreamFair.scheduleLiveMirror(task);
       }
@@ -9950,8 +9960,15 @@ function upsertAssistant(text, streaming, task) {
     body.classList.remove('md');
     body.classList.add('stream-body', 'is-streaming');
     const next = text || '';
-    // Coalesced full replace (rAF); still cheap vs markdown reparse
-    if (body.textContent !== next) body.textContent = next;
+    // Prefer append when prefix matches — avoids full string rewrite every frame
+    const prev = body.textContent || '';
+    if (prev === next) {
+      /* no-op */
+    } else if (next.startsWith(prev) && next.length - prev.length < 400) {
+      body.appendChild(document.createTextNode(next.slice(prev.length)));
+    } else {
+      body.textContent = next;
+    }
     if (role) {
       const phase = task.phase === 'tool' ? 'tool' : task.phase === 'thinking' ? 'think' : 'stream';
       role.textContent =

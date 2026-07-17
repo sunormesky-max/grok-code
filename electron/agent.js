@@ -5,27 +5,56 @@ const path = require('path');
 const { resolveGrokBinary } = require('./grok-cli');
 
 /**
- * Temporary stream diagnostic log (diagnose black-box / event shapes).
- * File: %TEMP%\grokcode-stream.log  — remove after investigation.
- * Env GROKCODE_STREAM_DEBUG=0 disables.
+ * Stream diagnostic log (async, batched — never block IPC hot path).
+ * File: %TEMP%\grokcode-stream.log
+ * Env GROKCODE_STREAM_DEBUG=0 disables; =full logs every NDJSON line.
  */
 const STREAM_DEBUG =
   process.env.GROKCODE_STREAM_DEBUG !== '0' && process.env.GROKCODE_STREAM_DEBUG !== 'false';
+const STREAM_DEBUG_FULL = process.env.GROKCODE_STREAM_DEBUG === 'full';
 const STREAM_DEBUG_PATH = path.join(os.tmpdir(), 'grokcode-stream.log');
 const STREAM_DEBUG_MAX = 8_000_000; // ~8MB rotate truncate
+/** @type {string[]} */
+const streamDebugBuf = [];
+let streamDebugTimer = null;
+let streamDebugBytes = 0;
+let streamDebugSeq = 0;
 
-function streamDebug(line) {
+function streamDebug(line, opts = {}) {
   if (!STREAM_DEBUG) return;
+  streamDebugSeq += 1;
+  const force = Boolean(opts.force);
+  // Sample by default so diagnosis stays cheap; full mode keeps every line.
+  if (
+    !force &&
+    !STREAM_DEBUG_FULL &&
+    streamDebugSeq > 40 &&
+    streamDebugSeq % 20 !== 0 &&
+    !/RUN |NON_JSON|stderr|type=(tool|end|error|result|done)/i.test(line)
+  ) {
+    return;
+  }
   try {
-    const ts = new Date().toISOString();
-    const row = `[${ts}] ${line}\n`;
-    if (fs.existsSync(STREAM_DEBUG_PATH)) {
-      const st = fs.statSync(STREAM_DEBUG_PATH);
-      if (st.size > STREAM_DEBUG_MAX) {
-        fs.writeFileSync(STREAM_DEBUG_PATH, `[${ts}] --- log rotated ---\n`);
+    streamDebugBuf.push(`[${new Date().toISOString()}] ${line}\n`);
+    if (streamDebugBuf.length > 400) streamDebugBuf.splice(0, streamDebugBuf.length - 200);
+    if (streamDebugTimer) return;
+    streamDebugTimer = setTimeout(() => {
+      streamDebugTimer = null;
+      const batch = streamDebugBuf.splice(0, streamDebugBuf.length).join('');
+      if (!batch) return;
+      const write = () => {
+        fs.appendFile(STREAM_DEBUG_PATH, batch, 'utf8', () => {});
+        streamDebugBytes += batch.length;
+      };
+      if (streamDebugBytes > STREAM_DEBUG_MAX) {
+        streamDebugBytes = 0;
+        fs.writeFile(STREAM_DEBUG_PATH, `[${new Date().toISOString()}] --- log rotated ---\n`, 'utf8', () =>
+          write()
+        );
+      } else {
+        write();
       }
-    }
-    fs.appendFileSync(STREAM_DEBUG_PATH, row, 'utf8');
+    }, 40);
   } catch {
     /* ignore disk errors */
   }
@@ -289,6 +318,78 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
         emitT('agent:status', { status: phase, detail: detail || phase });
       };
 
+      /**
+       * Coalesce text/thought IPC to ~60fps.
+       * Sending full finalText on every CLI token floods Electron IPC; the
+       * renderer then processes a backlog in one turn and paints one huge dump.
+       */
+      const STREAM_IPC_MS = 16;
+      let pendingTextPayload = null;
+      let pendingThoughtPayload = null;
+      let textIpcTimer = null;
+      let thoughtIpcTimer = null;
+
+      const emitTextStream = (payload, immediate = false) => {
+        pendingTextPayload = payload;
+        if (immediate) {
+          if (textIpcTimer) {
+            clearTimeout(textIpcTimer);
+            textIpcTimer = null;
+          }
+          emitT('agent:text', pendingTextPayload);
+          pendingTextPayload = null;
+          return;
+        }
+        if (textIpcTimer) return;
+        textIpcTimer = setTimeout(() => {
+          textIpcTimer = null;
+          if (pendingTextPayload) {
+            emitT('agent:text', pendingTextPayload);
+            pendingTextPayload = null;
+          }
+        }, STREAM_IPC_MS);
+      };
+
+      const emitThoughtStream = (payload, immediate = false) => {
+        pendingThoughtPayload = payload;
+        if (immediate) {
+          if (thoughtIpcTimer) {
+            clearTimeout(thoughtIpcTimer);
+            thoughtIpcTimer = null;
+          }
+          emitT('agent:thought', pendingThoughtPayload);
+          pendingThoughtPayload = null;
+          return;
+        }
+        if (thoughtIpcTimer) return;
+        thoughtIpcTimer = setTimeout(() => {
+          thoughtIpcTimer = null;
+          if (pendingThoughtPayload) {
+            emitT('agent:thought', pendingThoughtPayload);
+            pendingThoughtPayload = null;
+          }
+        }, STREAM_IPC_MS);
+      };
+
+      const flushStreamIpc = () => {
+        if (textIpcTimer) {
+          clearTimeout(textIpcTimer);
+          textIpcTimer = null;
+        }
+        if (thoughtIpcTimer) {
+          clearTimeout(thoughtIpcTimer);
+          thoughtIpcTimer = null;
+        }
+        if (pendingTextPayload) {
+          emitT('agent:text', pendingTextPayload);
+          pendingTextPayload = null;
+        }
+        if (pendingThoughtPayload) {
+          emitT('agent:thought', pendingThoughtPayload);
+          pendingThoughtPayload = null;
+        }
+      };
+
       const finish = (result) => {
         if (settled) return;
         settled = true;
@@ -329,8 +430,9 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
       const onAbort = () => {
         // User stop: resolve cleanly with partial text (not an error path)
         stop(taskId);
+        flushStreamIpc();
         if (finalText) {
-          emitT('agent:text', { text: finalText, delta: '', partial: false });
+          emitTextStream({ text: finalText, delta: '', partial: false }, true);
         }
         emitT('agent:done', {
           text: finalText,
@@ -446,7 +548,7 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
           } else if (chunk) {
             finalText += chunk;
           }
-          emitT('agent:text', {
+          emitTextStream({
             text: finalText,
             delta: chunk || '',
             partial: true,
@@ -464,7 +566,7 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
           else if (typeof ev.text === 'string' && ev.text.length > thoughtText.length) {
             thoughtText = ev.text;
           }
-          emitT('agent:thought', {
+          emitThoughtStream({
             text: thoughtText,
             delta: chunk || '',
             phase: 'thinking',
@@ -477,6 +579,8 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
           type === 'tool_use' ||
           type === 'function_call'
         ) {
+          // Flush stream before tool so chat order is correct
+          flushStreamIpc();
           toolDepth += 1;
           const name = ev.name || ev.tool || ev.function?.name || 'tool';
           emitT('agent:tool_start', {
@@ -491,6 +595,7 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
           type === 'tool_result_end' ||
           type === 'function_result'
         ) {
+          flushStreamIpc();
           toolDepth = Math.max(0, toolDepth - 1);
           emitT('agent:tool_end', {
             id: ev.id || ev.tool_call_id || ev.call_id || '',
@@ -512,11 +617,18 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
           if (typeof ev.numTurns === 'number') numTurns = ev.numTurns;
           if (typeof ev.text === 'string' && ev.text.length > finalText.length) {
             finalText = ev.text;
-            emitT('agent:text', { text: finalText, delta: '', partial: false });
+          }
+          flushStreamIpc();
+          if (finalText) {
+            emitTextStream(
+              { text: finalText, delta: '', partial: false },
+              true
+            );
           }
           if (usage) emitT('agent:usage', { usage, stopReason, numTurns, sessionId: newSessionId });
           setPhase('done', 'done');
         } else if (type === 'error') {
+          flushStreamIpc();
           emitT('agent:error', { error: ev.message || ev.error || 'Grok CLI error' });
         } else if (type === 'max_turns_reached') {
           setPhase('max_turns', 'max turns');
@@ -605,7 +717,7 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
           );
           // Non-JSON fallback: treat as plain text stream
           finalText += (finalText && !finalText.endsWith('\n') ? '\n' : '') + trimmed;
-          emitT('agent:text', { text: finalText, delta: trimmed, partial: true });
+          emitTextStream({ text: finalText, delta: trimmed, partial: true });
           setPhase('streaming', 'speaking…');
         }
       };
@@ -665,8 +777,9 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
 
         const intentional = takeIntentionalStop(taskId) || Boolean(signal?.aborted);
         if (intentional) {
+          flushStreamIpc();
           if (finalText) {
-            emitT('agent:text', { text: finalText, delta: '', partial: false });
+            emitTextStream({ text: finalText, delta: '', partial: false }, true);
           }
           emitT('agent:done', {
             text: finalText,
@@ -741,6 +854,7 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
           }
           // Partial output after unexpected kill: treat as interrupted stop (keep text)
           if (isForcedKillExit(code)) {
+            flushStreamIpc();
             emitT('agent:done', {
               text: finalText,
               sessionId: newSessionId,
@@ -761,6 +875,7 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
             });
             return;
           }
+          flushStreamIpc();
           emitT('agent:done', {
             text: finalText,
             sessionId: newSessionId,
@@ -785,8 +900,9 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
           return;
         }
 
+        flushStreamIpc();
         if (finalText) {
-          emitT('agent:text', { text: finalText, delta: '', partial: false });
+          emitTextStream({ text: finalText, delta: '', partial: false }, true);
         }
         emitT('agent:done', {
           text: finalText,
