@@ -5,6 +5,33 @@ const path = require('path');
 const { resolveGrokBinary } = require('./grok-cli');
 
 /**
+ * Temporary stream diagnostic log (diagnose black-box / event shapes).
+ * File: %TEMP%\grokcode-stream.log  — remove after investigation.
+ * Env GROKCODE_STREAM_DEBUG=0 disables.
+ */
+const STREAM_DEBUG =
+  process.env.GROKCODE_STREAM_DEBUG !== '0' && process.env.GROKCODE_STREAM_DEBUG !== 'false';
+const STREAM_DEBUG_PATH = path.join(os.tmpdir(), 'grokcode-stream.log');
+const STREAM_DEBUG_MAX = 8_000_000; // ~8MB rotate truncate
+
+function streamDebug(line) {
+  if (!STREAM_DEBUG) return;
+  try {
+    const ts = new Date().toISOString();
+    const row = `[${ts}] ${line}\n`;
+    if (fs.existsSync(STREAM_DEBUG_PATH)) {
+      const st = fs.statSync(STREAM_DEBUG_PATH);
+      if (st.size > STREAM_DEBUG_MAX) {
+        fs.writeFileSync(STREAM_DEBUG_PATH, `[${ts}] --- log rotated ---\n`);
+      }
+    }
+    fs.appendFileSync(STREAM_DEBUG_PATH, row, 'utf8');
+  } catch {
+    /* ignore disk errors */
+  }
+}
+
+/**
  * GrokCode multi-task agent
  * 每个 taskId 可并行跑一个 grok CLI 进程，互不抢占。
  */
@@ -351,6 +378,14 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
 
       children.set(taskId, child);
       if (child.pid) trackedPids.add(child.pid);
+      streamDebug(
+        `=== RUN start task=${taskId} pid=${child.pid || '?'} cwd=${cwd} resume=${sessionId || '-'} bin=${grokBin}`
+      );
+      streamDebug(
+        `task=${taskId} args=${args
+          .map((a, i) => (args[i - 1] === '--prompt-file' ? '<prompt>' : a))
+          .join(' ')} log=${STREAM_DEBUG_PATH}`
+      );
       try {
         child.stdout.setEncoding('utf8');
       } catch {
@@ -490,12 +525,84 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
         }
       };
 
+      let lineSeq = 0;
+      let chunkSeq = 0;
+      let recognized = 0;
+      let unrecognized = 0;
+      let nonJson = 0;
+
+      const summarizeEvent = (ev, recognizedFlag) => {
+        const type = String(ev?.type || '').toLowerCase() || '(no-type)';
+        const keys = ev && typeof ev === 'object' ? Object.keys(ev).slice(0, 16).join(',') : '';
+        let sample = '';
+        try {
+          const raw =
+            typeof ev?.delta === 'string'
+              ? ev.delta
+              : typeof ev?.data === 'string'
+                ? ev.data
+                : typeof ev?.text === 'string'
+                  ? ev.text
+                  : typeof ev?.content === 'string'
+                    ? ev.content
+                    : '';
+          if (raw) sample = raw.replace(/\s+/g, ' ').slice(0, 80);
+        } catch {
+          /* ignore */
+        }
+        return `type=${type} known=${recognizedFlag ? 1 : 0} keys=[${keys}] sample="${sample}" finalTextLen=${finalText.length} thoughtLen=${thoughtText.length} toolDepth=${toolDepth}`;
+      };
+
+      const isKnownType = (type) =>
+        [
+          'text',
+          'message',
+          'assistant',
+          'content',
+          'response_text',
+          'output_text',
+          'thought',
+          'reasoning',
+          'thinking',
+          'reasoning_text',
+          'tool',
+          'tool_call',
+          'tool_start',
+          'tool_use',
+          'function_call',
+          'tool_result',
+          'tool_end',
+          'tool_result_end',
+          'function_result',
+          'end',
+          'result',
+          'done',
+          'error',
+          'max_turns_reached',
+          'status',
+        ].includes(type);
+
       const consumeLine = (line) => {
         const trimmed = line.trim();
         if (!trimmed) return;
+        lineSeq += 1;
         try {
-          handleEvent(JSON.parse(trimmed));
+          const ev = JSON.parse(trimmed);
+          const type = String(ev?.type || '').toLowerCase();
+          const known = isKnownType(type);
+          if (known) recognized += 1;
+          else unrecognized += 1;
+          streamDebug(
+            `task=${taskId} line#${lineSeq} ${summarizeEvent(ev, known)}${
+              !known ? ` raw=${trimmed.slice(0, 240)}` : ''
+            }`
+          );
+          handleEvent(ev);
         } catch {
+          nonJson += 1;
+          streamDebug(
+            `task=${taskId} line#${lineSeq} NON_JSON len=${trimmed.length} raw=${trimmed.slice(0, 200)}`
+          );
           // Non-JSON fallback: treat as plain text stream
           finalText += (finalText && !finalText.endsWith('\n') ? '\n' : '') + trimmed;
           emitT('agent:text', { text: finalText, delta: trimmed, partial: true });
@@ -503,8 +610,18 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
         }
       };
 
+      streamDebug(
+        `task=${taskId} listening stdout/stderr log=${STREAM_DEBUG_PATH}`
+      );
+
       child.stdout.on('data', (chunk) => {
-        stdoutBuf += typeof chunk === 'string' ? chunk : chunk.toString('utf8');
+        const s = typeof chunk === 'string' ? chunk : chunk.toString('utf8');
+        chunkSeq += 1;
+        stdoutBuf += s;
+        const hasNl = /\r?\n/.test(s);
+        streamDebug(
+          `task=${taskId} stdout#${chunkSeq} bytes=${s.length} hasNl=${hasNl ? 1 : 0} buf=${stdoutBuf.length}`
+        );
         let idx;
         while ((idx = stdoutBuf.search(/\r?\n/)) >= 0) {
           const nl = stdoutBuf[idx] === '\r' && stdoutBuf[idx + 1] === '\n' ? 2 : 1;
@@ -515,8 +632,13 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
       });
 
       child.stderr.on('data', (buf) => {
-        stderrBuf += buf.toString('utf8');
+        const s = buf.toString('utf8');
+        stderrBuf += s;
         if (stderrBuf.length > 40_000) stderrBuf = stderrBuf.slice(-40_000);
+        // Log first stderr slices (TUI leak detection)
+        streamDebug(
+          `task=${taskId} stderr bytes=${s.length} head=${s.replace(/\s+/g, ' ').slice(0, 160)}`
+        );
       });
 
       child.on('error', (err) => {
@@ -524,7 +646,15 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
       });
 
       child.on('close', (code) => {
-        if (stdoutBuf.trim()) consumeLine(stdoutBuf);
+        streamDebug(
+          `=== RUN end task=${taskId} code=${code} lines=${lineSeq} chunks=${chunkSeq} known=${recognized} unknown=${unrecognized} nonJson=${nonJson} finalTextLen=${finalText.length} thoughtLen=${thoughtText.length} pendingBuf=${stdoutBuf.length}`
+        );
+        if (stdoutBuf.trim()) {
+          streamDebug(
+            `task=${taskId} flush-pending-buf len=${stdoutBuf.length} head=${stdoutBuf.slice(0, 200).replace(/\s+/g, ' ')}`
+          );
+          consumeLine(stdoutBuf);
+        }
         stdoutBuf = '';
         if (settled) return;
 
