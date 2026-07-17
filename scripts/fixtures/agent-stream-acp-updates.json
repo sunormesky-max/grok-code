@@ -1,0 +1,18 @@
+[
+  { "sessionUpdate": "agent_thought_chunk", "content": { "text": "plan: fix login" } },
+  { "sessionUpdate": "agent_message_chunk", "content": { "text": "Checking " } },
+  {
+    "sessionUpdate": "tool_call",
+    "toolCallId": "call-1",
+    "title": "read_file",
+    "rawInput": { "path": "src/auth.js" }
+  },
+  {
+    "sessionUpdate": "tool_call_update",
+    "toolCallId": "call-1",
+    "title": "read_file",
+    "status": "completed",
+    "rawOutput": "export function login() {}"
+  },
+  { "sessionUpdate": "agent_message_chunk", "content": { "text": "auth.js looks fine." } }
+]

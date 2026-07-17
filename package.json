@@ -1,6 +1,6 @@
 {
   "name": "grok-code",
-  "version": "1.10.7",
+  "version": "1.10.8",
   "description": "Desktop coding agent powered by local Grok Build CLI — multi-project, multi-task, context inheritance, MCP & Skills",
   "main": "electron/main.js",
   "productName": "GrokCode",
@@ -34,7 +34,7 @@
     "catalog": "node scripts/build-catalog.js",
     "icons": "node scripts/gen-icons.js",
     "precheck": "node scripts/gen-icons.js",
-    "check": "node scripts/check.js && node scripts/test-unit.js && node scripts/build-catalog.js",
+    "check": "node scripts/check.js && node scripts/check-pack-requires.js && node scripts/test-unit.js && node scripts/build-catalog.js",
     "test": "node scripts/test-unit.js",
     "audit:official": "npm audit --registry=https://registry.npmjs.org/",
     "prepack": "node scripts/gen-icons.js",

@@ -11,6 +11,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 - See [ROADMAP.md](ROADMAP.md)
 
+## [1.10.8] — 2026-07-18
+
+### Fix — packaging integrity (prevent missing-module crashes)
+
+- **1.10.6 crash** was missing `agent-stream.js` in asar; **installed Program Files is still 1.10.6** until reinstall
+- Commit remaining pack modules: `ipc-channels.js`, `stream-scheduler.js` + renderer wiring
+- `scripts/check-pack-requires.js` fails CI if any electron `require('./…')` or index.html script is untracked
+
 ## [1.10.7] — 2026-07-17
 
 ### Fix — missing `agent-stream` module crashed installed app

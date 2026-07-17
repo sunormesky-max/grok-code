@@ -8240,13 +8240,68 @@ const StreamFair = {
     this.raf = 0;
     const now = performance.now();
     const activeId = window.TaskStore?.activeId || null;
-    let painted = 0;
+    const sched = window.GrokStreamScheduler;
 
-    const entries = [...this.q.values()].sort((a, b) => {
+    // Pure planner (stream-scheduler.js) drives fair order + throttle decisions
+    const raw = [...this.q.values()];
+    const planEntries = raw.map((e) => ({
+      id: e.task.id,
+      streamDirty: e.streamDirty,
+      thoughtDirty: e.thoughtDirty,
+      lastStream: e.lastStream,
+      lastThought: e.lastThought,
+      running: Boolean(e.task.running),
+    }));
+    const plan = sched
+      ? sched.planTick(planEntries, {
+          activeId,
+          now,
+          ACTIVE_MS: this.ACTIVE_MS,
+          BG_MS: this.BG_MS,
+          MAX_PAINT_PER_TICK: this.MAX_PAINT_PER_TICK,
+        })
+      : null;
+
+    if (plan) {
+      for (const id of plan.drop) this.q.delete(id);
+      for (const p of plan.paint) {
+        const e = this.q.get(p.id);
+        if (!e) continue;
+        if (p.kind === 'stream') {
+          e.streamDirty = false;
+          e.lastStream = now;
+          if (e.task.streamRaf) {
+            cancelAnimationFrame(e.task.streamRaf);
+            e.task.streamRaf = null;
+          }
+          upsertAssistant(e.task.streamBuf, true, e.task);
+          if (e.task.id === activeId) this.scheduleLiveMirror(e.task);
+        } else if (p.kind === 'thought') {
+          e.thoughtDirty = false;
+          e.lastThought = now;
+          if (e.task.thoughtRaf) {
+            cancelAnimationFrame(e.task.thoughtRaf);
+            e.task.thoughtRaf = null;
+          }
+          upsertThought(e.task.thoughtBuf, true, e.task);
+          if (e.task.id === activeId) this.scheduleLiveMirror(e.task);
+        }
+      }
+      for (const [id, e] of this.q) {
+        if (!e.streamDirty && !e.thoughtDirty && !e.task.running) this.q.delete(id);
+      }
+      if (plan.needMore || [...this.q.values()].some((e) => e.streamDirty || e.thoughtDirty)) {
+        this.kick();
+      }
+      return;
+    }
+
+    // Fallback if stream-scheduler.js failed to load
+    let painted = 0;
+    const entries = raw.sort((a, b) => {
       const aA = a.task.id === activeId ? 0 : 1;
       const bA = b.task.id === activeId ? 0 : 1;
       if (aA !== bA) return aA - bA;
-      // Fair: longest-waiting first among same priority
       const aWait = Math.min(
         a.streamDirty ? a.lastStream : Infinity,
         a.thoughtDirty ? a.lastThought : Infinity
@@ -8305,7 +8360,6 @@ const StreamFair = {
       }
     }
 
-    // Drop idle entries
     for (const [id, e] of this.q) {
       if (!e.streamDirty && !e.thoughtDirty && !e.task.running) this.q.delete(id);
     }

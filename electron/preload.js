@@ -1,4 +1,5 @@
 const { contextBridge, ipcRenderer } = require('electron');
+const { isAllowedRendererChannel } = require('./ipc-channels');
 
 contextBridge.exposeInMainWorld('grok', {
   platform: process.platform,
@@ -144,22 +145,7 @@ contextBridge.exposeInMainWorld('grok', {
   grokHome: () => ipcRenderer.invoke('paths:grokHome'),
 
   on: (channel, callback) => {
-    const allowed = [
-      'agent:status',
-      'agent:phase',
-      'agent:text',
-      'agent:thought',
-      'agent:tool_start',
-      'agent:tool_end',
-      'agent:usage',
-      'agent:error',
-      'agent:done',
-      'agent:cli',
-      'fs:changed',
-      'window:maximized',
-      'update:status',
-    ];
-    if (!allowed.includes(channel)) return () => {};
+    if (!isAllowedRendererChannel(channel)) return () => {};
     const handler = (_event, data) => callback(data);
     ipcRenderer.on(channel, handler);
     return () => ipcRenderer.removeListener(channel, handler);

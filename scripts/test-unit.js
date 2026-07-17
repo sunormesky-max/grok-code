@@ -341,8 +341,242 @@ function testAgentExports() {
   console.log('ok  agent stop/reap exports');
 }
 
+function testIpcChannelContract() {
+  const {
+    AGENT_EVENT_CHANNELS,
+    RENDERER_EVENT_CHANNELS,
+    isAllowedRendererChannel,
+    assertAgentPayloadShape,
+  } = require(path.join(root, 'electron', 'ipc-channels'));
+
+  assert.ok(AGENT_EVENT_CHANNELS.includes('agent:text'));
+  assert.ok(AGENT_EVENT_CHANNELS.includes('agent:tool_start'));
+  assert.ok(AGENT_EVENT_CHANNELS.includes('agent:done'));
+  assert.ok(isAllowedRendererChannel('agent:phase'));
+  assert.ok(isAllowedRendererChannel('fs:changed'));
+  assert.ok(!isAllowedRendererChannel('agent:secret'));
+  assert.ok(RENDERER_EVENT_CHANNELS.length >= AGENT_EVENT_CHANNELS.length);
+
+  // preload must use the same allowlist module (source contract)
+  const preloadSrc = fs.readFileSync(path.join(root, 'electron', 'preload.js'), 'utf8');
+  assert.ok(
+    preloadSrc.includes("require('./ipc-channels')") || preloadSrc.includes('require("./ipc-channels")'),
+    'preload must require ipc-channels'
+  );
+  assert.ok(preloadSrc.includes('isAllowedRendererChannel'), 'preload gates on isAllowedRendererChannel');
+
+  const ok = assertAgentPayloadShape('agent:text', { taskId: 't1', text: 'hi' });
+  assert.ok(ok.ok, 'text+taskId valid');
+  const bad = assertAgentPayloadShape('agent:text', { text: 'no task' });
+  assert.ok(!bad.ok, 'text without taskId rejected');
+  const tool = assertAgentPayloadShape('agent:tool_start', { taskId: 't1', name: 'read_file' });
+  assert.ok(tool.ok);
+  console.log('ok  IPC channel contract');
+}
+
+function testAgentStreamNdjsonFixture() {
+  const {
+    reduceHeadlessNdjson,
+    applyStreamBuffer,
+    isKnownHeadlessType,
+  } = require(path.join(root, 'electron', 'agent-stream'));
+  const {
+    assertAgentPayloadShape,
+  } = require(path.join(root, 'electron', 'ipc-channels'));
+
+  const fixture = fs.readFileSync(
+    path.join(root, 'scripts', 'fixtures', 'agent-stream-basic.ndjson'),
+    'utf8'
+  );
+  const { state, emits, phases, stats } = reduceHeadlessNdjson(fixture, { taskId: 'task-a' });
+
+  assert.ok(stats.recognized >= 6, 'fixture lines recognized');
+  assert.equal(stats.nonJson, 0);
+  assert.ok(state.finalText.includes('我会先') && state.finalText.includes('文件'), 'text accumulated');
+  assert.ok(state.thoughtText.includes('分析'), 'thought accumulated');
+  assert.equal(state.sessionId, 'sess-abc');
+  assert.ok(state.usage && state.usage.input_tokens === 10);
+  assert.equal(state.toolDepth, 0, 'tools closed');
+
+  const channels = emits.map((e) => e.channel);
+  assert.ok(channels.includes('agent:thought'));
+  assert.ok(channels.includes('agent:text'));
+  assert.ok(channels.includes('agent:tool_start'));
+  assert.ok(channels.includes('agent:tool_end'));
+  assert.ok(channels.includes('agent:usage'));
+  assert.ok(phases.some((p) => p.phase === 'done'));
+
+  // Every agent emit must pass payload shape + taskId
+  for (const e of emits) {
+    if (!e.channel.startsWith('agent:')) continue;
+    // phase/status from pure runner always have taskId
+    const check = assertAgentPayloadShape(e.channel, e.payload);
+    if (e.channel === 'agent:status' || e.channel === 'agent:phase') {
+      assert.equal(e.payload.taskId, 'task-a');
+      continue;
+    }
+    assert.ok(check.ok, `${e.channel}: ${check.error || 'ok'}`);
+    assert.equal(e.payload.taskId, 'task-a');
+  }
+
+  // tool_start before tool_end; text after tools can continue
+  const startIdx = channels.indexOf('agent:tool_start');
+  const endIdx = channels.indexOf('agent:tool_end');
+  assert.ok(startIdx >= 0 && endIdx > startIdx, 'tool start before end');
+
+  // Renderer buffer contract: prefer full text snapshot
+  assert.equal(applyStreamBuffer('old', { text: 'full' }), 'full');
+  assert.equal(applyStreamBuffer('old', { delta: '!' }), 'old!');
+  assert.ok(isKnownHeadlessType('tool_call'));
+  assert.ok(!isKnownHeadlessType('nope'));
+  console.log('ok  headless NDJSON fixture contract');
+}
+
+function testAgentStreamAcpFixture() {
+  const { createStreamState, reduceAcpUpdate } = require(path.join(
+    root,
+    'electron',
+    'agent-stream'
+  ));
+  const updates = JSON.parse(
+    fs.readFileSync(path.join(root, 'scripts', 'fixtures', 'agent-stream-acp-updates.json'), 'utf8')
+  );
+  let state = createStreamState();
+  let counters = { textChunks: 0, thoughtChunks: 0 };
+  const emits = [];
+  for (const u of updates) {
+    const r = reduceAcpUpdate(state, u, counters);
+    state = r.state;
+    counters = r.counters;
+    for (const a of r.actions) {
+      if (a.op === 'emit') emits.push(a.channel);
+    }
+  }
+  assert.ok(state.thoughtText.includes('login'));
+  assert.ok(state.finalText.includes('Checking') && state.finalText.includes('auth.js'));
+  assert.equal(state.toolDepth, 0);
+  assert.ok(emits.includes('agent:tool_start'));
+  assert.ok(emits.includes('agent:tool_end'));
+  assert.ok(emits.filter((c) => c === 'agent:text').length >= 2);
+  console.log('ok  ACP session/update fixture contract');
+}
+
+function testStreamFairness() {
+  const sched = require(path.join(root, 'renderer', 'stream-scheduler.js'));
+  const entries = [
+    { id: 'bg1', streamDirty: true, lastStream: 0, running: true },
+    { id: 'active', streamDirty: true, lastStream: 0, running: true },
+    { id: 'bg2', streamDirty: true, lastStream: 50, running: true },
+  ];
+  const ordered = sched.sortFair(entries, 'active');
+  assert.equal(ordered[0].id, 'active', 'active first');
+
+  // Active paints every tick (ACTIVE_MS=0); bg holds until BG_MS
+  const tick0 = sched.planTick(entries, {
+    activeId: 'active',
+    now: 10,
+    ACTIVE_MS: 0,
+    BG_MS: 100,
+    MAX_PAINT_PER_TICK: 4,
+  });
+  assert.ok(
+    tick0.paint.some((p) => p.id === 'active' && p.kind === 'stream'),
+    'active paints at t=10'
+  );
+  // bg lastStream=0, now=10 < 100 → needMore, not painted
+  assert.ok(!tick0.paint.some((p) => p.id === 'bg1'), 'bg throttled early');
+  assert.ok(tick0.needMore, 'bg still waiting');
+
+  const tickBg = sched.planTick(
+    entries.map((e) =>
+      e.id === 'active' ? { ...e, streamDirty: false, lastStream: 10 } : e
+    ),
+    { activeId: 'active', now: 120, ACTIVE_MS: 0, BG_MS: 100, MAX_PAINT_PER_TICK: 4 }
+  );
+  assert.ok(tickBg.paint.some((p) => p.id === 'bg1'), 'bg paints after BG_MS');
+
+  const sim = sched.simulateFairness(
+    [
+      { id: 'a', streamDirty: true, lastStream: 0, running: true },
+      { id: 'b', streamDirty: true, lastStream: 0, running: true },
+    ],
+    { activeId: 'a', steps: 5, stepMs: 20, ACTIVE_MS: 0, BG_MS: 40 }
+  );
+  assert.ok(sim.history[0].paint.some((p) => p.startsWith('a:')), 'sim active first step');
+  console.log('ok  stream fairness scheduler');
+}
+
+function testCompressLongTaskGolden() {
+  const { compressContext, buildContextPrompt } = require(path.join(
+    root,
+    'electron',
+    'context-compress.js'
+  ));
+  const msgs = [];
+  // Long trajectory: preference → work → stop → continue
+  msgs.push({
+    role: 'user',
+    content: '约束：始终用中文回复；不要 force push；优先改 renderer/',
+    ts: 1,
+  });
+  for (let i = 0; i < 12; i += 1) {
+    msgs.push({
+      role: 'user',
+      content: `步骤 ${i}: 改 electron/agent.js 与 renderer/app.js 流式路径`,
+      ts: 10 + i * 2,
+    });
+    msgs.push({
+      role: 'assistant',
+      content: `完成步骤 ${i}\n- 更新了 electron/agent.js\n- 检查了 LiveBatcher\nTODO: 还要补契约测试`,
+      ts: 11 + i * 2,
+    });
+  }
+  msgs.push({
+    role: 'assistant',
+    content: '中断于 Diff 校验…',
+    ts: 100,
+    stopped: true,
+  });
+  msgs.push({ role: 'user', content: '从中断处继续，保持中文', ts: 101 });
+
+  const ctx = compressContext(msgs, {
+    projectName: 'grok-code',
+    taskTitle: 'stream-contract',
+    workMode: 'craft',
+    turns: [
+      { mode: 'craft', endedAt: 1, tools: 3 },
+      { mode: 'craft', stopped: true, tools: 5 },
+    ],
+    changedFiles: ['electron/agent.js', 'renderer/app.js', 'scripts/test-unit.js'],
+    lastStopped: true,
+  });
+
+  assert.ok(ctx.l0.length >= 2, 'L0 keeps tail');
+  assert.ok(String(ctx.l3).includes('中文') || String(ctx.l3).includes('偏好'), 'L3 durable prefs');
+  assert.ok(
+    String(ctx.l2).includes('agent.js') || String(ctx.l2).includes('变更'),
+    'L2 tracks hot files'
+  );
+  assert.ok(String(ctx.l2).includes('中断') || String(ctx.l2).includes('停止'), 'L2 stop marker');
+  assert.ok(String(ctx.l2).includes('TODO') || String(ctx.l2).includes('开放'), 'L2 open items');
+
+  const prompt = buildContextPrompt(ctx, '继续修流式契约', {
+    projectName: 'grok-code',
+    taskTitle: 'stream-contract',
+    workMode: 'craft',
+    lastStopped: true,
+    continueFrom: true,
+  });
+  assert.ok(prompt.includes('继续修流式契约'));
+  assert.ok(prompt.includes('断点') || prompt.includes('中断') || prompt.includes('继续'));
+  // Must not dump entire 12-turn raw history into L0 only — tiers present
+  assert.ok(Array.isArray(ctx.tiers) && ctx.tiers.length === 4);
+  console.log('ok  L0–L3 long-task golden');
+}
+
 try {
   testCompress();
+  testCompressLongTaskGolden();
   testExtractJson();
   testExternalEditorResolve();
   testDiagnosticsShape();
@@ -356,6 +590,10 @@ try {
   testDiffHunks();
   testToolsSearchExports();
   testAgentExports();
+  testIpcChannelContract();
+  testAgentStreamNdjsonFixture();
+  testAgentStreamAcpFixture();
+  testStreamFairness();
   Promise.resolve(testShellSafe())
     .then(() => {
       console.log('\nAll unit tests passed');

@@ -5,7 +5,7 @@
  * never tool progress. Desktop UI must use ACP for tool_call streaming.
  *
  * Spec shape used by Grok Build 0.2.x (verified against local probe):
- *   initialize â†’ session/new|session/load â†’ session/prompt
+ *   initialize â†?session/new|session/load â†?session/prompt
  *   session/update: agent_message_chunk | agent_thought_chunk | tool_call | tool_call_update
  */
 const { spawn } = require('child_process');
@@ -42,7 +42,7 @@ class AcpClient {
     this.stderrBuf = '';
     /**
      * Only true while session/prompt is in flight.
-     * session/load replays history as session/update â€” must be ignored or UI
+     * session/load replays history as session/update â€?must be ignored or UI
      * floods with old tools and looks blank / frozen during the real turn.
      */
     this.streaming = false;
@@ -219,8 +219,8 @@ class AcpClient {
       'initialize',
       {
         protocolVersion: 1,
-        clientInfo: { name: 'GrokCode', version: '1.10.7' },
-        // Do not advertise fs/terminal â€” agent executes tools itself; we only observe.
+        clientInfo: { name: 'GrokCode', version: '1.10.8' },
+        // Do not advertise fs/terminal â€?agent executes tools itself; we only observe.
         clientCapabilities: {},
       },
       30_000

@@ -1,0 +1,8 @@
+{"type":"status","status":"boot","detail":"starting"}
+{"type":"thought","delta":"分析 bug…"}
+{"type":"text","delta":"我会先"}
+{"type":"text","delta":"打开 "}
+{"type":"tool_start","id":"t1","name":"read_file","args":{"path":"renderer/app.js"}}
+{"type":"tool_end","id":"t1","name":"read_file","result":"ok","ok":true}
+{"type":"text","delta":"文件。"}
+{"type":"end","sessionId":"sess-abc","usage":{"input_tokens":10,"output_tokens":20},"numTurns":1}
