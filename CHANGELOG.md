@@ -11,6 +11,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 - See [ROADMAP.md](ROADMAP.md)
 
+## [1.10.7] — 2026-07-17
+
+### Fix — missing `agent-stream` module crashed installed app
+
+- **Symptom**: main process uncaught `Cannot find module './agent-stream'` under `Program Files\GrokCode\resources\app.asar`
+- **Cause**: `electron/agent.js` required `./agent-stream`, but `electron/agent-stream.js` was never committed — CI packaged an asar without the file
+- **Fix**: ship `electron/agent-stream.js` (pure NDJSON/ACP reducers used by headless path + unit fixtures)
+
 ## [1.10.6] — 2026-07-17
 
 ### Fix — kill pre-stream silence (compress + ACP handshake)
