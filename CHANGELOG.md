@@ -11,6 +11,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 - See [ROADMAP.md](ROADMAP.md)
 
+## [1.10.3] — 2026-07-17
+
+### Fix — real-time stream paint (no sudden full dump)
+
+- **IPC coalesce (~60fps)**: text/thought no longer emit full `finalText` on every CLI token (flooded Electron → renderer painted one huge chunk). Latest snapshot flushed every ~16ms; tool/end/stop flush immediately.
+- **Async stream debug**: `%TEMP%\grokcode-stream.log` batched/async + sampled (set `GROKCODE_STREAM_DEBUG=full` for every line; `=0` to disable). Sync disk I/O removed from hot path.
+- **UI**: stream body prefers DOM append; Live phase label throttled; first token still flushes immediately.
+
 ## [1.10.2] — 2026-07-17
 
 ### Fix / harden — security & process hygiene (audit follow-up)
