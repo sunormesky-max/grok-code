@@ -10148,6 +10148,8 @@ function appendToolStart(d, task) {
   div.className = 'msg tool running';
   div.dataset.toolId = d.id;
   if (task.turnId) div.dataset.turn = task.turnId;
+  const startedAt = Number(d.startedAt) || Date.now();
+  div.dataset.toolStarted = String(startedAt);
   let argsPreview = '';
   try {
     argsPreview = JSON.stringify(summarizeArgs(d.name, d.args), null, 0);
@@ -10159,8 +10161,26 @@ function appendToolStart(d, task) {
     <div class="body">
       <div class="name">⚙ ${esc(d.name)}</div>
       <div class="args">${esc(argsPreview)}</div>
-      <div class="result">running…</div>
+      <div class="result">running… 0s</div>
     </div>`;
+  // Upstream CLI has no in_progress tool updates — local clock fills the silent gap
+  const resultEl = div.querySelector('.result');
+  const tick = () => {
+    if (!div.isConnected || !div.classList.contains('running')) {
+      if (div._toolTimer) {
+        clearInterval(div._toolTimer);
+        div._toolTimer = null;
+      }
+      return;
+    }
+    const sec = Math.max(0, Math.floor((Date.now() - startedAt) / 1000));
+    if (resultEl) resultEl.textContent = `running… ${sec}s`;
+    if (isActiveTask(task)) {
+      setLivePhase(`${d.name || 'tool'}… ${sec}s`, task.title || '');
+    }
+  };
+  div._toolTimer = setInterval(tick, 500);
+  tick();
   const asst = task.liveAssistantEl;
   if (asst?.parentNode === box) box.insertBefore(div, asst);
   else box.appendChild(div);
@@ -10175,17 +10195,25 @@ function appendToolEnd(d, task) {
     appendToolStart(d, task);
     div = task.pane.querySelector(`.msg.tool[data-tool-id="${cssEscape(d.id)}"]`);
   }
+  if (div?._toolTimer) {
+    clearInterval(div._toolTimer);
+    div._toolTimer = null;
+  }
   div?.classList.remove('running');
+  const startedAt = Number(div?.dataset?.toolStarted) || 0;
+  const elapsedSec = startedAt ? ((Date.now() - startedAt) / 1000).toFixed(1) : '';
   const el = div?.querySelector('.result');
   if (el) {
     const full = String(d.result || '');
     const preview = full.slice(0, 500);
-    el.textContent = preview + (full.length > 500 ? '…（点击展开）' : '');
+    const head = elapsedSec ? `✓ ${elapsedSec}s · ` : '';
+    const body = preview + (full.length > 500 ? '…（点击展开）' : '');
+    el.textContent = head + (body || (d.ok === false ? 'failed' : 'done'));
     el.title = '点击展开/收起';
     el.onclick = () => {
       el.classList.toggle('expanded');
       if (el.classList.contains('expanded')) el.textContent = full || '（空）';
-      else el.textContent = preview + (full.length > 500 ? '…（点击展开）' : '');
+      else el.textContent = head + (body || 'done');
     };
   }
 }

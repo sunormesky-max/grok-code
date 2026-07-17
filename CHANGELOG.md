@@ -11,6 +11,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 - See [ROADMAP.md](ROADMAP.md)
 
+## [1.10.9] — 2026-07-18
+
+### UX — work with upstream ACP batch cadence (not fake token stream)
+
+Upstream grok Build 0.2.x ACP flushes thought/text/tool in **stage batches** with multi-second silent gaps (not token-SSE). GrokCode cannot invent tokens; we improve wait UX:
+
+- **Warm ACP pool**: keep `grok agent stdio` + session after a turn; next prompt skips `initialize`/`session/new` (~1s+ cold path). Log: `acp REUSE` / `session_reuse` / `reused=1`.
+- **Wait-clock during CLI silence**: after prompt send, phase ticks `等待模型（CLI 批量段）… Ns` until first thought/text/tool.
+- **Tool running timer**: tool cards show `running… Ns` (CLI has no `in_progress`); end shows elapsed seconds.
+
 ## [1.10.8] — 2026-07-18
 
 ### Fix — packaging integrity (prevent missing-module crashes)

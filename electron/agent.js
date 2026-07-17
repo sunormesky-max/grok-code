@@ -83,6 +83,12 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
   /** @type {Map<string, import('child_process').ChildProcess>} */
   const children = new Map();
   /**
+   * Warm ACP sessions kept after a turn so the next prompt skips
+   * initialize+session/new (~1s+ cold start). Keyed by taskId.
+   * @type {Map<string, { client: import('./acp-client').AcpClient, sessionId: string, cwd: string, key: string }>}
+   */
+  const acpPool = new Map();
+  /**
    * taskIds we intentionally stopped (user stop / replace / external cleanup).
    * Without this, Windows taskkill surfaces exit 4294967295 and UI shows a fake hard error.
    * @type {Set<string>}
@@ -93,6 +99,27 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
    * @type {Set<number>}
    */
   const trackedPids = new Set();
+
+  function acpArgsKey(bin, args, cwd) {
+    return `${bin}\0${(args || []).join('\0')}\0${cwd}`;
+  }
+
+  function disposeAcpPool(taskId, { kill = true } = {}) {
+    if (taskId) {
+      const slot = acpPool.get(String(taskId));
+      if (!slot) return;
+      acpPool.delete(String(taskId));
+      if (kill) {
+        try {
+          slot.client.kill();
+        } catch {
+          /* ignore */
+        }
+      }
+      return;
+    }
+    for (const id of [...acpPool.keys()]) disposeAcpPool(id, { kill });
+  }
 
   function killPidTree(pid) {
     if (!pid || pid <= 0) return;
@@ -184,6 +211,8 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
         }
         children.delete(taskId);
       }
+      // Always drop warm pool on explicit stop so next run is clean
+      disposeAcpPool(taskId, { kill: true });
       return;
     }
     for (const [id, child] of children) {
@@ -199,6 +228,7 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
       }
       children.delete(id);
     }
+    disposeAcpPool(null, { kill: true });
     // Catch orphans not currently mapped (race after crash mid-spawn)
     reapTracked();
   }
@@ -439,7 +469,18 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
         return safeIpc(u);
       };
 
+      let waitTickTimer = null;
+      let promptSentAt = 0;
+
+      const clearWaitTick = () => {
+        if (waitTickTimer) {
+          clearInterval(waitTickTimer);
+          waitTickTimer = null;
+        }
+      };
+
       const cleanup = () => {
+        clearWaitTick();
         if (signal) signal.removeEventListener?.('abort', onAbort);
         const child = children.get(taskId);
         if (child && child.__acpClient) {
@@ -447,15 +488,37 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
         }
       };
 
-      const finish = (result) => {
+      /** Park warm ACP for next turn (skip cold initialize). Kill only on stop/fail. */
+      const parkClient = (c, sid) => {
+        if (!c?.alive || !sid) return;
+        try {
+          c.onUpdate = () => {};
+          c.onNotification = () => {};
+        } catch {
+          /* ignore */
+        }
+        acpPool.set(String(taskId), {
+          client: c,
+          sessionId: sid,
+          cwd,
+          key: argsKey,
+        });
+      };
+
+      const finish = (result, { keepWarm = true } = {}) => {
         if (settled) return;
         settled = true;
         intentionalStops.delete(String(taskId));
         cleanup();
-        try {
-          client.kill();
-        } catch {
-          /* ignore */
+        if (keepWarm && client?.alive && newSessionId && !result?.stopped) {
+          parkClient(client, newSessionId);
+        } else {
+          try {
+            client?.kill?.();
+          } catch {
+            /* ignore */
+          }
+          disposeAcpPool(taskId, { kill: false });
         }
         resolve(result);
       };
@@ -466,20 +529,50 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
         intentionalStops.delete(String(taskId));
         cleanup();
         try {
-          client.kill();
+          client?.kill?.();
         } catch {
           /* ignore */
         }
+        disposeAcpPool(taskId, { kill: false });
         emitT('agent:error', { error: err.message || String(err) });
         reject(err);
       };
 
-      const client = new AcpClient({
-        bin: grokBin,
-        args: acpArgs,
-        env,
-        autoApprove: alwaysApprove,
-        onUpdate: (update) => {
+      const argsKey = acpArgsKey(grokBin, acpArgs, cwd);
+      let client = null;
+      let reused = false;
+      let warmSessionId = null;
+      const pooled = acpPool.get(String(taskId));
+      if (
+        pooled &&
+        pooled.client?.alive &&
+        pooled.key === argsKey &&
+        pooled.cwd === cwd
+      ) {
+        client = pooled.client;
+        reused = true;
+        warmSessionId = pooled.sessionId || null;
+        acpPool.delete(String(taskId)); // checked out for this run
+        if (!sessionId && warmSessionId) {
+          // Continue warm session when renderer still has no id yet
+          newSessionId = warmSessionId;
+        }
+        streamDebug(
+          `task=${taskId} acp REUSE pid=${client.pid || '?'} session=${warmSessionId || '-'}`,
+          { force: true }
+        );
+      } else {
+        if (pooled) disposeAcpPool(taskId, { kill: true });
+        client = new AcpClient({
+          bin: grokBin,
+          args: acpArgs,
+          env,
+          autoApprove: alwaysApprove,
+        });
+      }
+
+      const bindHandlers = () => {
+        client.onUpdate = (update) => {
           // AcpClient already gates on .streaming (active prompt only)
           if (!update || settled) return;
           const kind = String(update.sessionUpdate || update.type || '');
@@ -490,11 +583,11 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
             textChunks += 1;
             if (textChunks === 1) {
               noteFirstToken('text');
+              clearWaitTick();
               streamDebug(
                 `task=${taskId} acp first text chunk len=${chunk.length} total=${finalText.length}`,
                 { force: true }
               );
-              // First token: immediate IPC so UI is never blank
               emitTextStream(
                 {
                   text: finalText,
@@ -519,6 +612,7 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
             thoughtChunks += 1;
             if (thoughtChunks === 1) {
               noteFirstToken('thought');
+              clearWaitTick();
               streamDebug(
                 `task=${taskId} acp first thought chunk len=${chunk.length}`,
                 { force: true }
@@ -545,11 +639,15 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
             if (!openTools.has(info.id)) {
               openTools.add(info.id);
               toolDepth += 1;
-              if (textChunks === 0 && thoughtChunks === 0) noteFirstToken('tool');
+              if (textChunks === 0 && thoughtChunks === 0) {
+                noteFirstToken('tool');
+                clearWaitTick();
+              }
               emitT('agent:tool_start', {
                 id: info.id,
                 name: info.name,
                 args: slimToolArgs(info.args),
+                startedAt: Date.now(),
               });
               setPhase('tool', `${info.name}…`);
               streamDebug(
@@ -560,7 +658,6 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
           } else if (kind === 'tool_call_update') {
             const info = pickToolInfo(update);
             const status = String(update.status || '').toLowerCase();
-            // Mid-flight updates (title/locations) — keep phase, don't double-start
             if (
               !openTools.has(info.id) &&
               status !== 'completed' &&
@@ -573,6 +670,7 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
                 id: info.id,
                 name: info.name,
                 args: slimToolArgs(info.args),
+                startedAt: Date.now(),
               });
               setPhase('tool', `${info.name}…`);
             }
@@ -588,38 +686,40 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
                 args: slimToolArgs(info.args),
                 result: pickToolResultText(update),
                 ok: status === 'completed',
+                endedAt: Date.now(),
               });
               if (toolDepth <= 0 && finalText) setPhase('streaming', 'speaking…');
               else if (toolDepth <= 0) setPhase('running', 'working…');
             }
           } else if (kind === 'user_message_chunk') {
-            /* echo of our prompt — ignore */
+            /* echo — ignore */
           }
-        },
-        onStderr: (s) => {
+        };
+        client.onStderr = (s) => {
           streamDebug(`task=${taskId} acp-stderr ${String(s).slice(0, 200)}`);
-        },
-        onExit: () => {
+        };
+        client.onExit = () => {
           children.delete(taskId);
-        },
-      });
+          acpPool.delete(String(taskId));
+        };
+      };
+      bindHandlers();
 
       // Track as child so stop() can kill it
-      client.start();
+      if (!client.child) client.start();
       if (client.child) {
         client.child.__acpClient = client;
         children.set(taskId, client.child);
         if (client.pid) trackedPids.add(client.pid);
       }
-      // session id filled after new/load — stop() cancel uses it when present
 
-      mark('spawned');
+      mark(reused ? 'reused' : 'spawned');
       streamDebug(
-        `=== RUN start task=${taskId} transport=acp pid=${client.pid || '?'} cwd=${cwd} resume=${sessionId || '-'} bin=${grokBin} prepMs=${prepMs || 0}`,
+        `=== RUN start task=${taskId} transport=acp reused=${reused ? 1 : 0} pid=${client.pid || '?'} cwd=${cwd} resume=${sessionId || '-'} bin=${grokBin} prepMs=${prepMs || 0}`,
         { force: true }
       );
       streamDebug(`task=${taskId} acp-args=${acpArgs.join(' ')}`, { force: true });
-      setPhase('boot', 'ACP initialize…');
+      setPhase('boot', reused ? 'ACP 热会话…' : 'ACP initialize…');
 
       const onAbort = () => {
         intentionalStops.add(String(taskId));
@@ -640,15 +740,18 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
               usage,
             });
             setPhase('stopped', '已停止');
-            finish({
-              text: finalText,
-              stopped: true,
-              sessionId: newSessionId,
-              taskId,
-              usage,
-              thought: thoughtText || undefined,
-              transport: 'acp',
-            });
+            finish(
+              {
+                text: finalText,
+                stopped: true,
+                sessionId: newSessionId,
+                taskId,
+                usage,
+                thought: thoughtText || undefined,
+                transport: 'acp',
+              },
+              { keepWarm: false }
+            );
           });
       };
 
@@ -662,45 +765,65 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
 
       (async () => {
         try {
-          setPhase('boot', 'ACP initialize…');
-          await client.initialize();
-          mark('initialized');
-          setPhase('boot', sessionId ? 'session/load…' : 'session/new…');
-
           const meta = {};
           if (rules) meta.rules = String(rules);
-          // maxTurns is headless-only on CLI; pass as meta hint if supported
           if (maxTurns) meta.maxTurns = Number(maxTurns);
 
-          let sess;
-          if (sessionId) {
-            try {
-              sess = await client.loadSession(sessionId, cwd, meta);
-              mark('session_loaded');
-            } catch (loadErr) {
-              streamDebug(
-                `task=${taskId} session/load failed: ${loadErr.message}; new session`,
-                { force: true }
-              );
-              if (!_resumeRetried) {
-                // one soft retry as new session
-              }
-              setPhase('boot', 'session/new（load 失败）…');
-              sess = await client.newSession(cwd, meta);
-              mark('session_new_after_load_fail');
-            }
+          if (!reused || !client._acpInitialized) {
+            setPhase('boot', 'ACP initialize…');
+            await client.initialize();
+            client._acpInitialized = true;
+            mark('initialized');
           } else {
-            sess = await client.newSession(cwd, meta);
-            mark('session_new');
+            mark('initialized_skip');
           }
 
-          newSessionId = sess?.sessionId || sess?.session_id || newSessionId;
+          // Session: reuse warm id when possible (skip load/new + history replay)
+          const wantSession = sessionId || newSessionId || warmSessionId || null;
+          if (reused && wantSession && (!warmSessionId || wantSession === warmSessionId)) {
+            newSessionId = wantSession;
+            mark('session_reuse');
+            setPhase('running', '热会话 prompt…');
+          } else {
+            setPhase('boot', wantSession ? 'session/load…' : 'session/new…');
+            let sess;
+            if (wantSession) {
+              try {
+                sess = await client.loadSession(wantSession, cwd, meta);
+                mark('session_loaded');
+              } catch (loadErr) {
+                streamDebug(
+                  `task=${taskId} session/load failed: ${loadErr.message}; new session`,
+                  { force: true }
+                );
+                setPhase('boot', 'session/new（load 失败）…');
+                sess = await client.newSession(cwd, meta);
+                mark('session_new_after_load_fail');
+              }
+            } else {
+              sess = await client.newSession(cwd, meta);
+              mark('session_new');
+            }
+            newSessionId = sess?.sessionId || sess?.session_id || newSessionId;
+          }
+
           if (client.child) client.child.__acpSessionId = newSessionId;
           setPhase('running', '已发送 prompt，等待首包…');
           mark('prompt_send');
+          promptSentAt = Date.now();
+          // Upstream CLI is silent between stages — tick so UI never looks frozen
+          waitTickTimer = setInterval(() => {
+            if (settled || firstTokenAt) {
+              clearWaitTick();
+              return;
+            }
+            const s = Math.max(0, Math.floor((Date.now() - promptSentAt) / 1000));
+            setPhase('running', `等待模型（CLI 批量段）… ${s}s`);
+          }, 1000);
 
           const result = await client.prompt(newSessionId, message);
           if (settled) return;
+          clearWaitTick();
           mark('prompt_done');
 
           // Close any tools that never got completed updates
@@ -760,15 +883,18 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
               usage,
             });
             setPhase('stopped', '已停止');
-            finish({
-              text: finalText,
-              stopped: true,
-              sessionId: newSessionId,
-              taskId,
-              usage,
-              thought: thoughtText || undefined,
-              transport: 'acp',
-            });
+            finish(
+              {
+                text: finalText,
+                stopped: true,
+                sessionId: newSessionId,
+                taskId,
+                usage,
+                thought: thoughtText || undefined,
+                transport: 'acp',
+              },
+              { keepWarm: false }
+            );
             return;
           }
 
@@ -782,7 +908,7 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
           });
           setPhase('done', 'done');
           streamDebug(
-            `=== RUN end task=${taskId} transport=acp code=0 finalTextLen=${finalText.length} thoughtLen=${thoughtText.length} textChunks=${textChunks} thoughtChunks=${thoughtChunks} firstTokenMs=${firstTokenAt ? firstTokenAt - t0 : -1} totalMs=${Date.now() - t0} prepMs=${prepMs || 0}`,
+            `=== RUN end task=${taskId} transport=acp reused=${reused ? 1 : 0} code=0 finalTextLen=${finalText.length} thoughtLen=${thoughtText.length} textChunks=${textChunks} thoughtChunks=${thoughtChunks} firstTokenMs=${firstTokenAt ? firstTokenAt - t0 : -1} totalMs=${Date.now() - t0} prepMs=${prepMs || 0}`,
             { force: true }
           );
           finish({
@@ -795,9 +921,11 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
             stopReason,
             numTurns,
             transport: 'acp',
+            acpReused: reused,
           });
         } catch (err) {
           if (settled) return;
+          clearWaitTick();
           if (takeIntentionalStop(taskId) || signal?.aborted) {
             flushStreamIpc();
             emitT('agent:done', {
@@ -807,15 +935,18 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
               thought: thoughtText || undefined,
               usage,
             });
-            finish({
-              text: finalText,
-              stopped: true,
-              sessionId: newSessionId,
-              taskId,
-              usage,
-              thought: thoughtText || undefined,
-              transport: 'acp',
-            });
+            finish(
+              {
+                text: finalText,
+                stopped: true,
+                sessionId: newSessionId,
+                taskId,
+                usage,
+                thought: thoughtText || undefined,
+                transport: 'acp',
+              },
+              { keepWarm: false }
+            );
             return;
           }
           // Cold-start style failures → allow outer run() fallback
