@@ -94,8 +94,8 @@ const store = new Store({
     /** opt-in crash telemetry */
     telemetryEnabled: false,
     telemetryEndpoint: '',
-    /** craft | plan | ask | goal */
-    workMode: 'craft',
+    /** cli (CLI-native) | legacy craft|plan|ask|goal when GROKCODE_CLI_NATIVE=0 */
+    workMode: 'cli',
     /** default | pragmatic | teaching | warm | blunt */
     stylePack: 'default',
     /** off | standard | strict — personal dir caution for UI ops */
@@ -1019,6 +1019,7 @@ ipcMain.handle('agent:run', async (_e, payload) => {
     context.llm = { used: false, reason: err.message || String(err) };
   }
 
+  // CLI_NATIVE: no Craft/Plan/Ask/Goal prompt prefixes — session mode is CLI-owned
   const modePrefix = modes.modePromptPrefix(workMode, message, { goal: goalState });
   let skillsIndex = '';
   try {
@@ -1038,7 +1039,7 @@ ipcMain.handle('agent:run', async (_e, payload) => {
   });
   const fullPrompt = modePrefix + skillsIndex + basePrompt;
 
-  // merged rules for CLI (global + project .grok/rules + style + mode)
+  // Rules for CLI --rules: user settings + project .grok/rules only (no fake modes)
   let projectRulesText = '';
   try {
     projectRulesText = modes.readProjectRulesFile(p.path).text || '';
@@ -1052,41 +1053,36 @@ ipcMain.handle('agent:run', async (_e, payload) => {
     stylePack,
   });
 
-  // Ask: never auto-approve tools; Plan: fewer turns while planning;
-  // Plan+execute / Craft / Goal: full throttle (user always-approve + maxTurns)
+  // Permission / turns: settings only — not per GrokCode "Ask vs Craft"
   let alwaysOverride;
   let maxTurnsOverride;
-  const planExec =
-    workMode === 'plan' && modes.isPlanExecutePhrase(message);
-  const effectiveMode = planExec || payload?.forceCraft ? 'craft' : workMode;
-  if (workMode === 'ask') {
-    // Hard: never pass --always-approve in Ask (YOLO off even if settings YOLO is on)
-    alwaysOverride = false;
-    maxTurnsOverride = Math.min(Number(store.get('maxTurns') || 30), 12);
-  } else if (workMode === 'plan' && !planExec) {
-    // pure planning turn: fewer tool turns preferred
-    maxTurnsOverride = Math.min(Number(store.get('maxTurns') || 30), 16);
-  } else if (
-    workMode === 'craft' ||
-    workMode === 'goal' ||
-    planExec ||
-    payload?.forceCraft
-  ) {
-    alwaysOverride = undefined; // keep user always-approve
-    const base = Number(store.get('maxTurns') || 30);
-    if (store.get('alwaysApprove') !== false && base < 24) {
-      maxTurnsOverride = 24;
-    }
-    // Plan→Craft execute: ensure enough turns to finish multi-step plan
-    if ((planExec || payload?.fromPlanExecute) && base < 28) {
-      maxTurnsOverride = Math.max(maxTurnsOverride || 0, 28);
-    }
-    // Goal: multi-milestone flights need headroom
-    if (workMode === 'goal' && base < 28) {
-      maxTurnsOverride = Math.max(maxTurnsOverride || 0, 28);
+  if (!modes.CLI_NATIVE) {
+    const planExec =
+      workMode === 'plan' && modes.isPlanExecutePhrase(message);
+    if (workMode === 'ask') {
+      alwaysOverride = false;
+      maxTurnsOverride = Math.min(Number(store.get('maxTurns') || 30), 12);
+    } else if (workMode === 'plan' && !planExec) {
+      maxTurnsOverride = Math.min(Number(store.get('maxTurns') || 30), 16);
+    } else if (
+      workMode === 'craft' ||
+      workMode === 'goal' ||
+      planExec ||
+      payload?.forceCraft
+    ) {
+      alwaysOverride = undefined;
+      const base = Number(store.get('maxTurns') || 30);
+      if (store.get('alwaysApprove') !== false && base < 24) {
+        maxTurnsOverride = 24;
+      }
+      if ((planExec || payload?.fromPlanExecute) && base < 28) {
+        maxTurnsOverride = Math.max(maxTurnsOverride || 0, 28);
+      }
+      if (workMode === 'goal' && base < 28) {
+        maxTurnsOverride = Math.max(maxTurnsOverride || 0, 28);
+      }
     }
   }
-  // note: modePrefix still uses original workMode so plan-exec / goal banners apply
 
   if (p.aborts.has(tid)) {
     try {

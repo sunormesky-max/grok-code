@@ -11,6 +11,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 - See [ROADMAP.md](ROADMAP.md)
 
+## [1.12.0] — 2026-07-18
+
+### Breaking — CLI-native modes only (no host Craft/Plan/Ask/Goal)
+
+GrokCode is a host for the local Grok CLI. Inventing Craft/Plan/Ask/Goal via
+prompt prefixes and permission overrides caused drift from CLI behavior
+(`/plan`, Shift+Tab Normal↔Plan↔Always-approve, enter_plan_mode tools).
+
+- **Default `CLI_NATIVE`**: no mode/style rules injected into `--rules`; no
+  mode prompt prefixes; Ask no longer forces YOLO off; Plan no longer caps turns
+- Mode bar shows single **CLI** chip; palette modes collapsed to CLI
+- Permission = settings `alwaysApprove` only (maps to CLI `--always-approve`)
+- Opt out (legacy host modes): `GROKCODE_CLI_NATIVE=0` (not recommended)
+
 ## [1.11.5] — 2026-07-18
 
 ### Fix — ACP 403 Build gate → headless fallback (matches working `grok -p`)

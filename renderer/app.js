@@ -43,10 +43,8 @@ const MODEL_PRESETS = [
 ];
 
 const state = {
-  workMode: (() => {
-    const m = String(loadJson(MODE_KEY, 'craft') || 'craft').toLowerCase();
-    return ['craft', 'plan', 'goal', 'ask'].includes(m) ? m : 'craft';
-  })(),
+  // CLI owns session mode (/plan, Shift+Tab, YOLO) — host no longer invents craft/plan/ask/goal
+  workMode: 'cli',
   workspace: null,
   treeData: [],
   currentFile: null,
@@ -1674,7 +1672,7 @@ function templatePrompt(t, en) {
 function applySessionTemplate(t, opts = {}) {
   if (!t) return;
   const en = localeIsEn();
-  if (state.workMode !== 'craft') setWorkMode('craft');
+  if (state.workMode !== 'cli') setWorkMode('cli');
   const promptText = templatePrompt(t, en);
   const el = document.getElementById('prompt');
   if (el) {
@@ -3099,52 +3097,34 @@ window.openFile = openFile;
 window.switchTab = switchTab;
 window.renderDiffPane = renderDiffPane;
 
-// ── Work mode Craft / Plan / Goal / Ask ─────────────────
-const WORK_MODES = ['craft', 'plan', 'goal', 'ask'];
+// ── Work mode: CLI-owned (no GrokCode craft/plan/ask/goal) ─
+const WORK_MODES = ['cli'];
 
 const MODE_HINTS = {
-  craft: { zh: '飞行 · 动手', en: 'Flight · act' },
-  plan: { zh: '先方案 · 「执行」再改', en: 'Plan · then execute' },
-  goal: { zh: '锚定目标 · 里程碑推进', en: 'Goal · ship milestones' },
-  ask: { zh: '只读 · 不改盘', en: 'Read-only' },
+  cli: {
+    zh: 'CLI · 模式在 TUI：/plan · Shift+Tab · YOLO',
+    en: 'CLI · mode in TUI: /plan · Shift+Tab · YOLO',
+  },
 };
 
 const MODE_SEND = {
-  craft: { zh: 'Grok it', en: 'Grok it' },
-  plan: { zh: '规划', en: 'Plan' },
-  goal: { zh: '推进', en: 'Advance' },
-  ask: { zh: '提问', en: 'Ask' },
+  cli: { zh: 'Grok it', en: 'Grok it' },
 };
 
 const MODE_PLACEHOLDER = {
-  craft: {
-    zh: 'Craft · 要改什么…',
-    en: 'Craft · what to ship…',
-  },
-  plan: {
-    zh: 'Plan · 描述目标，先拿方案…',
-    en: 'Plan · goal first, then plan…',
-  },
-  goal: {
-    zh: 'Goal · 一句话目标，多轮推进到完成…',
-    en: 'Goal · one-line outcome, multi-turn to done…',
-  },
-  ask: {
-    zh: 'Ask · 只读提问…',
-    en: 'Ask · read-only…',
+  cli: {
+    zh: '对接本机 Grok CLI… 模式用 CLI 的 /plan 等，这里不伪造 Craft/Plan',
+    en: 'Local Grok CLI… use CLI /plan etc.; no host-side Craft/Plan modes',
   },
 };
 
 const MODE_RUN_STATUS = {
-  craft: { zh: 'Craft · 飞行中', en: 'Craft · in flight' },
-  plan: { zh: 'Plan · 规划中', en: 'Plan · planning' },
-  goal: { zh: 'Goal · 推进中', en: 'Goal · advancing' },
-  ask: { zh: 'Ask · 分析中', en: 'Ask · analyzing' },
+  cli: { zh: 'CLI · 运行中', en: 'CLI · running' },
 };
 
 function normalizeWorkMode(mode) {
-  const m = String(mode || '').toLowerCase();
-  return WORK_MODES.includes(m) ? m : 'craft';
+  // Always CLI-native — legacy craft/plan/ask/goal map away
+  return 'cli';
 }
 
 function localeIsEn() {
@@ -3173,25 +3153,24 @@ function applyModePlaceholder() {
 }
 
 function setWorkMode(mode, opts = {}) {
-  const m = normalizeWorkMode(mode);
+  const m = 'cli';
   state.workMode = m;
   saveJson(MODE_KEY, m);
   document.body.dataset.workMode = m;
-  document.body.classList.toggle('mode-goal', m === 'goal');
-  // Scope to mode bar — avoid clobbering unrelated .mode-chip classes
+  document.body.classList.remove('mode-goal');
   document.querySelectorAll('#modeBar .mode-chip, .mode-bar .mode-chip').forEach((btn) => {
-    const on = btn.dataset.mode === m;
-    btn.classList.toggle('active', on);
-    btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+    const on = (btn.dataset.mode || '') === 'cli' || btn.dataset.mode === m;
+    btn.classList.toggle('active', on || btn.dataset.mode === 'cli');
+    btn.setAttribute('aria-pressed', on || btn.dataset.mode === 'cli' ? 'true' : 'false');
   });
   const loc = localeIsEn() ? 'en' : 'zh';
-  const hint = MODE_HINTS[m];
+  const hint = MODE_HINTS.cli;
   const el = document.getElementById('modeHint');
   if (el && hint) el.textContent = loc === 'en' ? hint.en : hint.zh;
   applySendLabel();
   applyModePlaceholder();
+  // Goal track UI kept optional but not driven by a host "goal mode"
   renderGoalTrack(T());
-  // status bar mode chip
   let sb = document.getElementById('sbMode');
   if (!sb) {
     const foot = document.querySelector('.statusbar');
@@ -3199,7 +3178,6 @@ function setWorkMode(mode, opts = {}) {
       sb = document.createElement('span');
       sb.id = 'sbMode';
       sb.className = 'sb-mode';
-      sb.setAttribute('role', 'button');
       sb.tabIndex = 0;
       const brand = foot.querySelector('.sb-brand');
       if (brand?.nextSibling) foot.insertBefore(sb, brand.nextSibling);
@@ -3207,23 +3185,28 @@ function setWorkMode(mode, opts = {}) {
     }
   }
   if (sb) {
-    sb.textContent = m.toUpperCase();
-    sb.dataset.mode = m;
-    const tip = hint ? (loc === 'en' ? hint.en : hint.zh) : m;
-    sb.title = (loc === 'en' ? 'Click to cycle mode · ' : '点击切换模式 · ') + tip;
+    sb.textContent = 'CLI';
+    sb.dataset.mode = 'cli';
+    sb.title =
+      (loc === 'en' ? 'Session mode is owned by Grok CLI' : '会话模式由本机 Grok CLI 控制') +
+      ' · /plan · Shift+Tab · YOLO';
   }
   if (opts.toast) {
-    toast(loc === 'en' ? `Mode: ${m}` : `模式：${m.toUpperCase()}`, 'ok');
+    toast(
+      loc === 'en'
+        ? 'Mode: CLI (use /plan in CLI; host no longer fakes Craft/Plan)'
+        : '模式：CLI（请用 CLI 的 /plan 等；宿主不再伪造 Craft/Plan）',
+      'ok'
+    );
   }
   if (opts.persistRemote !== false && window.grok?.setConfig) {
-    window.grok.setConfig({ workMode: m }).catch(() => {});
+    window.grok.setConfig({ workMode: 'cli' }).catch(() => {});
   }
 }
 
 function cycleWorkMode() {
-  const order = WORK_MODES;
-  const i = order.indexOf(state.workMode || 'craft');
-  setWorkMode(order[(i + 1) % order.length], { toast: true });
+  // No host-side mode cycle — CLI Shift+Tab owns this
+  setWorkMode('cli', { toast: true });
 }
 
 /** Parse lightweight 【目标进度】 from assistant text (mirrors modes.js) */
@@ -3377,29 +3360,11 @@ function bindWorkModeUi() {
   };
   document.addEventListener('click', onModeClick, true);
 
-  // Ctrl/Cmd+1/2/3/4 → Craft / Plan / Ask / Goal
-  window.addEventListener('keydown', (e) => {
-    if (!(e.ctrlKey || e.metaKey) || e.altKey || e.shiftKey) return;
-    const code = e.code || '';
-    const key = e.key || '';
-    if (key === '1' || code === 'Digit1' || code === 'Numpad1') {
-      e.preventDefault();
-      setWorkMode('craft', { toast: true });
-    } else if (key === '2' || code === 'Digit2' || code === 'Numpad2') {
-      e.preventDefault();
-      setWorkMode('plan', { toast: true });
-    } else if (key === '3' || code === 'Digit3' || code === 'Numpad3') {
-      e.preventDefault();
-      setWorkMode('ask', { toast: true });
-    } else if (key === '4' || code === 'Digit4' || code === 'Numpad4') {
-      e.preventDefault();
-      setWorkMode('goal', { toast: true });
-    }
-  });
-  // status badge click cycles mode
+  // Ctrl/Cmd+1..4 no longer switch host modes (CLI owns mode)
+  // status badge: remind CLI ownership
   document.addEventListener('click', (e) => {
     if (e.target?.id === 'sbMode' || e.target?.closest?.('#sbMode')) {
-      cycleWorkMode();
+      setWorkMode('cli', { toast: true });
     }
     if (e.target?.id === 'btnClearGoal' || e.target?.closest?.('#btnClearGoal')) {
       e.preventDefault();
@@ -3524,10 +3489,14 @@ window.markDiffReviewed = markDiffReviewed;
 
 // ── Slash commands in composer ──────────────────────────
 const SLASH_COMMANDS = () => [
-  { id: 'craft', label: '/craft', desc: localeIsEn() ? 'Switch to Craft' : '切换 Craft 飞行', run: () => setWorkMode('craft', { toast: true }) },
-  { id: 'plan', label: '/plan', desc: localeIsEn() ? 'Switch to Plan' : '切换 Plan', run: () => setWorkMode('plan', { toast: true }) },
-  { id: 'goal', label: '/goal', desc: localeIsEn() ? 'Switch to Goal' : '切换 Goal 目标', run: () => setWorkMode('goal', { toast: true }) },
-  { id: 'ask', label: '/ask', desc: localeIsEn() ? 'Switch to Ask' : '切换 Ask', run: () => setWorkMode('ask', { toast: true }) },
+  {
+    id: 'cli-mode',
+    label: '/cli',
+    desc: localeIsEn()
+      ? 'Host uses CLI modes only (/plan in grok TUI)'
+      : '宿主仅对接 CLI 模式（在 grok TUI 用 /plan）',
+    run: () => setWorkMode('cli', { toast: true }),
+  },
   {
     id: 'model',
     label: '/model',
@@ -8120,11 +8089,7 @@ async function runTerminal(cmd) {
     appendTerm(t('term.needWs', '请先打开工作区。'), 'err');
     return;
   }
-  if (state.workMode === 'ask') {
-    appendTerm('Ask 模式：已拦截终端命令。请切换到 Craft / Plan。', 'err');
-    toast('Ask 模式禁止终端写操作', 'err');
-    return;
-  }
+  // Terminal pane is always allowed; permission is CLI YOLO / always-approve
   try {
     const res = await window.grok.runTerminal(pid(), cmd);
     if (res.stdout) appendTerm(res.stdout, 'ok');
@@ -9304,32 +9269,8 @@ async function runTaskPrompt(task, text, opts = {}) {
     clearPromptDraft(task);
   }
 
-  // Plan confirm phrases ("执行" / "implement the plan") promote this turn to Craft
-  let modeUsed = normalizeWorkMode(
-    opts.forceCraft || opts.workMode === 'craft'
-      ? 'craft'
-      : opts.workMode || state.workMode || cfg.workMode || 'craft'
-  );
-  const typedPlanExec =
-    modeUsed === 'plan' && isPlanExecutePhrase(text) && !opts.forceCraft;
-  if (typedPlanExec) {
-    modeUsed = 'craft';
-    opts = { ...opts, fromPlanExecute: true, forceCraft: true };
-    if (state.workMode === 'plan') {
-      // Sticky switch so subsequent sends stay in Craft unless user flips back
-      setWorkMode('craft', { toast: false, persistRemote: true });
-    }
-    toast(localeIsEn() ? 'Plan → Craft · executing' : 'Plan → Craft · 开始执行', 'ok');
-  } else if (opts.forceCraft && opts.fromPlanExecute) {
-    toast(localeIsEn() ? 'Plan → Craft · executing' : 'Plan → Craft · 开始执行', 'ok');
-  } else if (opts.forceCraft && state.workMode !== 'craft') {
-    toast(localeIsEn() ? 'One-shot Craft' : '单次 Craft 起飞', 'ok');
-  }
-
-  // Goal mode: anchor / refresh task.goal before run
-  if (modeUsed === 'goal') {
-    ensureTaskGoal(task, text);
-  }
+  // CLI owns plan/normal/yolo — host always tags turn as "cli"
+  const modeUsed = 'cli';
 
   // 重试时不重复追加相同 user 消息
   const lastUser = [...(task.messages || [])].reverse().find((m) => m.role === 'user');
@@ -9713,19 +9654,17 @@ function appendPlanExecuteBar(task, opts = {}) {
     </div>`;
   bar.querySelector('[data-act="exec"]').onclick = () => {
     bar.remove();
-    setWorkMode('craft', { toast: false, persistRemote: true });
-    const execText = buildPlanExecutePrompt(task.lastPlan || planText);
+    // Do not switch host "modes" — send plain execute request; CLI owns plan tools
+    const execText = en
+      ? 'Please implement the plan above step by step.'
+      : '请按上面的方案逐步实现。';
     const prompt = document.getElementById('prompt');
     if (prompt) {
       prompt.value = '';
       autoResizePrompt();
       updateCharCount();
     }
-    runTaskPrompt(task, execText, {
-      fromComposer: false,
-      forceCraft: true,
-      fromPlanExecute: true,
-    });
+    runTaskPrompt(task, execText, { fromComposer: false });
   };
   bar.querySelector('[data-act="refine"]').onclick = () => {
     const prompt = document.getElementById('prompt');
@@ -9737,7 +9676,6 @@ function appendPlanExecuteBar(task, opts = {}) {
       updateCharCount();
       prompt.focus();
     }
-    if (state.workMode !== 'plan') setWorkMode('plan', { toast: true });
   };
   bar.querySelector('[data-act="dismiss"]').onclick = () => bar.remove();
   task.pane.appendChild(bar);

@@ -142,63 +142,34 @@ function testCatalogBuild() {
 
 function testModes() {
   const m = require(path.join(root, 'electron', 'modes.js'));
+  assert.equal(m.CLI_NATIVE, true);
+  // No host mode/style injection into --rules
   const rules = m.buildRules({ baseRules: 'base', workMode: 'ask', stylePack: 'pragmatic' });
-  assert.ok(rules.includes('Ask') || rules.includes('只读'));
-  assert.ok(m.modePromptPrefix('plan', 'hello').includes('Plan'));
-  const craft = m.modePromptPrefix('craft', 'fix the bug');
-  assert.ok(craft.includes('Craft'), 'craft prefix names Craft');
-  assert.ok(craft.includes('飞行') || craft.includes('直接'), 'craft is flight/act-now');
-  const craftRules = m.buildRules({ workMode: 'craft' });
-  assert.ok(craftRules.includes('Craft'));
-  const withProj = m.buildRules({ baseRules: 'g', projectRules: 'prefer tests', workMode: 'craft' });
+  assert.ok(rules.includes('base'));
+  assert.ok(!/Ask|只读|Craft|Plan 模式|Goal/.test(rules), 'no fake mode rules');
+  assert.equal(m.modePromptPrefix('plan', 'hello'), '');
+  assert.equal(m.modePromptPrefix('craft', 'fix the bug'), '');
+  assert.equal(m.modePromptPrefix('goal', 'x', { goal: { title: 't' } }), '');
+  const withProj = m.buildRules({
+    baseRules: 'g',
+    projectRules: 'prefer tests',
+    workMode: 'craft',
+  });
   assert.ok(withProj.includes('prefer tests') || withProj.includes('项目规则'));
   assert.equal(typeof m.readProjectRulesFile, 'function');
-  assert.equal(typeof m.writeProjectRulesFile, 'function');
   const os = require('os');
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'grokcode-rules-'));
   fs.mkdirSync(path.join(tmp, '.grok'), { recursive: true });
   fs.writeFileSync(path.join(tmp, '.grok', 'rules.md'), 'no force push\n', 'utf8');
   const pr = m.readProjectRulesFile(tmp);
   assert.ok(pr.text.includes('no force push'));
-  assert.equal(m.listModes().length, 4, 'craft plan ask goal');
+  assert.equal(m.listModes().length, 1, 'cli only');
+  assert.equal(m.listModes()[0].id, 'cli');
+  assert.equal(m.normalizeWorkMode('goal'), 'cli');
+  assert.equal(m.normalizeWorkMode('nope'), 'cli');
   assert.ok(m.listStyles().length >= 3);
-  assert.equal(m.normalizeWorkMode('goal'), 'goal');
-  assert.equal(m.normalizeWorkMode('nope'), 'craft');
-  // plan execute phrase + craft promotion prefix
   assert.ok(m.isPlanExecutePhrase('执行'));
-  assert.ok(m.isPlanExecutePhrase('implement the plan'));
-  assert.ok(!m.isPlanExecutePhrase('帮我分析一下架构'));
-  const execPrefix = m.modePromptPrefix('plan', '执行');
-  assert.ok(execPrefix.includes('执行') || execPrefix.includes('Craft') || execPrefix.includes('动手'));
-  const planBody = [
-    '目标：修好登录',
-    '步骤：',
-    '1. 检查 auth.js',
-    '2. 修 token 刷新',
-    '3. 跑测试',
-    '涉及文件：src/auth.js',
-    '风险：会话失效',
-  ].join('\n');
-  assert.ok(m.looksLikePlan(planBody), 'structured plan detected');
-  const execPrompt = m.buildPlanExecutePrompt(planBody, { locale: 'zh' });
-  assert.ok(execPrompt.includes('auth') || execPrompt.includes('方案'), 'execute embeds plan');
-  assert.ok(execPrompt.includes('Craft') || execPrompt.includes('执行'), 'execute is craft-ish');
-  // Goal mode
-  const goalPrefix = m.modePromptPrefix('goal', '让登录可恢复', {
-    goal: { title: '登录可恢复', status: 'active', progress: 20 },
-  });
-  assert.ok(goalPrefix.includes('Goal') || goalPrefix.includes('目标'), 'goal prefix');
-  assert.ok(goalPrefix.includes('登录可恢复'), 'goal title injected');
-  assert.ok(m.extractGoalTitle('目标：修好 Diff 面板').includes('Diff'));
-  assert.ok(m.isGoalDonePhrase('目标完成'));
-  assert.ok(!m.isGoalDonePhrase('继续推进目标'));
-  const parsed = m.parseGoalProgress(
-    '做完了半截\n【目标进度】\n- 目标：修好登录\n- 进度：45%\n- 本轮完成：auth 刷新\n- 下一步：补测试\n'
-  );
-  assert.ok(parsed && parsed.progress === 45, 'parse progress %');
-  assert.ok(parsed.title.includes('登录'), 'parse goal title');
-  assert.ok(String(parsed.next || '').includes('测试'), 'parse next');
-  console.log('ok  modes / styles / plan→craft / goal');
+  console.log('ok  modes CLI-native (no craft/plan/ask inject)');
 }
 
 function testLooksLikePlan() {

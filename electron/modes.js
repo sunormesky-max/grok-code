@@ -1,76 +1,69 @@
 /**
- * Work modes & style packs — inspired by desktop agent UX patterns,
- * content is GrokCode / Grok-native (not third-party prompts).
+ * Work modes & style packs.
+ *
+ * CLI_NATIVE (default true): GrokCode does NOT inject Craft/Plan/Ask/Goal
+ * prompt prefixes or fake mode rules. Session mode is owned by the Grok CLI
+ * (/plan, Shift+Tab Normal↔Plan↔Always-approve, enter_plan_mode tools, etc.).
+ * Host only passes user rules + project .grok/rules and permission flags
+ * (--always-approve from settings).
  */
 
+/** When true, ignore GrokCode-invented work modes (recommended). */
+const CLI_NATIVE = process.env.GROKCODE_CLI_NATIVE !== '0';
+
 /** Canonical work-mode ids (UI + config + IPC) */
-const WORK_MODE_IDS = ['craft', 'plan', 'ask', 'goal'];
+const WORK_MODE_IDS = CLI_NATIVE
+  ? ['cli']
+  : ['craft', 'plan', 'ask', 'goal'];
 
 function normalizeWorkMode(mode) {
+  if (CLI_NATIVE) return 'cli';
   const m = String(mode || '').toLowerCase();
   return WORK_MODE_IDS.includes(m) ? m : 'craft';
 }
 
 const MODES = {
+  /** CLI-owned session mode — no host-side behavior rules */
+  cli: {
+    id: 'cli',
+    labelZh: 'CLI',
+    labelEn: 'CLI',
+    descZh: '模式由 Grok CLI 控制（/plan · Shift+Tab · YOLO）',
+    descEn: 'Mode owned by Grok CLI (/plan · Shift+Tab · YOLO)',
+    rules: '',
+  },
+  // Legacy ids kept for old configs/UI tests; rules empty under CLI_NATIVE
   craft: {
     id: 'craft',
     labelZh: 'Craft',
     labelEn: 'Craft',
-    descZh: '直接动手：读写跑命令',
-    descEn: 'Act now: read, write, run',
-    rules: [
-      '【工作模式：Craft · 飞行模式】用户要结果就直接干。',
-      '改动聚焦需求；能写文件就写；该跑命令就跑；改完做必要检查；少废话。',
-      '多步骤时按序推进，不要只列方案就停（除非明显缺关键信息）。',
-      '默认在项目工作区内操作，不要越权改系统/用户主目录。',
-    ].join('\n'),
+    descZh: '（已弃用）直接动手',
+    descEn: '(deprecated) act now',
+    rules: '',
   },
   plan: {
     id: 'plan',
     labelZh: 'Plan',
     labelEn: 'Plan',
-    descZh: '先方案，确认后再改',
-    descEn: 'Plan first, act after confirm',
-    rules: [
-      '【工作模式：Plan】先想清楚再动手。',
-      '第一步：用简短中文给出目标、步骤、涉及文件、风险；不要立刻大改代码。',
-      '只有用户明确说「执行」「开干」「按方案做」「implement the plan」后，才开始写文件/跑破坏性命令。',
-      '若信息不足，先提问再列方案。',
-    ].join('\n'),
+    descZh: '（已弃用）用 CLI /plan',
+    descEn: '(deprecated) use CLI /plan',
+    rules: '',
   },
   ask: {
     id: 'ask',
     labelZh: 'Ask',
     labelEn: 'Ask',
-    descZh: '只读问答，不改磁盘',
-    descEn: 'Read-only Q&A',
-    rules: [
-      '【工作模式：Ask · 只读】',
-      '可以读文件、解释代码、分析问题。',
-      '禁止：写文件、删文件、改配置、跑会修改系统状态的命令（安装包、git push、rm 等）。',
-      '若用户要求动手，提示切换到 Craft、Plan 或 Goal 模式。',
-      '回复给方案与示例代码块即可，不要声称已写入磁盘。',
-    ].join('\n'),
+    descZh: '（已弃用）',
+    descEn: '(deprecated)',
+    rules: '',
   },
   goal: {
     id: 'goal',
     labelZh: 'Goal',
     labelEn: 'Goal',
-    descZh: '锚定目标 · 分里程碑推进到完成',
-    descEn: 'Anchor a goal · ship by milestones',
-    rules: [
-      '【工作模式：Goal · 目标模式】',
-      '用户给出的是「要达成的目标」，不是一次性闲聊。',
-      '先用 1–2 行确认目标与成功标准，再拆成 3–7 个可验证里程碑，然后立即动手推进（可读可写可跑命令）。',
-      '每一轮结束用固定小节汇报进度（便于 UI 解析）：',
-      '【目标进度】',
-      '- 目标：…',
-      '- 进度：N%（或 已完成/受阻）',
-      '- 本轮完成：…',
-      '- 下一步：…',
-      '未完成目标时优先继续推进，不要半途只停在方案；信息不足再问。',
-      '用户说「目标完成 / goal done / 算了」时收尾并总结验收。',
-    ].join('\n'),
+    descZh: '（已弃用）',
+    descEn: '(deprecated)',
+    rules: '',
   },
 };
 
@@ -182,6 +175,16 @@ function buildRules({
   workMode = 'craft',
   stylePack = 'default',
 } = {}) {
+  // CLI native: only user + project rules — no GrokCode mode/style prompt injection
+  if (CLI_NATIVE) {
+    const parts = [
+      String(baseRules || '').trim(),
+      String(projectRules || '').trim()
+        ? `【项目规则 · .grok/rules】\n${String(projectRules).trim()}`
+        : '',
+    ].filter(Boolean);
+    return parts.join('\n\n');
+  }
   const mode = MODES[normalizeWorkMode(workMode)] || MODES.craft;
   const style = STYLES[stylePack] || STYLES.default;
   const parts = [
@@ -397,9 +400,10 @@ function buildGoalPromptBlock(goal) {
 }
 
 /**
- * Extra prompt prefix for modes
+ * Extra prompt prefix for modes (no-op when CLI_NATIVE — CLI owns /plan etc.)
  */
 function modePromptPrefix(workMode, userMessage, opts = {}) {
+  if (CLI_NATIVE) return '';
   const mode = normalizeWorkMode(workMode);
   if (mode === 'plan') {
     if (isPlanExecutePhrase(userMessage)) {
@@ -442,13 +446,17 @@ function modePromptPrefix(workMode, userMessage, opts = {}) {
 }
 
 function listModes() {
-  return Object.values(MODES).map((m) => ({
-    id: m.id,
-    labelZh: m.labelZh,
-    labelEn: m.labelEn,
-    descZh: m.descZh,
-    descEn: m.descEn,
-  }));
+  const ids = CLI_NATIVE ? ['cli'] : ['craft', 'plan', 'ask', 'goal'];
+  return ids.map((id) => {
+    const m = MODES[id];
+    return {
+      id: m.id,
+      labelZh: m.labelZh,
+      labelEn: m.labelEn,
+      descZh: m.descZh,
+      descEn: m.descEn,
+    };
+  });
 }
 
 function listStyles() {
@@ -460,6 +468,7 @@ function listStyles() {
 }
 
 module.exports = {
+  CLI_NATIVE,
   MODES,
   WORK_MODE_IDS,
   STYLES,
