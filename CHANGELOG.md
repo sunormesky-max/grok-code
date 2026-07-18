@@ -11,6 +11,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 - See [ROADMAP.md](ROADMAP.md)
 
+## [1.11.3] — 2026-07-18
+
+### Fix — craft black box: tool_delta follow-ups + stuck "Grok · stream"
+
+Diagnosis (`%TEMP%\grokcode-stream.log`, craft run): after first thought/text, host saw **only** `x.ai` `tool_call_delta_chunk` for minutes (0 standard `tool_call`), with 7–30s gaps. Subsequent delta frames omit `tool_call_id`/`name` and only send `tool_index` + `arguments_delta` — we treated them as `id= name=tool` and dropped arg progress. Chat role stayed **Grok · stream** because role only updated on text paint.
+
+- Resolve ToolCallDelta via `tool_index` map + accumulate `arguments_delta` → live tool args/path
+- Handle `pending_interaction` / `interaction_resolved` (approve → execute phase)
+- `paintLiveAssistantRole`: phase changes update chrome to `Grok · tool · write…` etc.
+- Unit test for first/later delta frames (matches grok-build notification.rs contract)
+
 ## [1.11.2] — 2026-07-18
 
 ### ACP identity + live token meter

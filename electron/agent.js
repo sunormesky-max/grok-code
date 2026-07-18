@@ -10,6 +10,7 @@ const {
   pickToolResultText,
   slimToolArgs,
   safeIpc,
+  resolveToolCallDelta,
 } = require('./acp-client');
 const {
   isKnownHeadlessType,
@@ -375,6 +376,13 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
       let firstTokenAt = 0;
       /** @type {Set<string>} */
       const openTools = new Set();
+      /** Shared state for resolveToolCallDelta (index→id, arg fragments). */
+      let toolDeltaState = {
+        indexToId: new Map(),
+        names: new Map(),
+        argAccum: new Map(),
+        lastName: 'tool',
+      };
       const noteFirstToken = (kind) => {
         if (firstTokenAt) return;
         firstTokenAt = Date.now();
@@ -661,7 +669,11 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
           if (!update || settled) return;
           // Live totalTokens / turnStartMs ride on params._meta (not inside update)
           ingestUpdateMeta(params, update);
-          const kind = String(update.sessionUpdate || update.type || '');
+          // Normalize camelCase / PascalCase / snake_case (ACP is usually snake_case)
+          const kind = String(update.sessionUpdate || update.session_update || update.type || '')
+            .replace(/([a-z])([A-Z])/g, '$1_$2')
+            .toLowerCase()
+            .replace(/-/g, '_');
 
           if (kind === 'agent_message_chunk' || kind === 'agent_message') {
             const chunk = pickChunkText(update);
@@ -886,22 +898,23 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
           bumpActivity();
 
           if (kind === 'tool_call_delta_chunk' || kind === 'toolcalldeltachunk') {
-            // Partial tool args / streaming tool content — keep tool phase live
-            const id =
-              update.toolCallId ||
-              update.tool_call_id ||
-              update.id ||
-              update.callId ||
-              '';
-            const name = update.title || update.name || update.toolName || 'tool';
-            const deltaArgs = slimToolArgs(
+            // Wire: first frame has id+name; later frames only tool_index+arguments_delta
+            const resolved = resolveToolCallDelta(update, toolDeltaState);
+            toolDeltaState = resolved.state;
+            const { id, name, idx, argFrag, hintArgs } = resolved;
+            let deltaArgs = slimToolArgs(
               update.rawInput || update.delta || update.args || update.partialArgs || {}
             );
-            if (id && !openTools.has(String(id))) {
-              openTools.add(String(id));
+            if (hintArgs && Object.keys(hintArgs).length) {
+              deltaArgs = { ...deltaArgs, ...hintArgs };
+            }
+
+            if (id && !openTools.has(id)) {
+              openTools.add(id);
               toolDepth += 1;
+              if (textChunks === 0 && thoughtChunks === 0) noteFirstToken('tool');
               emitT('agent:tool_start', {
-                id: String(id),
+                id,
                 name: String(name),
                 args: deltaArgs,
                 startedAt: Date.now(),
@@ -909,9 +922,8 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
                 fromDelta: true,
               });
             } else if (id) {
-              // Refine existing tool card / storm row without double-counting
               emitT('agent:tool_start', {
-                id: String(id),
+                id,
                 name: String(name),
                 args: deltaArgs,
                 status: 'in_progress',
@@ -919,10 +931,39 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
                 fromDelta: true,
               });
             }
-            setPhase('tool', `${name}…`);
-            streamDebug(`task=${taskId} xai tool_delta id=${id} name=${name}`, {
-              force: true,
-            });
+            setPhase('tool', `${name}${id ? '' : ' (args)'}…`);
+            streamDebug(
+              `task=${taskId} xai tool_delta id=${id || '-'} idx=${idx ?? '-'} name=${name} frag=${argFrag ? argFrag.length : 0}`,
+              { force: true }
+            );
+            return;
+          }
+
+          if (kind === 'pending_interaction') {
+            // Auto-approve YOLO: still surface that a tool is about to run
+            const tid =
+              update.tool_call_id || update.toolCallId || update.id || '';
+            const pk = update.kind || update.interactionKind || '';
+            const nm =
+              (tid && toolDeltaState.names.get(String(tid))) ||
+              toolDeltaState.lastName ||
+              'tool';
+            setPhase('tool', `批准 ${nm}${pk ? ` · ${pk}` : ''}…`);
+            streamDebug(
+              `task=${taskId} xai pending_interaction id=${tid} kind=${pk}`,
+              { force: true }
+            );
+            return;
+          }
+
+          if (kind === 'interaction_resolved') {
+            const tid =
+              update.tool_call_id || update.toolCallId || update.id || '';
+            const nm =
+              (tid && toolDeltaState.names.get(String(tid))) ||
+              toolDeltaState.lastName ||
+              'tool';
+            setPhase('tool', `执行 ${nm}…`);
             return;
           }
 

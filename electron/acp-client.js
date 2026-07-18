@@ -479,6 +479,64 @@ function safeIpc(obj) {
 }
 
 /**
+ * Resolve ToolCallDeltaChunk id/name/args across first + subsequent frames.
+ * Subsequent frames omit tool_call_id/name and only send tool_index + arguments_delta.
+ * @param {object} update
+ * @param {{ indexToId: Map<number,string>, names: Map<string,string>, argAccum: Map<string,string>, lastName: string }} state
+ */
+function resolveToolCallDelta(update, state) {
+  const st = state || {
+    indexToId: new Map(),
+    names: new Map(),
+    argAccum: new Map(),
+    lastName: 'tool',
+  };
+  const rawId =
+    update?.toolCallId || update?.tool_call_id || update?.id || update?.callId || '';
+  const idxRaw = update?.tool_index ?? update?.toolIndex;
+  const idx =
+    typeof idxRaw === 'number'
+      ? idxRaw
+      : idxRaw != null && idxRaw !== ''
+        ? Number(idxRaw)
+        : null;
+  let id = rawId ? String(rawId) : '';
+  if (id && idx != null && Number.isFinite(idx)) st.indexToId.set(idx, id);
+  else if (!id && idx != null && Number.isFinite(idx) && st.indexToId.has(idx)) {
+    id = st.indexToId.get(idx);
+  }
+  let name = update?.title || update?.name || update?.toolName || update?.tool_name || '';
+  if (name) {
+    st.lastName = String(name);
+    if (id) st.names.set(id, st.lastName);
+  } else if (id && st.names.has(id)) name = st.names.get(id);
+  else name = st.lastName || 'tool';
+
+  const argFrag =
+    typeof update?.arguments_delta === 'string'
+      ? update.arguments_delta
+      : typeof update?.argumentsDelta === 'string'
+        ? update.argumentsDelta
+        : '';
+  if (id && argFrag) st.argAccum.set(id, (st.argAccum.get(id) || '') + argFrag);
+
+  let hintArgs = {};
+  if (id && st.argAccum.has(id)) {
+    const frag = st.argAccum.get(id);
+    const pathM = frag.match(
+      /"(?:path|file_path|target_file|command)"\s*:\s*"((?:\\.|[^"\\]){1,120})/
+    );
+    if (pathM) {
+      const key = frag.includes('"command"') ? 'command' : 'path';
+      hintArgs = { [key]: pathM[1].replace(/\\"/g, '"') };
+    } else {
+      hintArgs = { preview: frag.length > 120 ? `${frag.slice(0, 120)}…` : frag };
+    }
+  }
+  return { id, name: String(name), idx, argFrag, hintArgs, state: st };
+}
+
+/**
  * Build ACP initialize params (pure — unit-tested).
  * Client identity must land in meta/_meta, not only clientInfo.name.
  * Upstream: mvp_agent/acp_agent.rs reads meta.clientType then meta.clientIdentifier.
@@ -522,4 +580,5 @@ module.exports = {
   slimToolArgs,
   safeIpc,
   buildInitializeParams,
+  resolveToolCallDelta,
 };

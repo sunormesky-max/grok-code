@@ -393,6 +393,35 @@ function testAcpPermissionPicker() {
   console.log('ok  ACP permission option picker');
 }
 
+function testResolveToolCallDelta() {
+  const { resolveToolCallDelta } = require(path.join(root, 'electron', 'acp-client.js'));
+  let st = {
+    indexToId: new Map(),
+    names: new Map(),
+    argAccum: new Map(),
+    lastName: 'tool',
+  };
+  // First frame: id + name + index
+  let r = resolveToolCallDelta(
+    { tool_call_id: 'call-1', tool_index: 0, name: 'write' },
+    st
+  );
+  st = r.state;
+  assert.equal(r.id, 'call-1');
+  assert.equal(r.name, 'write');
+  // Subsequent: only index + arguments_delta (matches upstream test)
+  r = resolveToolCallDelta(
+    { tool_index: 0, arguments_delta: '{"path":"C:\\\\erp\\\\a.js","content":"x' },
+    st
+  );
+  st = r.state;
+  assert.equal(r.id, 'call-1', 'index maps back to id');
+  assert.equal(r.name, 'write', 'name remembered');
+  assert.ok(r.hintArgs.path || r.hintArgs.preview, 'path hint from fragment');
+  assert.ok(r.argFrag.length > 0);
+  console.log('ok  ToolCallDelta index→id + arguments_delta');
+}
+
 function testAcpInitializeIdentity() {
   const { buildInitializeParams } = require(path.join(root, 'electron', 'acp-client.js'));
   const p = buildInitializeParams('9.9.9-test');
@@ -700,6 +729,7 @@ try {
   testToolsSearchExports();
   testAgentExports();
   testAcpPermissionPicker();
+  testResolveToolCallDelta();
   testAcpInitializeIdentity();
   testPickChunkTextMultimodal();
   testIpcChannelContract();

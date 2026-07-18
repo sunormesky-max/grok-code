@@ -8454,6 +8454,9 @@ function setTaskPhase(task, phase, detail) {
   task.phase = next;
   task.phaseDetail = det;
   StreamFair.scheduleTabs();
+  // Keep "Grok · stream" role in sync with real phase — otherwise long tool
+  // stretches look frozen under a stuck "stream" label (log: only tool_delta).
+  paintLiveAssistantRole(task);
   // Discrete path breadcrumbs (active only). Skip streaming spam + tool
   // (tool_start already records name/path). Skip boot duplicate if same turn.
   if (
@@ -8478,6 +8481,30 @@ function setTaskPhase(task, phase, detail) {
       sub: det || task.title,
       projectId: task.projectId,
     });
+  }
+}
+
+/** Update live assistant chrome: "Grok · tool · write 3s" not stuck "Grok · stream". */
+function paintLiveAssistantRole(task) {
+  task = task || T();
+  if (!task) return;
+  const el =
+    task.liveAssistantEl ||
+    (task.turnId && task.pane?.querySelector?.(`.msg.assistant[data-turn="${cssEscape(task.turnId)}"]`)) ||
+    task.pane?.querySelector?.('.msg.assistant[data-live="1"]');
+  if (!el) return;
+  const role = el.querySelector('.role');
+  if (!role || !task.running) return;
+  const phase = task.phase || '';
+  const det = String(task.phaseDetail || '').slice(0, 48);
+  if (phase === 'tool') {
+    role.textContent = det ? `Grok · tool · ${det}` : 'Grok · tool';
+  } else if (phase === 'thinking') {
+    role.textContent = det ? `Grok · think · ${det}` : 'Grok · think';
+  } else if (phase === 'streaming') {
+    role.textContent = det ? `Grok · stream · ${det}` : 'Grok · stream';
+  } else if (phase === 'running' || phase === 'boot' || phase === 'retry') {
+    role.textContent = det ? `Grok · ${det}` : `Grok · ${phase || 'run'}`;
   }
 }
 
@@ -10366,11 +10393,7 @@ function upsertAssistant(text, streaming, task) {
     } else {
       body.textContent = next;
     }
-    if (role) {
-      const phase = task.phase === 'tool' ? 'tool' : task.phase === 'thinking' ? 'think' : 'stream';
-      role.textContent =
-        phase === 'tool' ? 'Grok · tool' : phase === 'think' ? 'Grok · think' : 'Grok · stream';
-    }
+    if (role) paintLiveAssistantRole(task);
   } else {
     el.classList.remove('is-streaming');
     body.classList.add('md');
