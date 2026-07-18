@@ -234,7 +234,7 @@ class AcpClient {
       'initialize',
       {
         protocolVersion: 1,
-        clientInfo: { name: 'GrokCode', version: '1.10.11' },
+        clientInfo: { name: 'GrokCode', version: '1.10.12' },
         // Do not advertise fs/terminal �?agent executes tools itself; we only observe.
         clientCapabilities: {},
         _meta: {
