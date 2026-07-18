@@ -19,17 +19,15 @@ jobs:
     name: Build & publish GitHub Release
     runs-on: ${{ matrix.os }}
     strategy:
-      # Avoid racing softprops uploads of latest.yml across OS jobs finishing out of order
-      # (still parallel builds; upload step serializes poorly so use clobber + publish never).
       fail-fast: false
       matrix:
         include:
           - os: windows-latest
-            cmd: npm run dist:win
+            eb_args: --win
           - os: ubuntu-latest
-            cmd: npm run dist:linux
+            eb_args: --linux
           - os: macos-latest
-            cmd: npm run dist:mac
+            eb_args: --mac
 
     steps:
       - uses: actions/checkout@v4
@@ -47,14 +45,13 @@ jobs:
           npm run catalog
           npm run icons
 
-      # Critical: do NOT pass GH_TOKEN into electron-builder.
-      # With publish.provider=github + GH_TOKEN, builder auto-publishes and races
-      # softprops/action-gh-release, often leaving latest.yml on an older version
-      # (auto-update then never sees the new tag).
+      # Build only — upload is softprops below.
+      # Do not pass GH_TOKEN here: with package.json publish.provider=github,
+      # electron-builder will try to create a GitHubPublisher and fail without token
+      # (and race latest.yml if token is present). Explicit --publish never.
       - name: Build distributables
-        run: ${{ matrix.cmd }} -- --publish never
+        run: npx electron-builder ${{ matrix.eb_args }} --publish never
         env:
-          # Unsigned community artifacts (no Apple/Windows certs in OSS by default)
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
 
       - name: Upload release assets
@@ -71,8 +68,6 @@ jobs:
             release/*.blockmap
           generate_release_notes: true
           draft: false
-          # Overwrite same-named assets (latest.yml) when matrix jobs finish out of order
-          # so a late/wrong upload cannot permanently pin auto-update to an old version.
           make_latest: true
           prerelease: ${{ contains(github.ref_name, 'alpha') || contains(github.ref_name, 'beta') || contains(github.ref_name, 'rc') }}
         env:
