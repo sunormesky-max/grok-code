@@ -11,6 +11,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 - See [ROADMAP.md](ROADMAP.md)
 
+### Fixed
+
+- **Auto-update**: `latest.yml` was stuck on 1.11.2 after the 1.11.3 release (electron-builder + softprops race with `GH_TOKEN` auto-publish). Release workflow now builds with `--publish never` and only softprops uploads; manifest rewritten to 1.11.3.
+
 ## [1.11.3] — 2026-07-18
 
 ### Fix — craft black box: tool_delta follow-ups + stuck "Grok · stream"

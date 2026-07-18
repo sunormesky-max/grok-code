@@ -40,10 +40,10 @@
     "prepack": "node scripts/gen-icons.js",
     "predist": "node scripts/gen-icons.js",
     "pack": "electron-builder --dir",
-    "dist": "electron-builder",
-    "dist:win": "electron-builder --win",
-    "dist:linux": "electron-builder --linux",
-    "dist:mac": "electron-builder --mac",
+    "dist": "electron-builder --publish never",
+    "dist:win": "electron-builder --win --publish never",
+    "dist:linux": "electron-builder --linux --publish never",
+    "dist:mac": "electron-builder --mac --publish never",
     "release:dry": "electron-builder --win --publish never"
   },
   "dependencies": {
