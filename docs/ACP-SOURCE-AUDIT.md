@@ -33,9 +33,9 @@ Source (`updates.rs`):
 | `tool_call` | Tool start (`Pending` common) | ✅ → `agent:tool_start` |
 | `tool_call_update` | Status/fields/result | ✅ partial (`in_progress`/`completed`/…) |
 | `user_message_chunk` | Echo | ✅ ignored (ok) |
-| `plan` | Execution plan entries | ❌ ignored |
-| `available_commands_update` | Slash/tools meta | ❌ ignored |
-| `current_mode_update` | Session mode | ❌ ignored |
+| `plan` | Execution plan entries | ✅ `agent:plan` + Live (1.11.0) |
+| `available_commands_update` | Slash/tools meta | ✅ `agent:commands` (1.11.0) |
+| `current_mode_update` | Session mode | ✅ `agent:mode` (1.11.0) |
 
 ---
 
@@ -152,19 +152,21 @@ We advertise **no** client fs/terminal capabilities (correct for “agent runs t
 └───────────────────┴─────────────────┴───────────────────┘
 ```
 
-\* Subscribing to `x.ai/session_notification` for `ToolCallDeltaChunk` is a **host fix** still missing until implemented.
+\* `x.ai/session_notification` / `ToolCallDeltaChunk` subscribed since 1.10.12; tool-storm UI since 1.11.0.
 
 ---
 
 ## 11. Recommended work order
 
-1. **P0** Handle `x.ai/session_notification` (at least `tool_call_delta_chunk`, `retry_state`, `auto_compact_*`, `turn_completed`, `goal_updated`) → phase + Live events  
-2. **P0** Keep whole-prompt activity clock (1.10.11)  
-3. **P1** Tool-storm UI: collapse parallel tools into one “N tools · Ns” card  
-4. **P1** Permission response: map options from request payload exactly  
-5. **P2** Surface `plan` / mode / available_commands  
-6. **P2** Document usage incomplete flags in settings/doctor  
-7. **Upstream** `/feedback` using `patches/grok-build/FEEDBACK.md` (Issues disabled on repo)
+| Item | Status |
+|------|--------|
+| P0 `x.ai/session_notification` | Done (1.10.12) |
+| P0 whole-prompt activity clock | Done (1.10.11) |
+| P1 Tool-storm UI | Done (1.11.0 `ToolStorm`) |
+| P1 Permission option picker | Done (1.11.0 `acp-permission.js`) |
+| P2 plan / mode / commands | Done (1.11.0 `agent:plan|mode|commands`) |
+| P2 usage incomplete flags | Done (formatUsageBrief) |
+| Upstream `/feedback` | `patches/grok-build/FEEDBACK.md` |
 
 ---
 
@@ -176,6 +178,6 @@ We advertise **no** client fs/terminal capabilities (correct for “agent runs t
 | Prompt loop / emit | `electron/agent.js` | `acp_session_impl/*` |
 | Chunk merge | client meta only | `update_chunk_merge.rs` |
 | Tools | agent onUpdate | `tool_calls.rs` |
-| xAI ext notify | **missing** | `extensions/notification.rs` + `emit_buffered` |
+| xAI ext notify | `agent.js` onNotification | `extensions/notification.rs` + `emit_buffered` |
 | Headless | `runHeadless` | `headless.rs` |
 | UI stream | `renderer/app.js` StreamFair | n/a |

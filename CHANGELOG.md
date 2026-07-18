@@ -11,6 +11,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 - See [ROADMAP.md](ROADMAP.md)
 
+## [1.11.0] — 2026-07-18
+
+### Full ACP host surface (post source audit)
+
+- **Permission**: `acp-permission.js` picks real `optionId` from agent options (AllowOnce first, never invent IDs); plan/exit reverse-requests no longer hang on empty `{}`.
+- **Tool storm**: `ToolStorm` coalesces ≥3 parallel tools into one batch card with live timers (fixes ACP same-ms tool dumps flooding chat).
+- **Plan / mode / commands**: `agent:plan` `agent:mode` `agent:commands` IPC + Live mirrors.
+- **Usage**: show cache / incomplete / cost-partial flags.
+- **x.ai ext**: permission + unhandled `agent:ext` Live breadcrumbs.
+- Audit: `docs/ACP-SOURCE-AUDIT.md`
 ## [1.10.12] — 2026-07-18
 
 ### Audit — wire `x.ai/session_notification` + full ACP source map

@@ -8548,6 +8548,37 @@ function paintLiveStreamMirrors(task) {
 function clearLiveStreamMirrors() {
   document.getElementById('liveStreamMirror')?.remove();
   document.getElementById('liveThoughtMirror')?.remove();
+  document.getElementById('livePlanMirror')?.remove();
+}
+
+function paintLivePlanMirror(task, lines) {
+  if (!isActiveTask(task)) return;
+  const box = document.getElementById('liveTimeline');
+  if (!box || !lines?.length) return;
+  let row = document.getElementById('livePlanMirror');
+  if (!row || !row.isConnected) {
+    row = document.createElement('div');
+    row.id = 'livePlanMirror';
+    row.className = 'live-event status live-mirror';
+    row.innerHTML = `
+      <div class="t"></div>
+      <div class="dot"></div>
+      <div class="card">
+        <div class="kind">plan</div>
+        <div class="title">执行计划</div>
+        <pre class="sub stream-mirror-body"></pre>
+      </div>`;
+    box.appendChild(row);
+  }
+  const body = row.querySelector('.stream-mirror-body');
+  if (body) {
+    body.textContent = lines
+      .map((l, i) => `${i + 1}. ${l}`)
+      .join('\n')
+      .slice(0, 2000);
+  }
+  const title = row.querySelector('.title');
+  if (title) title.textContent = `执行计划 · ${lines.length} 步`;
 }
 
 function formatUsageBrief(usage) {
@@ -8555,12 +8586,203 @@ function formatUsageBrief(usage) {
   const inT = usage.input_tokens ?? usage.inputTokens;
   const outT = usage.output_tokens ?? usage.outputTokens;
   const total = usage.total_tokens ?? usage.totalTokens;
+  const cache = usage.cache_read_input_tokens ?? usage.cachedReadTokens ?? usage.cached_read_tokens;
   const bits = [];
   if (inT != null) bits.push(`in ${inT}`);
+  if (cache != null && Number(cache) > 0) bits.push(`cache ${cache}`);
   if (outT != null) bits.push(`out ${outT}`);
   if (total != null && !bits.length) bits.push(`Σ ${total}`);
   else if (total != null) bits.push(`Σ ${total}`);
+  if (usage.usage_is_incomplete || usage.usageIsIncomplete) bits.push('incomplete');
+  if (usage.cost_is_partial || usage.costIsPartial) bits.push('cost partial');
   return bits.join(' · ');
+}
+
+/**
+ * Coalesce parallel tool_start storms (ACP often emits 5–20 tools in 1ms).
+ * Still tracks each tool id for tool_end; UI shows one batch card when ≥3.
+ */
+const ToolStorm = {
+  WINDOW_MS: 90,
+  /** @type {Map<string, { timer: any, starts: object[], task: object }>} */
+  pending: new Map(),
+
+  onStart(d, task) {
+    if (!task?.id) {
+      appendToolStartDirect(d, task);
+      return;
+    }
+    let bag = this.pending.get(task.id);
+    if (!bag) {
+      bag = { timer: null, starts: [], task };
+      this.pending.set(task.id, bag);
+    }
+    bag.task = task;
+    bag.starts.push(d);
+    if (bag.timer) return;
+    bag.timer = setTimeout(() => this.flush(task.id), this.WINDOW_MS);
+  },
+
+  flush(taskId) {
+    const bag = this.pending.get(taskId);
+    if (!bag) return;
+    this.pending.delete(taskId);
+    clearTimeout(bag.timer);
+    const { starts, task } = bag;
+    if (!starts.length) return;
+    if (starts.length < 3) {
+      for (const d of starts) appendToolStartDirect(d, task);
+      return;
+    }
+    ensureToolStormCard(task, starts);
+    if (!task._toolStorm) task._toolStorm = new Map();
+    for (const d of starts) {
+      const id = String(d.id || '');
+      if (!id) continue;
+      task._toolStorm.set(id, {
+        id,
+        name: d.name || 'tool',
+        args: d.args || {},
+        status: 'running',
+        startedAt: Number(d.startedAt) || Date.now(),
+        result: '',
+      });
+      const fpath = window.DiffUtil?.extractPathFromTool?.(d.name, d.args || {});
+      if (fpath && isActiveTask(task) && window.DiffUtil?.isWriteTool?.(d.name)) {
+        cacheFileBefore(fpath);
+      }
+      if (window.DiffUtil?.isWriteTool?.(d.name)) {
+        task.writeCount = (task.writeCount || 0) + 1;
+      }
+    }
+    paintToolStorm(task);
+    if (isActiveTask(task)) {
+      const n = task._toolStorm.size;
+      pushLiveEvent({
+        kind: 'tool',
+        title: `[${task.title}] 并行 ${n} tools`,
+        sub: starts
+          .map((s) => s.name)
+          .filter(Boolean)
+          .slice(0, 8)
+          .join(', '),
+        running: true,
+        projectId: task.projectId,
+        immediate: true,
+      });
+      setLivePhase(`工具 ×${n}`, task.title);
+      paintLiveStreamMirrors(task);
+    }
+  },
+
+  onEnd(d, task) {
+    // Flush any pending starts first so end can match
+    if (task?.id && this.pending.has(task.id)) this.flush(task.id);
+    if (updateToolStormCard(task, d)) return;
+    appendToolEndDirect(d, task);
+  },
+};
+
+function ensureToolStormCard(task, starts) {
+  task = task || T();
+  if (!task?.pane) return null;
+  const box = task.pane;
+  let el = box.querySelector(`.msg.tool-storm[data-turn="${cssEscape(task.turnId || '')}"]`);
+  if (!el) {
+    el = document.createElement('div');
+    el.className = 'msg tool tool-storm running';
+    if (task.turnId) el.dataset.turn = task.turnId;
+    el.dataset.storm = '1';
+    el.innerHTML = `
+      <div class="role">Tools</div>
+      <div class="body">
+        <div class="name storm-title">⚙ 并行工具</div>
+        <div class="args storm-list"></div>
+        <div class="result storm-result">starting…</div>
+      </div>`;
+    const asst = task.liveAssistantEl;
+    if (asst?.parentNode === box) box.insertBefore(el, asst);
+    else box.appendChild(el);
+    task._toolStormEl = el;
+    task._toolStorm = new Map();
+    const startedAt = Date.now();
+    el.dataset.toolStarted = String(startedAt);
+    el._toolTimer = setInterval(() => {
+      if (!el.isConnected || !el.classList.contains('running')) {
+        clearInterval(el._toolTimer);
+        return;
+      }
+      paintToolStorm(task);
+    }, 500);
+  }
+  return el;
+}
+
+function trackToolInStorm(task, d) {
+  if (!task._toolStorm) task._toolStorm = new Map();
+  const id = String(d.id || '');
+  if (!id) return;
+  if (!task._toolStorm.has(id)) {
+    task._toolStorm.set(id, {
+      id,
+      name: d.name || 'tool',
+      args: d.args || {},
+      status: 'running',
+      startedAt: Number(d.startedAt) || Date.now(),
+      result: '',
+    });
+  }
+  ensureToolStormCard(task, [d]);
+  paintToolStorm(task);
+}
+
+function paintToolStorm(task) {
+  const el = task?._toolStormEl;
+  const map = task?._toolStorm;
+  if (!el || !map) return;
+  const list = el.querySelector('.storm-list');
+  const result = el.querySelector('.storm-result');
+  const title = el.querySelector('.storm-title');
+  const items = [...map.values()];
+  const running = items.filter((t) => t.status === 'running').length;
+  const done = items.length - running;
+  const startedAt = Number(el.dataset.toolStarted) || Date.now();
+  const sec = Math.max(0, Math.floor((Date.now() - startedAt) / 1000));
+  if (title) title.textContent = `⚙ 并行工具 · ${items.length}（运行 ${running} / 完成 ${done}）`;
+  if (list) {
+    list.innerHTML = items
+      .slice(0, 24)
+      .map((t) => {
+        const mark = t.status === 'running' ? '…' : t.ok === false ? '✗' : '✓';
+        const path =
+          t.args?.path || t.args?.file_path || t.args?.target_file || t.args?.command || '';
+        return `<div class="storm-row">${mark} ${esc(t.name)}${path ? ` · ${esc(String(path).slice(0, 60))}` : ''}</div>`;
+      })
+      .join('');
+    if (items.length > 24) {
+      list.innerHTML += `<div class="storm-row muted">+${items.length - 24} more</div>`;
+    }
+  }
+  if (result) {
+    result.textContent =
+      running > 0 ? `running… ${sec}s` : `批次完成 · ${sec}s · ${done}/${items.length}`;
+  }
+  el.classList.toggle('running', running > 0);
+  if (running === 0 && el._toolTimer) {
+    clearInterval(el._toolTimer);
+    el._toolTimer = null;
+  }
+}
+
+/** @returns {boolean} true if handled by storm card */
+function updateToolStormCard(task, d) {
+  if (!task?._toolStorm?.has(String(d.id))) return false;
+  const rec = task._toolStorm.get(String(d.id));
+  rec.status = 'done';
+  rec.ok = d.ok !== false;
+  rec.result = String(d.result || '').slice(0, 500);
+  paintToolStorm(task);
+  return true;
 }
 
 function bindAgentEvents() {
@@ -8631,12 +8853,22 @@ function bindAgentEvents() {
     window.grok.on('agent:tool_start', (d) => {
       const task = taskFromEvent(d);
       if (!task) return;
+      if (d?.progress) {
+        // Mid-flight status only — don't double-count or re-row
+        setTaskPhase(task, 'tool', `${d.name || 'tool'}…`);
+        return;
+      }
       const active = isActiveTask(task);
-      // Flush pending stream so tool row appears after latest text in chat
       if (active) StreamFair.flushTask(task);
       appendToolStart(d, task);
       task.toolCount += 1;
       setTaskPhase(task, 'tool', `${d.name || 'tool'}…`);
+      // Live noise for single tools only (storm path emits one summary)
+      const pending = ToolStorm.pending.get(task.id);
+      if (pending && pending.starts.length >= 2) {
+        StreamFair.scheduleTabs();
+        return;
+      }
       const fpath = window.DiffUtil.extractPathFromTool(d.name, d.args || {});
       const write = window.DiffUtil.isWriteTool(d.name);
       if (write) task.writeCount = (task.writeCount || 0) + 1;
@@ -8656,10 +8888,8 @@ function bindAgentEvents() {
           setLiveFocus(fpath, contentCacheMap().get(fpath) || '');
         }
         updateLiveStats();
-        // Keep stream mirrors after timeline rebuild from pushLiveEvent
         paintLiveStreamMirrors(task);
       } else {
-        // Background tasks: batch Live noise so active stream stays smooth
         StreamFair.pushLiveBg(write ? 'write' : 'tool', liveTitle, liveSub, task.projectId);
       }
       StreamFair.scheduleTabs();
@@ -8670,9 +8900,10 @@ function bindAgentEvents() {
       const active = isActiveTask(task);
       const fpath = window.DiffUtil.extractPathFromTool(d.name, d.args || {});
       const proj = task ? window.ProjectStore.get(task.projectId) : null;
+      const inStorm = task?._toolStorm?.has(String(d.id));
       if (fpath && window.DiffUtil.isWriteTool(d.name) && proj) {
         recordFileChangeForProject(proj, fpath, { reason: 'write' });
-      } else if (fpath && window.DiffUtil.isReadTool(d.name)) {
+      } else if (fpath && window.DiffUtil.isReadTool(d.name) && !inStorm) {
         if (active) {
           cacheFileBefore(fpath).then(() => {
             if (state.followAgent) openFile(fpath, { fromAgent: true, switchToCode: false });
@@ -8688,14 +8919,14 @@ function bindAgentEvents() {
         } else {
           StreamFair.pushLiveBg('tool', `已读 ${fpath}`, task?.title || d.name, task?.projectId);
         }
-      } else if (active) {
+      } else if (active && !inStorm) {
         pushLiveEvent({
           kind: 'tool',
           title: `${d.name || 'tool'} 完成`,
           sub: fpath || (d.ok === false ? '可能失败' : 'ok'),
           projectId: task?.projectId,
         });
-      } else {
+      } else if (!active && !inStorm) {
         StreamFair.pushLiveBg(
           'tool',
           `${d.name || 'tool'} 完成`,
@@ -8703,8 +8934,73 @@ function bindAgentEvents() {
           task?.projectId
         );
       }
-      // Tree refresh only for active writes — bg writes still update Diff maps
       if (active && window.DiffUtil.isWriteTool(d.name)) scheduleTreeRefresh();
+    }),
+    window.grok.on('agent:plan', (d) => {
+      const task = taskFromEvent(d);
+      if (!task) return;
+      task.lastPlanEntries = d.entries || [];
+      if (!isActiveTask(task)) return;
+      const lines = d.entries || [];
+      pushLiveEvent({
+        kind: 'status',
+        title: `计划 · ${lines.length || d.rawCount || 0} 步`,
+        sub: lines.slice(0, 3).join(' · ') || task.title,
+        projectId: task.projectId,
+      });
+      setLivePhase('计划更新', lines[0] || task.title);
+      paintLivePlanMirror(task, lines);
+    }),
+    window.grok.on('agent:mode', (d) => {
+      const task = taskFromEvent(d);
+      if (!task) return;
+      task.acpModeId = d.modeId || '';
+      if (isActiveTask(task) && d.modeId) {
+        setLivePhase(`模式 · ${d.modeId}`, task.title);
+        pushLiveEvent({
+          kind: 'status',
+          title: `会话模式 · ${d.modeId}`,
+          sub: task.title,
+          projectId: task.projectId,
+        });
+      }
+    }),
+    window.grok.on('agent:commands', (d) => {
+      const task = taskFromEvent(d);
+      if (!task) return;
+      task.acpCommands = d.commands || [];
+      if (isActiveTask(task) && (d.count || 0) > 0) {
+        setLivePhase(`命令 ${d.count}`, (d.commands || []).slice(0, 4).join(' · '));
+      }
+    }),
+    window.grok.on('agent:permission', (d) => {
+      const task = taskFromEvent(d);
+      if (!isActiveTask(task)) return;
+      const sub =
+        d.mode === 'auto'
+          ? `自动批准 · ${d.selected || '?'}`
+          : d.mode === 'deny'
+            ? '已拒绝（非 YOLO）'
+            : `无 allow 选项 · cancelled`;
+      pushLiveEvent({
+        kind: 'status',
+        title: '权限',
+        sub,
+        projectId: task?.projectId,
+      });
+    }),
+    window.grok.on('agent:ext', (d) => {
+      const task = taskFromEvent(d);
+      if (!isActiveTask(task) || !d?.kind) return;
+      // Low-noise: only surface interesting kinds
+      if (/retry|compact|goal|subagent|recovery|hook/i.test(d.kind)) {
+        pushLiveEvent({
+          kind: 'status',
+          title: `ext · ${d.kind}`,
+          sub: String(d.preview || '').slice(0, 100),
+          projectId: task.projectId,
+        });
+      }
     }),
     window.grok.on('agent:usage', (d) => {
       const task = taskFromEvent(d);
@@ -10140,12 +10436,21 @@ function upsertThought(text, streaming, task) {
 }
 
 function appendToolStart(d, task) {
+  ToolStorm.onStart(d, task || T());
+}
+
+function appendToolStartDirect(d, task) {
   task = task || T();
   if (!task) return;
   const box = task.pane;
   if (!box) return;
   // Dedupe (ACP may re-send tool_call + tool_call_update)
   if (d?.id && box.querySelector(`.msg.tool[data-tool-id="${cssEscape(d.id)}"]`)) return;
+  // If storm card already tracks this id, skip individual row
+  if (task._toolStorm?.has(String(d.id))) {
+    trackToolInStorm(task, d);
+    return;
+  }
   const div = document.createElement('div');
   div.className = 'msg tool running';
   div.dataset.toolId = d.id;
@@ -10165,7 +10470,6 @@ function appendToolStart(d, task) {
       <div class="args">${esc(argsPreview)}</div>
       <div class="result">running… 0s</div>
     </div>`;
-  // Upstream CLI has no in_progress tool updates — local clock fills the silent gap
   const resultEl = div.querySelector('.result');
   const tick = () => {
     if (!div.isConnected || !div.classList.contains('running')) {
@@ -10190,11 +10494,15 @@ function appendToolStart(d, task) {
 }
 
 function appendToolEnd(d, task) {
+  ToolStorm.onEnd(d, task || T());
+}
+
+function appendToolEndDirect(d, task) {
   task = task || T();
   const scope = task?.pane || document;
   let div = scope.querySelector?.(`.msg.tool[data-tool-id="${cssEscape(d.id)}"]`);
   if (!div && task) {
-    appendToolStart(d, task);
+    appendToolStartDirect(d, task);
     div = task.pane.querySelector(`.msg.tool[data-tool-id="${cssEscape(d.id)}"]`);
   }
   if (div?._toolTimer) {

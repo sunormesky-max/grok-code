@@ -341,6 +341,49 @@ function testAgentExports() {
   console.log('ok  agent stop/reap exports');
 }
 
+function testAcpPermissionPicker() {
+  const {
+    pickAutoApproveOptionId,
+    resolvePermissionResponse,
+    extractOptions,
+  } = require(path.join(root, 'electron', 'acp-permission.js'));
+
+  const opts = [
+    { optionId: 'reject', name: 'Reject', kind: 'rejectOnce' },
+    { optionId: 'allow-once', name: 'Allow once', kind: 'allowOnce' },
+    { optionId: 'allow-always', name: 'Allow always', kind: 'allowAlways' },
+  ];
+  assert.equal(pickAutoApproveOptionId(opts), 'allow-once', 'prefer AllowOnce kind/id');
+  assert.equal(
+    pickAutoApproveOptionId(opts, { preferAlways: true }),
+    'allow-once',
+    'still prefer once before always when both exist'
+  );
+
+  const onlyAlways = [{ optionId: 'allow-always', name: 'Always', kind: 'allowAlways' }];
+  assert.equal(
+    pickAutoApproveOptionId(onlyAlways, { preferAlways: true }),
+    'allow-always'
+  );
+  assert.equal(pickAutoApproveOptionId([{ optionId: 'reject', name: 'No' }]), null);
+
+  const auto = resolvePermissionResponse(
+    { options: opts },
+    { autoApprove: true }
+  );
+  assert.equal(auto.mode, 'auto');
+  assert.equal(auto.selected, 'allow-once');
+  assert.equal(auto.result.outcome.outcome, 'selected');
+  assert.equal(auto.result.outcome.optionId, 'allow-once');
+
+  const deny = resolvePermissionResponse({ options: opts }, { autoApprove: false });
+  assert.equal(deny.mode, 'deny');
+  assert.equal(deny.result.outcome.outcome, 'cancelled');
+
+  assert.equal(extractOptions({ options: opts }).length, 3);
+  console.log('ok  ACP permission option picker');
+}
+
 function testIpcChannelContract() {
   const {
     AGENT_EVENT_CHANNELS,
@@ -352,7 +395,13 @@ function testIpcChannelContract() {
   assert.ok(AGENT_EVENT_CHANNELS.includes('agent:text'));
   assert.ok(AGENT_EVENT_CHANNELS.includes('agent:tool_start'));
   assert.ok(AGENT_EVENT_CHANNELS.includes('agent:done'));
+  assert.ok(AGENT_EVENT_CHANNELS.includes('agent:plan'));
+  assert.ok(AGENT_EVENT_CHANNELS.includes('agent:mode'));
+  assert.ok(AGENT_EVENT_CHANNELS.includes('agent:commands'));
+  assert.ok(AGENT_EVENT_CHANNELS.includes('agent:permission'));
+  assert.ok(AGENT_EVENT_CHANNELS.includes('agent:ext'));
   assert.ok(isAllowedRendererChannel('agent:phase'));
+  assert.ok(isAllowedRendererChannel('agent:plan'));
   assert.ok(isAllowedRendererChannel('fs:changed'));
   assert.ok(!isAllowedRendererChannel('agent:secret'));
   assert.ok(RENDERER_EVENT_CHANNELS.length >= AGENT_EVENT_CHANNELS.length);
@@ -590,6 +639,7 @@ try {
   testDiffHunks();
   testToolsSearchExports();
   testAgentExports();
+  testAcpPermissionPicker();
   testIpcChannelContract();
   testAgentStreamNdjsonFixture();
   testAgentStreamAcpFixture();

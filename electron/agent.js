@@ -752,6 +752,56 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
             }
           } else if (kind === 'user_message_chunk') {
             bumpActivity();
+          } else if (kind === 'plan') {
+            bumpActivity();
+            const entries = Array.isArray(update.entries)
+              ? update.entries
+              : Array.isArray(update.plan)
+                ? update.plan
+                : [];
+            const lines = entries
+              .map((e) => {
+                if (typeof e === 'string') return e;
+                return e?.content || e?.title || e?.text || JSON.stringify(e);
+              })
+              .filter(Boolean)
+              .slice(0, 40);
+            emitT('agent:plan', {
+              entries: lines,
+              rawCount: entries.length,
+            });
+            if (lines[0]) setPhase('running', `计划: ${String(lines[0]).slice(0, 80)}`);
+          } else if (kind === 'current_mode_update' || kind === 'currentmodeupdate') {
+            bumpActivity();
+            const modeId =
+              update.currentModeId ||
+              update.current_mode_id ||
+              update.modeId ||
+              update.mode ||
+              '';
+            emitT('agent:mode', { modeId: String(modeId) });
+            if (modeId) setPhase('running', `模式: ${modeId}`);
+          } else if (
+            kind === 'available_commands_update' ||
+            kind === 'availablecommandsupdate'
+          ) {
+            bumpActivity();
+            const cmds = Array.isArray(update.availableCommands)
+              ? update.availableCommands
+              : Array.isArray(update.available_commands)
+                ? update.available_commands
+                : Array.isArray(update.commands)
+                  ? update.commands
+                  : [];
+            const names = cmds
+              .map((c) => c?.name || c?.command || c?.id || (typeof c === 'string' ? c : ''))
+              .filter(Boolean)
+              .slice(0, 80);
+            emitT('agent:commands', {
+              commands: names,
+              count: names.length,
+              toolsMeta: update._meta || update.meta || null,
+            });
           }
         };
         /**
@@ -893,11 +943,28 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
             return;
           }
 
-          // Unknown xAI update — log once-ish for audit
+          // Unknown xAI update — forward as agent:ext for Live + log
+          emitT('agent:ext', {
+            kind: kind || 'unknown',
+            preview: JSON.stringify(update).slice(0, 240),
+          });
           streamDebug(
             `task=${taskId} xai unhandled sessionUpdate=${kind || '(empty)'} keys=${Object.keys(update).slice(0, 8).join(',')}`,
             { force: true }
           );
+        };
+
+        client.onPermission = (info) => {
+          emitT('agent:permission', {
+            mode: info.mode,
+            selected: info.selected,
+            optionCount: (info.options || []).length,
+            options: (info.options || []).map((o) => ({
+              optionId: o.optionId,
+              name: o.name,
+              kind: o.kind,
+            })),
+          });
         };
         client.onStderr = (s) => {
           streamDebug(`task=${taskId} acp-stderr ${String(s).slice(0, 200)}`);

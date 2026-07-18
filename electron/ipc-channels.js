@@ -9,10 +9,16 @@ const AGENT_EVENT_CHANNELS = Object.freeze([
   'agent:thought',
   'agent:tool_start',
   'agent:tool_end',
+  'agent:tool_batch',
   'agent:usage',
   'agent:error',
   'agent:done',
   'agent:cli',
+  'agent:plan',
+  'agent:mode',
+  'agent:commands',
+  'agent:permission',
+  'agent:ext',
 ]);
 
 const RENDERER_EVENT_CHANNELS = Object.freeze([

@@ -9,6 +9,7 @@
  *   session/update: agent_message_chunk | agent_thought_chunk | tool_call | tool_call_update
  */
 const { spawn } = require('child_process');
+const { resolvePermissionResponse } = require('./acp-permission');
 
 class AcpClient {
   /**
@@ -172,19 +173,52 @@ class AcpClient {
     const method = String(msg.method || '');
     // Auto-approve tool permissions when YOLO / always-approve
     if (method === 'session/request_permission' || method.endsWith('/request_permission')) {
-      const options = msg.params?.options || msg.params?.permissionOptions || [];
-      let optionId =
-        options.find((o) => /allow|approve|yes|always/i.test(String(o.optionId || o.id || o.name || '')))
-          ?.optionId ||
-        options.find((o) => /allow|approve/i.test(String(o.optionId || o.id || '')))?.id ||
-        'allow-once';
-      if (options[0] && !optionId) optionId = options[0].optionId || options[0].id;
-      const result = this.autoApprove
-        ? { outcome: { outcome: 'selected', optionId: optionId || 'allow-once' } }
-        : { outcome: { outcome: 'cancelled' } };
-      this._respond(msg.id, result);
+      const resolved = resolvePermissionResponse(msg.params || {}, {
+        autoApprove: this.autoApprove,
+        preferAlways: false, // match grok-build: YOLO uses AllowOnce, not AllowAlways
+      });
+      try {
+        if (typeof this.onPermission === 'function') {
+          this.onPermission({
+            method,
+            params: msg.params,
+            selected: resolved.selected,
+            mode: resolved.mode,
+            options: resolved.options,
+          });
+        }
+      } catch {
+        /* ignore */
+      }
+      this._respond(msg.id, resolved.result);
       return;
     }
+
+    // Plan approval / other x.ai reverse requests — never hang the agent.
+    // Prefer approve/continue options when autoApprove; else cancel-like.
+    if (/exit_plan|plan_approval|request_permission|ask_user/i.test(method)) {
+      const opts = msg.params?.options || msg.params?.choices || [];
+      const pick = Array.isArray(opts)
+        ? opts.find((o) =>
+            /allow|approve|yes|accept|continue|execute/i.test(
+              String(o.optionId || o.id || o.name || o.label || '')
+            )
+          )
+        : null;
+      if (this.autoApprove && pick) {
+        const oid = pick.optionId || pick.id || pick.name;
+        this._respond(msg.id, {
+          outcome: { outcome: 'selected', optionId: String(oid) },
+        });
+        return;
+      }
+      this._respond(msg.id, {
+        outcome: { outcome: 'cancelled' },
+        cancelled: true,
+      });
+      return;
+    }
+
     // Unknown agent→client request: empty result so agent does not hang
     this._respond(msg.id, {});
   }
@@ -234,7 +268,7 @@ class AcpClient {
       'initialize',
       {
         protocolVersion: 1,
-        clientInfo: { name: 'GrokCode', version: '1.10.12' },
+        clientInfo: { name: 'GrokCode', version: '1.11.0' },
         // Do not advertise fs/terminal �?agent executes tools itself; we only observe.
         clientCapabilities: {},
         _meta: {
