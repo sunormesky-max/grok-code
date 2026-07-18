@@ -215,13 +215,23 @@ class AcpClient {
 
   async initialize() {
     this.start();
+    // grok-build ReplayBuffer (update_chunk_merge.rs) reads _meta.bufferingSettings.
+    // Omit => settings None => no merge (immediate). When set, low thresholds flush each chunk.
+    // https://github.com/xai-org/grok-build
     return this.request(
       'initialize',
       {
         protocolVersion: 1,
         clientInfo: { name: 'GrokCode', version: '1.10.9' },
-        // Do not advertise fs/terminal �?agent executes tools itself; we only observe.
+        // Do not advertise fs/terminal — agent executes tools itself; we only observe.
         clientCapabilities: {},
+        _meta: {
+          bufferingSettings: {
+            maxItems: 1,
+            maxBytes: 64,
+            maxDurationMs: 0,
+          },
+        },
       },
       30_000
     );
