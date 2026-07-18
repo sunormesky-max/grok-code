@@ -11,6 +11,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 - See [ROADMAP.md](ROADMAP.md)
 
+## [1.10.10] — 2026-07-18
+
+### ACP stream tuning + upstream patch kit
+
+- Pass `initialize._meta.bufferingSettings` (maxItems=1) for low-latency chunk flush (grok-build ReplayBuffer contract).
+- Handle ACP `tool_call_update` status `in_progress` / `pending` (keep tool card running).
+- Add `patches/grok-build/`: experimental `InProgress` emit patch + `FEEDBACK.md` for `/feedback` (upstream Issues disabled).
 ## [1.10.9] — 2026-07-18
 
 ### UX — work with upstream ACP batch cadence (not fake token stream)

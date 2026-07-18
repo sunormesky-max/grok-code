@@ -1,0 +1,24 @@
+﻿diff --git a/crates/codegen/xai-grok-shell/src/session/acp_session_impl/tool_calls.rs b/crates/codegen/xai-grok-shell/src/session/acp_session_impl/tool_calls.rs
+index 08fd514..ac446cd 100644
+--- a/crates/codegen/xai-grok-shell/src/session/acp_session_impl/tool_calls.rs
++++ b/crates/codegen/xai-grok-shell/src/session/acp_session_impl/tool_calls.rs
+@@ -406,6 +406,19 @@ impl SessionActor {
+         let workspace_ops = self.workspace_ops.clone();
+         let pending_interjections = self.pending_interjections.clone();
+         let session_id: Arc<str> = Arc::from(&*self.session_info.id.0);
++        // ACP clients (desktop hosts): Pending alone does not prove execution started.
++        // Emit InProgress once tools are approved and about to run so UIs can show
++        // elapsed time during long tools (run_terminal_command, large reads, etc.).
++        for prepared in &approved {
++            let tool_update = acp::ToolCallUpdate::new(
++                prepared.tool_call_id.clone(),
++                acp::ToolCallUpdateFields::new()
++                    .status(Some(acp::ToolCallStatus::InProgress))
++                    .title(Some(prepared.tool_name.clone())),
++            );
++            self.send_update(acp::SessionUpdate::ToolCallUpdate(tool_update), None)
++                .await;
++        }
+         let dispatch_futures: Vec<_> = approved
+             .iter()
+             .enumerate()

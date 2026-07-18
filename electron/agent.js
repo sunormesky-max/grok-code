@@ -658,7 +658,38 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
           } else if (kind === 'tool_call_update') {
             const info = pickToolInfo(update);
             const status = String(update.status || '').toLowerCase();
+            // in_progress / pending / running: keep tool card alive (upstream may
+            // emit InProgress when execution starts; see patches/grok-build).
             if (
+              status === 'in_progress' ||
+              status === 'pending' ||
+              status === 'running'
+            ) {
+              if (!openTools.has(info.id)) {
+                openTools.add(info.id);
+                toolDepth += 1;
+                if (textChunks === 0 && thoughtChunks === 0) {
+                  noteFirstToken('tool');
+                  clearWaitTick();
+                }
+                emitT('agent:tool_start', {
+                  id: info.id,
+                  name: info.name,
+                  args: slimToolArgs(info.args),
+                  startedAt: Date.now(),
+                  status,
+                });
+              } else {
+                emitT('agent:tool_start', {
+                  id: info.id,
+                  name: info.name,
+                  args: slimToolArgs(info.args),
+                  status,
+                  progress: true,
+                });
+              }
+              setPhase('tool', `${info.name}…`);
+            } else if (
               !openTools.has(info.id) &&
               status !== 'completed' &&
               status !== 'failed' &&
