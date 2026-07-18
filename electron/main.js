@@ -428,17 +428,53 @@ function createWindow(opts = {}) {
   return win;
 }
 
-app.whenReady().then(() => {
-  createWindow();
-  // 恢复最近一个项目（若存在）
-  const recent = store.get('recentProjects') || [];
-  if (recent[0] && fs.existsSync(recent[0])) {
-    try {
-      openProject(recent[0]);
-    } catch {
-      /* ignore */
+/**
+ * Rehydrate recent project list from disk sessions when electron-store lost it.
+ * Data lives in ~/.grok-code/sessions — never depend on in-memory projects alone.
+ */
+function seedRecentProjectsFromDisk() {
+  let recent = (store.get('recentProjects') || []).filter(
+    (p) => typeof p === 'string' && p && fs.existsSync(p)
+  );
+  // Legacy single workspace field
+  const legacy = store.get('workspace');
+  if (legacy && typeof legacy === 'string' && fs.existsSync(legacy)) {
+    if (!recent.some((p) => path.resolve(p) === path.resolve(legacy))) {
+      recent.unshift(legacy);
     }
   }
+  // If still empty (or thin), merge persist index / session files
+  try {
+    const snaps = persist.listSnapshots() || [];
+    for (const s of snaps) {
+      if (!s?.path || !fs.existsSync(s.path)) continue;
+      const abs = path.resolve(s.path);
+      if (!recent.some((p) => path.resolve(p) === abs)) recent.push(abs);
+    }
+  } catch (e) {
+    console.warn('seedRecent from persist', e);
+  }
+  recent = recent.slice(0, 12);
+  store.set('recentProjects', recent);
+  // Open up to 8 so multi-project tabs come back after restart
+  for (const dir of recent.slice(0, 8)) {
+    try {
+      openProject(dir);
+    } catch (e) {
+      console.warn('seed openProject', dir, e?.message || e);
+    }
+  }
+  return recent;
+}
+
+app.whenReady().then(() => {
+  // Restore project list BEFORE first paint IPC so renderer projectList() is non-empty
+  try {
+    seedRecentProjectsFromDisk();
+  } catch (e) {
+    console.warn('seedRecentProjectsFromDisk', e);
+  }
+  createWindow();
 
   // 自动更新（仅打包后）
   if (store.get('autoUpdate') !== false) {

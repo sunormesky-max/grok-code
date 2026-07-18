@@ -92,37 +92,60 @@ function createPersist(opts = {}) {
 
   function listSnapshots() {
     const indexFile = path.join(root, 'index.json');
+    /** Prefer index order, always fall back to scanning session files. */
+    const byPath = new Map();
     try {
       if (fs.existsSync(indexFile)) {
         const index = JSON.parse(fs.readFileSync(indexFile, 'utf8'));
-        return (index.projects || []).filter((p) => p.path && fs.existsSync(p.path));
+        for (const p of index.projects || []) {
+          if (!p?.path) continue;
+          // Keep entry even if path missing (user may re-mount drive); open will fail later
+          byPath.set(path.resolve(p.path).toLowerCase(), {
+            path: p.path,
+            name: p.name,
+            updatedAt: p.updatedAt,
+            taskCount: p.taskCount || 0,
+            hash: p.hash,
+          });
+        }
       }
     } catch {
       /* fall through */
     }
-    // 扫目录
-    const out = [];
+    // 扫目录 — merge/override with on-disk truth
     try {
       for (const name of fs.readdirSync(root)) {
         if (!name.endsWith('.json') || name === 'index.json') continue;
         try {
           const data = JSON.parse(fs.readFileSync(path.join(root, name), 'utf8'));
-          if (data.path && fs.existsSync(data.path)) {
-            out.push({
-              path: data.path,
-              name: data.name,
-              updatedAt: data.updatedAt,
-              taskCount: (data.tasks || []).length,
-            });
-          }
+          if (!data.path) continue;
+          const key = path.resolve(data.path).toLowerCase();
+          byPath.set(key, {
+            path: data.path,
+            name: data.name,
+            updatedAt: data.updatedAt,
+            taskCount: (data.tasks || []).length,
+            hash: name.replace(/\.json$/, ''),
+          });
         } catch {
-          /* skip */
+          /* skip corrupt file */
         }
       }
     } catch {
       /* ignore */
     }
-    return out.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+    // Prefer paths that still exist on disk; keep missing ones at the end (remount)
+    const all = [...byPath.values()];
+    const existing = all.filter((p) => {
+      try {
+        return p.path && fs.existsSync(p.path);
+      } catch {
+        return false;
+      }
+    });
+    const missing = all.filter((p) => !existing.includes(p));
+    existing.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+    return existing.length ? existing : missing.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
   }
 
   function deleteSnapshot(projectPath) {

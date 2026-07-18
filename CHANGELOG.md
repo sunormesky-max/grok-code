@@ -11,6 +11,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 - See [ROADMAP.md](ROADMAP.md)
 
+## [1.12.1] — 2026-07-18
+
+### Fixed
+
+- **Project persistence restore**: startup only reopened `recentProjects` (often empty in
+  electron-store) and only scanned `~/.grok-code/sessions` when *no* project was open —
+  one seeded project blocked the rest. Now seed recent from session index + always merge
+  all snapshots into the project bar and rehydrate tasks/messages.
+  **Your data was not deleted** — still under `%USERPROFILE%\.grok-code\sessions\`.
+
 ## [1.12.0] — 2026-07-18
 
 ### Breaking — CLI-native modes only (no host Craft/Plan/Ask/Goal)

@@ -357,42 +357,62 @@ function showPersistChip() {
   el.title = `已保存到本地 · ${new Date(lastPersistAt).toLocaleTimeString()}`;
 }
 
+function pathKey(p) {
+  return String(p || '')
+    .replace(/\\/g, '/')
+    .replace(/\/+$/, '')
+    .toLowerCase();
+}
+
 async function restoreAllProjectsFromDisk() {
-  const list = window.ProjectStore.list();
-  for (const proj of list) {
+  // Always merge ~/.grok-code/sessions index — do not require empty ProjectStore.
+  // (Bug: only restored snaps when list was empty; one "recent" project blocked the rest.)
+  let merged = 0;
+  try {
+    const snaps = await window.grok.persistList();
+    const openKeys = new Set(
+      window.ProjectStore.list().map((p) => pathKey(p.path))
+    );
+    for (const s of snaps || []) {
+      if (!s?.path || openKeys.has(pathKey(s.path))) continue;
+      try {
+        const info = await window.grok.projectOpenPath(s.path);
+        if (info) {
+          window.ProjectStore.add(info);
+          openKeys.add(pathKey(info.path || s.path));
+          merged += 1;
+        }
+      } catch (e) {
+        console.warn('restore open', s.path, e);
+      }
+    }
+  } catch (e) {
+    console.warn('persistList', e);
+  }
+
+  // Hydrate tasks/messages for every open project from disk snapshots
+  for (const proj of window.ProjectStore.list()) {
     await restoreProjectFromDisk(proj);
   }
-  // 若内存无项目，尝试从 persist 索引恢复最近项目
-  if (!list.length) {
-    try {
-      const snaps = await window.grok.persistList();
-      for (const s of (snaps || []).slice(0, 5)) {
-        if (!s.path) continue;
-        try {
-          const info = await window.grok.projectOpenPath(s.path);
-          if (info) {
-            window.ProjectStore.add(info);
-            const p = window.ProjectStore.get(info.id) || window.ProjectStore.list().find((x) => x.path === info.path);
-            if (p) await restoreProjectFromDisk(p);
-          }
-        } catch (e) {
-          console.warn('restore open', s.path, e);
-        }
-      }
-      if (window.ProjectStore.count() > 0) {
-        const p = P();
-        setWorkspaceLabel(p.path);
-        window.TaskStore.onProjectSwitch();
+
+  if (window.ProjectStore.count() > 0) {
+    const p = P();
+    if (p) {
+      setWorkspaceLabel(p.path);
+      window.TaskStore?.onProjectSwitch?.();
+      try {
         await loadTree();
-        toast(
-          t('projects.restored', `已恢复 ${window.ProjectStore.count()} 个项目的上下文`, {
-            n: window.ProjectStore.count(),
-          }),
-          'ok'
-        );
+      } catch {
+        /* ignore */
       }
-    } catch (e) {
-      console.warn(e);
+    }
+    if (merged > 0) {
+      toast(
+        t('projects.restored', `已恢复 ${window.ProjectStore.count()} 个项目的上下文`, {
+          n: window.ProjectStore.count(),
+        }),
+        'ok'
+      );
     }
   }
 }
