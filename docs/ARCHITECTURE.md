@@ -59,15 +59,19 @@ Goal state lives on the task (`title`, `status`, `progress`, `next`), is persist
 ## Streaming & performance path
 
 ```text
-CLI stdout (NDJSON)
-  → agent.js handleEvent  (text / thought / tool_* / phase / usage / done)
-  → webContents.send      (preload allowlist — must include phase+usage)
+CLI stdout (NDJSON)  or  ACP session/update
+  → electron/agent-stream.js  pure reduce (headless NDJSON / ACP)
+  → agent.js apply actions → emit IPC
+  → preload ipc-channels allowlist
   → renderer bindAgentEvents
-       ├─ StreamFair     active: every frame · bg: throttle
+       ├─ StreamFair + stream-scheduler.js  (active first · bg throttle)
        ├─ upsertAssistant / upsertThought / tool rows  (Chat)
        ├─ LiveBatcher    coalesce timeline rebuilds (~56ms)
        └─ live mirrors   sticky think/stream cards mid-run
 ```
+
+Contract tests: `scripts/fixtures/agent-stream-*.ndjson|json` + `npm test`
+(IPC shape, NDJSON/ACP reduce, multi-task fairness, L0–L3 golden).
 
 Hot paths to keep cheap:
 

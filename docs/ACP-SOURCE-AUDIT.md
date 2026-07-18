@@ -12,8 +12,8 @@ This audit maps **what the agent actually emits** to **what GrokCode consumes**,
 
 | Plane | Wire method | Content | GrokCode today |
 |-------|-------------|---------|----------------|
-| **ACP core** | `session/update` | `agent_message_chunk`, `agent_thought_chunk`, `tool_call`, `tool_call_update`, `plan`, `available_commands_update`, `current_mode_update`, `user_message_chunk` | **Handled** (subset) |
-| **xAI extension** | `x.ai/session_notification` | `ToolCallDeltaChunk`, `RetryState`, `AutoCompact*`, `GoalUpdated`, `TurnCompleted`, `Subagent*`, `TaskCompleted`, … | **Dropped** (`onNotification` no-op) |
+| **ACP core** | `session/update` | `agent_message_chunk`, `agent_thought_chunk`, `tool_call`, `tool_call_update`, `plan`, `available_commands_update`, `current_mode_update`, `user_message_chunk` | **Handled** (1.11.x full surface) |
+| **xAI extension** | `x.ai/session_notification` | `ToolCallDeltaChunk`, `RetryState`, `AutoCompact*`, `GoalUpdated`, `TurnCompleted`, `Subagent*`, `TaskCompleted`, … | **Handled** since 1.10.12 (phase + tool delta + `agent:ext`) |
 
 Source (`updates.rs`):
 
@@ -93,7 +93,7 @@ GrokCode: local `running… Ns` clock compensates missing mid-flight events.
 
 Upstream documents ACP `_meta.usage` as **full** input (includes cache); headless projects **uncached** input.
 
-GrokCode maps camelCase usage on prompt result; incomplete/partial cost flags mostly unused in UI.
+GrokCode maps camelCase usage on prompt result; `formatUsageBrief` surfaces cache / incomplete / cost-partial flags (1.11.0+).
 
 ---
 
@@ -123,13 +123,13 @@ We advertise **no** client fs/terminal capabilities (correct for “agent runs t
 | Issue | Severity | Notes |
 |-------|----------|-------|
 | Inter-stage silence after first token | High (UX) | Fixed in 1.10.11: activity clock for whole prompt |
-| `x.ai/session_notification` dropped | High | Tool deltas / compact / retry invisible |
+| `x.ai/session_notification` dropped | High | Fixed 1.10.12+; ToolCallDelta progress refresh 1.11.1 |
 | Thought collapsed while streaming | Medium | Fixed 1.10.11: keep open while live |
-| Warm pool skips re-init | Low | Settings changes need process recycle |
-| Tool storm (N tools same ms) | Medium | Floods chat; needs batch summary card |
-| Plan / mode / commands updates | Low | No UI surface yet |
-| Multimodal content blocks | Low | Text-only `pickChunkText` |
-| Permission option IDs | Medium | Heuristic `allow-once` may not match all builds |
+| Warm pool skips re-init | Low | Settings changes need process recycle (buffering stuck on first init) |
+| Tool storm (N tools same ms) | Medium | Fixed 1.11.0 `ToolStorm`; late-wave merge 1.11.1 |
+| Plan / mode / commands updates | Low | Fixed 1.11.0 Live mirrors |
+| Multimodal content blocks | Low | `pickChunkText` joins text blocks, skips image/audio (1.11.1) |
+| Permission option IDs | Medium | Fixed 1.11.0 `acp-permission.js` (AllowOnce first) |
 | Concurrent GrokCode processes | Ops | Multiple Electron instances confuse logs |
 
 ---
@@ -166,6 +166,9 @@ We advertise **no** client fs/terminal capabilities (correct for “agent runs t
 | P1 Permission option picker | Done (1.11.0 `acp-permission.js`) |
 | P2 plan / mode / commands | Done (1.11.0 `agent:plan|mode|commands`) |
 | P2 usage incomplete flags | Done (formatUsageBrief) |
+| P2 ToolStorm late-wave merge + delta args | Done (1.11.1) |
+| P2 multimodal text extract | Done (1.11.1 pickChunkText) |
+| P2 unknown reverse-req breadcrumb | Done (1.11.1 `agent:ext` reverse_request) |
 | Upstream `/feedback` | `patches/grok-build/FEEDBACK.md` |
 
 ---

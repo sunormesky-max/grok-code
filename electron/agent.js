@@ -838,15 +838,28 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
               update.callId ||
               '';
             const name = update.title || update.name || update.toolName || 'tool';
+            const deltaArgs = slimToolArgs(
+              update.rawInput || update.delta || update.args || update.partialArgs || {}
+            );
             if (id && !openTools.has(String(id))) {
               openTools.add(String(id));
               toolDepth += 1;
               emitT('agent:tool_start', {
                 id: String(id),
                 name: String(name),
-                args: slimToolArgs(update.rawInput || update.delta || update.args || {}),
+                args: deltaArgs,
                 startedAt: Date.now(),
                 status: 'in_progress',
+                fromDelta: true,
+              });
+            } else if (id) {
+              // Refine existing tool card / storm row without double-counting
+              emitT('agent:tool_start', {
+                id: String(id),
+                name: String(name),
+                args: deltaArgs,
+                status: 'in_progress',
+                progress: true,
                 fromDelta: true,
               });
             }
@@ -958,12 +971,24 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
           emitT('agent:permission', {
             mode: info.mode,
             selected: info.selected,
+            method: info.method || 'session/request_permission',
             optionCount: (info.options || []).length,
             options: (info.options || []).map((o) => ({
               optionId: o.optionId,
               name: o.name,
               kind: o.kind,
             })),
+          });
+        };
+        client.onAgentRequest = (info) => {
+          // Unknown reverse request (fs/terminal/etc.) — empty {} already sent
+          streamDebug(
+            `task=${taskId} acp reverse-req unhandled method=${info?.method || '?'}`,
+            { force: true }
+          );
+          emitT('agent:ext', {
+            kind: 'reverse_request',
+            preview: String(info?.method || 'unknown').slice(0, 120),
           });
         };
         client.onStderr = (s) => {
@@ -1117,15 +1142,26 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
           else if (typeof usage?.modelCalls === 'number') numTurns = usage.modelCalls;
 
           // Normalize usage keys for UI (headless snake_case + ACP camelCase)
-          if (usage && !usage.input_tokens && usage.inputTokens != null) {
-            usage = {
-              input_tokens: usage.inputTokens,
-              output_tokens: usage.outputTokens,
-              total_tokens: usage.totalTokens,
-              cache_read_input_tokens: usage.cachedReadTokens,
-              reasoning_tokens: usage.reasoningTokens,
-              modelCalls: usage.modelCalls,
-            };
+          if (usage && typeof usage === 'object') {
+            if (!usage.input_tokens && usage.inputTokens != null) {
+              usage = {
+                ...usage,
+                input_tokens: usage.inputTokens,
+                output_tokens: usage.outputTokens,
+                total_tokens: usage.totalTokens,
+                cache_read_input_tokens:
+                  usage.cachedReadTokens ?? usage.cache_read_input_tokens,
+                reasoning_tokens: usage.reasoningTokens,
+                modelCalls: usage.modelCalls,
+              };
+            }
+            // Surface incomplete / partial cost flags for formatUsageBrief
+            if (usage.usageIsIncomplete != null && usage.usage_is_incomplete == null) {
+              usage.usage_is_incomplete = usage.usageIsIncomplete;
+            }
+            if (usage.costIsPartial != null && usage.cost_is_partial == null) {
+              usage.cost_is_partial = usage.costIsPartial;
+            }
           }
           usage = plainUsage(usage);
 

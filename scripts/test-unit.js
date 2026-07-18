@@ -381,7 +381,48 @@ function testAcpPermissionPicker() {
   assert.equal(deny.result.outcome.outcome, 'cancelled');
 
   assert.equal(extractOptions({ options: opts }).length, 3);
+
+  // snake_case wire + allow_once kind
+  const snake = extractOptions({
+    permission_options: [
+      { option_id: 'deny-once', name: 'Deny', kind: 'reject_once' },
+      { option_id: 'proceed', name: 'Allow once', kind: 'allow_once' },
+    ],
+  });
+  assert.equal(pickAutoApproveOptionId(snake), 'proceed');
   console.log('ok  ACP permission option picker');
+}
+
+function testPickChunkTextMultimodal() {
+  const { pickChunkText, pickToolInfo, slimToolArgs } = require(path.join(
+    root,
+    'electron',
+    'acp-client.js'
+  ));
+  assert.equal(pickChunkText({ content: 'hi' }), 'hi');
+  assert.equal(pickChunkText({ content: { text: 'a' } }), 'a');
+  assert.equal(
+    pickChunkText({
+      content: [
+        { type: 'text', text: 'Hello ' },
+        { type: 'image', data: 'base64…' },
+        { type: 'text', text: 'world' },
+      ],
+    }),
+    'Hello world',
+    'skip image blocks'
+  );
+  assert.equal(pickChunkText({ text: 'top', content: null }), 'top');
+  const tool = pickToolInfo({
+    toolCallId: 't1',
+    title: 'read_file',
+    rawInput: { path: '/x/y.js', content: 'x'.repeat(500) },
+  });
+  assert.equal(tool.id, 't1');
+  assert.equal(tool.name, 'read_file');
+  const slim = slimToolArgs(tool.args);
+  assert.ok(String(slim.content || '').endsWith('…') || slim.content.length <= 241);
+  console.log('ok  pickChunkText multimodal + slimToolArgs');
 }
 
 function testIpcChannelContract() {
@@ -640,6 +681,7 @@ try {
   testToolsSearchExports();
   testAgentExports();
   testAcpPermissionPicker();
+  testPickChunkTextMultimodal();
   testIpcChannelContract();
   testAgentStreamNdjsonFixture();
   testAgentStreamAcpFixture();

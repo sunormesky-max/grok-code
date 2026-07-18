@@ -205,21 +205,51 @@ class AcpClient {
             )
           )
         : null;
+      let selected = null;
+      let mode = 'cancel';
       if (this.autoApprove && pick) {
         const oid = pick.optionId || pick.id || pick.name;
+        selected = String(oid);
+        mode = 'auto';
         this._respond(msg.id, {
-          outcome: { outcome: 'selected', optionId: String(oid) },
+          outcome: { outcome: 'selected', optionId: selected },
         });
-        return;
+      } else {
+        this._respond(msg.id, {
+          outcome: { outcome: 'cancelled' },
+          cancelled: true,
+        });
       }
-      this._respond(msg.id, {
-        outcome: { outcome: 'cancelled' },
-        cancelled: true,
-      });
+      try {
+        if (typeof this.onPermission === 'function') {
+          this.onPermission({
+            method,
+            params: msg.params,
+            selected,
+            mode,
+            options: Array.isArray(opts)
+              ? opts.map((o) => ({
+                  optionId: o.optionId || o.id,
+                  name: o.name || o.label || '',
+                  kind: o.kind || '',
+                }))
+              : [],
+          });
+        }
+      } catch {
+        /* ignore */
+      }
       return;
     }
 
     // Unknown agent→client request: empty result so agent does not hang
+    try {
+      if (typeof this.onAgentRequest === 'function') {
+        this.onAgentRequest({ method, params: msg.params || {}, id: msg.id });
+      }
+    } catch {
+      /* ignore */
+    }
     this._respond(msg.id, {});
   }
 
@@ -268,7 +298,7 @@ class AcpClient {
       'initialize',
       {
         protocolVersion: 1,
-        clientInfo: { name: 'GrokCode', version: '1.11.0' },
+        clientInfo: { name: 'GrokCode', version: '1.11.1' },
         // Do not advertise fs/terminal �?agent executes tools itself; we only observe.
         clientCapabilities: {},
         _meta: {
@@ -376,17 +406,29 @@ function pickToolInfo(update) {
   return { id, name: String(name), args: typeof args === 'object' && args ? args : {} };
 }
 
+/**
+ * Extract text from ACP content blocks (string | {text} | multimodal array).
+ * Skips image/binary blocks; joins text parts only.
+ */
 function pickChunkText(update) {
-  const c = update?.content;
-  if (!c) return '';
+  if (!update || typeof update !== 'object') return '';
+  // Some agents put text at top-level
+  if (typeof update.text === 'string' && update.content == null) return update.text;
+  const c = update.content;
+  if (c == null) return '';
   if (typeof c === 'string') return c;
   if (typeof c.text === 'string') return c.text;
   if (Array.isArray(c)) {
     return c
       .map((x) => {
         if (typeof x === 'string') return x;
-        if (x?.text) return x.text;
+        if (!x || typeof x !== 'object') return '';
+        const t = String(x.type || x.kind || '').toLowerCase();
+        // Multimodal: only surface text-ish blocks
+        if (t === 'image' || t === 'audio' || t === 'resource' || t === 'blob') return '';
+        if (typeof x.text === 'string') return x.text;
         if (x?.content?.text) return x.content.text;
+        if (typeof x.data === 'string' && (t === 'text' || !t)) return x.data;
         return '';
       })
       .join('');

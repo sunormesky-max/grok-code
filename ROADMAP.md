@@ -60,6 +60,7 @@ Living plan for the GrokCode open-source ecosystem. Order may change based on co
 
 ## Now (core)
 
+- [x] Stream contract modules + fixture tests (agent-stream / ipc-channels / stream-scheduler)
 - [x] Task phase machine + stream paint (v1.9.0)
 - [x] Turn markers + interrupt/resume continue bar (v1.9.1)
 - [x] Multi-task stream fairness under heavy tool load (v1.9.2)
@@ -68,6 +69,8 @@ Living plan for the GrokCode open-source ecosystem. Order may change based on co
 - [x] Real-time stream (no black box) (v1.9.6)
 - [x] **Goal mode** + LiveBatcher perf + arch doc (v1.10.0)
 - [x] openExternal whitelist · orphan grok reap · Ask YOLO hard-off (v1.10.2)
+- [x] Full ACP host surface: permission picker, ToolStorm, plan/mode/commands, x.ai ext (v1.11.0)
+- [x] ACP residual: storm late-wave, tool-delta progress, multimodal text, reverse-req crumbs (v1.11.1)
 
 ## Now (UI / experience)
 

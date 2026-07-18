@@ -11,6 +11,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 - See [ROADMAP.md](ROADMAP.md)
 
+## [1.11.1] — 2026-07-18
+
+### ACP host residual polish (post 1.11.0 audit)
+
+- **ToolStorm late-wave merge**: tools arriving after the 90ms coalesce window still join an open storm card (ACP often emits parallel tools in waves).
+- **ToolCallDelta progress**: mid-flight `x.ai` deltas refine existing tool/storm args (`progress: true`) instead of only opening first-seen tools.
+- **Multimodal `pickChunkText`**: joins text blocks; skips image/audio/resource.
+- **Reverse requests**: plan/exit_plan also emit `agent:permission`; unknown agent→client methods breadcrumb as `agent:ext` `reverse_request` (still reply `{}` so agent never hangs).
+- **Usage flags**: normalize `usageIsIncomplete` / `costIsPartial` for Live brief.
+- Audit doc sections reconciled with shipped host surface.
+
 ## [1.11.0] — 2026-07-18
 
 ### Full ACP host surface (post source audit)

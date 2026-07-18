@@ -8607,9 +8607,41 @@ const ToolStorm = {
   /** @type {Map<string, { timer: any, starts: object[], task: object }>} */
   pending: new Map(),
 
+  /** True when a storm card is still absorbing late parallel tools. */
+  isOpen(task) {
+    if (!task?._toolStorm?.size || !task._toolStormEl) return false;
+    if (task._toolStormEl.classList?.contains('running')) return true;
+    return [...task._toolStorm.values()].some((t) => t.status === 'running');
+  },
+
   onStart(d, task) {
     if (!task?.id) {
       appendToolStartDirect(d, task);
+      return;
+    }
+    // Progress / mid-flight updates: refresh storm row args, never open a new card
+    if (d?.progress) {
+      if (task._toolStorm?.has(String(d.id))) {
+        const rec = task._toolStorm.get(String(d.id));
+        if (d.name) rec.name = d.name;
+        if (d.args && typeof d.args === 'object' && Object.keys(d.args).length) {
+          rec.args = { ...rec.args, ...d.args };
+        }
+        paintToolStorm(task);
+      }
+      return;
+    }
+    // Late tools after the 90ms window still join an open storm (ACP tool batches
+    // often arrive in waves of 3–20 over a few hundred ms).
+    if (this.isOpen(task)) {
+      trackToolInStorm(task, d);
+      if (window.DiffUtil?.isWriteTool?.(d.name)) {
+        task.writeCount = (task.writeCount || 0) + 1;
+      }
+      const fpath = window.DiffUtil?.extractPathFromTool?.(d.name, d.args || {});
+      if (fpath && isActiveTask(task) && window.DiffUtil?.isWriteTool?.(d.name)) {
+        cacheFileBefore(fpath);
+      }
       return;
     }
     let bag = this.pending.get(task.id);
@@ -8856,6 +8888,8 @@ function bindAgentEvents() {
       if (d?.progress) {
         // Mid-flight status only — don't double-count or re-row
         setTaskPhase(task, 'tool', `${d.name || 'tool'}…`);
+        // Still refresh storm args if ToolCallDelta / in_progress refine lands
+        ToolStorm.onStart(d, task);
         return;
       }
       const active = isActiveTask(task);
@@ -8866,6 +8900,10 @@ function bindAgentEvents() {
       // Live noise for single tools only (storm path emits one summary)
       const pending = ToolStorm.pending.get(task.id);
       if (pending && pending.starts.length >= 2) {
+        StreamFair.scheduleTabs();
+        return;
+      }
+      if (ToolStorm.isOpen(task)) {
         StreamFair.scheduleTabs();
         return;
       }
