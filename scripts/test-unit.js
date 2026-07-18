@@ -393,6 +393,25 @@ function testAcpPermissionPicker() {
   console.log('ok  ACP permission option picker');
 }
 
+function testAcpInitializeIdentity() {
+  const { buildInitializeParams } = require(path.join(root, 'electron', 'acp-client.js'));
+  const p = buildInitializeParams('9.9.9-test');
+  assert.equal(p.clientInfo.name, 'GrokCode', 'product name stays GrokCode');
+  assert.equal(p.clientInfo.version, '9.9.9-test');
+  // Upstream mvp_agent reads meta.clientType (serde) then meta.clientIdentifier
+  for (const key of ['_meta', 'meta']) {
+    const m = p[key];
+    assert.ok(m, key);
+    assert.equal(m.clientType, 'grok_desktop', `${key}.clientType Desktop serde`);
+    assert.equal(m.clientIdentifier, 'grok-desktop', `${key}.clientIdentifier`);
+    assert.equal(m.clientSource, 'grok-desktop', `${key}.clientSource`);
+    assert.equal(m.clientVersion, '9.9.9-test');
+    assert.equal(m.bufferingSettings.maxItems, 1);
+    assert.equal(m.bufferingSettings.maxDurationMs, 1);
+  }
+  console.log('ok  ACP initialize Desktop identity + buffering');
+}
+
 function testPickChunkTextMultimodal() {
   const { pickChunkText, pickToolInfo, slimToolArgs } = require(path.join(
     root,
@@ -681,6 +700,7 @@ try {
   testToolsSearchExports();
   testAgentExports();
   testAcpPermissionPicker();
+  testAcpInitializeIdentity();
   testPickChunkTextMultimodal();
   testIpcChannelContract();
   testAgentStreamNdjsonFixture();

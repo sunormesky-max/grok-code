@@ -291,34 +291,8 @@ class AcpClient {
 
   async initialize() {
     this.start();
-    // grok-build ReplayBuffer (update_chunk_merge.rs) reads _meta.bufferingSettings.
-    // Omit => settings None => no merge (immediate). When set, low thresholds flush each chunk.
-    // https://github.com/xai-org/grok-build
-    return this.request(
-      'initialize',
-      {
-        protocolVersion: 1,
-        clientInfo: { name: 'GrokCode', version: '1.11.1' },
-        // Do not advertise fs/terminal �?agent executes tools itself; we only observe.
-        clientCapabilities: {},
-        _meta: {
-          bufferingSettings: {
-            maxItems: 1,
-            maxBytes: 1,
-            maxDurationMs: 1,
-          },
-        },
-        // Some ACP stacks expose meta without underscore on the wire
-        meta: {
-          bufferingSettings: {
-            maxItems: 1,
-            maxBytes: 1,
-            maxDurationMs: 1,
-          },
-        },
-      },
-      30_000
-    );
+    // See buildInitializeParams() for clientType / bufferingSettings contract.
+    return this.request('initialize', buildInitializeParams(), 30_000);
   }
 
   async newSession(cwd, meta = {}) {
@@ -504,6 +478,42 @@ function safeIpc(obj) {
   }
 }
 
+/**
+ * Build ACP initialize params (pure — unit-tested).
+ * Client identity must land in meta/_meta, not only clientInfo.name.
+ * Upstream: mvp_agent/acp_agent.rs reads meta.clientType then meta.clientIdentifier.
+ */
+function buildInitializeParams(versionOverride) {
+  let clientVersion = versionOverride;
+  if (!clientVersion) {
+    try {
+      clientVersion = require('../package.json').version || '0.0.0';
+    } catch {
+      clientVersion = '0.0.0';
+    }
+  }
+  // grok-build ClientType::Desktop serde rename is "grok_desktop";
+  // clientIdentifier fallback string is hyphenated "grok-desktop".
+  const identityMeta = {
+    clientType: 'grok_desktop',
+    clientIdentifier: 'grok-desktop',
+    clientSource: 'grok-desktop',
+    clientVersion,
+    bufferingSettings: {
+      maxItems: 1,
+      maxBytes: 1,
+      maxDurationMs: 1,
+    },
+  };
+  return {
+    protocolVersion: 1,
+    clientInfo: { name: 'GrokCode', title: 'GrokCode', version: clientVersion },
+    clientCapabilities: {},
+    _meta: { ...identityMeta },
+    meta: { ...identityMeta },
+  };
+}
+
 module.exports = {
   AcpClient,
   pickToolInfo,
@@ -511,4 +521,5 @@ module.exports = {
   pickToolResultText,
   slimToolArgs,
   safeIpc,
+  buildInitializeParams,
 };

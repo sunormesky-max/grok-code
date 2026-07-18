@@ -8591,8 +8591,11 @@ function formatUsageBrief(usage) {
   if (inT != null) bits.push(`in ${inT}`);
   if (cache != null && Number(cache) > 0) bits.push(`cache ${cache}`);
   if (outT != null) bits.push(`out ${outT}`);
-  if (total != null && !bits.length) bits.push(`Σ ${total}`);
-  else if (total != null) bits.push(`Σ ${total}`);
+  if (total != null && !bits.length) bits.push(usage.live ? `~${total} tok` : `Σ ${total}`);
+  else if (total != null) bits.push(usage.live ? `~${total}` : `Σ ${total}`);
+  if (usage.live && inT == null && outT == null) {
+    /* mid-turn estimate only — already covered by ~N tok */
+  }
   if (usage.usage_is_incomplete || usage.usageIsIncomplete) bits.push('incomplete');
   if (usage.cost_is_partial || usage.costIsPartial) bits.push('cost partial');
   return bits.join(' · ');

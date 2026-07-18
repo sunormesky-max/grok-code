@@ -473,6 +473,12 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
       let promptSentAt = 0;
       /** Last time we saw any agent activity (token/tool). Used for inter-stage silence clock. */
       let lastActivityAt = 0;
+      /** Agent wall clock from session/update _meta.turnStartMs (ms epoch). */
+      let agentTurnStartMs = 0;
+      /** Live totalTokens from each session/update _meta (estimated mid-turn). */
+      let liveTotalTokens = 0;
+      let lastLiveUsageEmitAt = 0;
+      let lastLiveUsageTokens = -1;
 
       const clearWaitTick = () => {
         if (waitTickTimer) {
@@ -484,6 +490,45 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
       const bumpActivity = () => {
         lastActivityAt = Date.now();
       };
+
+      /**
+       * Read totalTokens / turnStartMs from ACP notification params meta.
+       * Upstream (updates.rs) attaches: totalTokens, agentTimestampMs, turnStartMs, streamStartMs.
+       */
+      const ingestUpdateMeta = (params, update) => {
+        const meta =
+          (params && (params._meta || params.meta)) ||
+          (update && (update._meta || update.meta)) ||
+          null;
+        if (!meta || typeof meta !== 'object') return;
+        const tt = meta.totalTokens ?? meta.total_tokens;
+        if (typeof tt === 'number' && Number.isFinite(tt) && tt >= 0) {
+          liveTotalTokens = tt;
+          // Throttle IPC: every 400ms or when tokens jump ≥64
+          const now = Date.now();
+          const jumped = Math.abs(tt - lastLiveUsageTokens) >= 64;
+          if (jumped || now - lastLiveUsageEmitAt >= 400) {
+            lastLiveUsageEmitAt = now;
+            lastLiveUsageTokens = tt;
+            const liveUsage = plainUsage({
+              total_tokens: tt,
+              totalTokens: tt,
+              live: true,
+            });
+            if (liveUsage) {
+              usage = { ...(usage || {}), ...liveUsage };
+              emitT('agent:usage', { usage: liveUsage, live: true });
+            }
+          }
+        }
+        const tsm = meta.turnStartMs ?? meta.turn_start_ms;
+        if (typeof tsm === 'number' && tsm > 0 && !agentTurnStartMs) {
+          agentTurnStartMs = tsm;
+        }
+      };
+
+      const tokenBrief = () =>
+        liveTotalTokens > 0 ? ` · ~${liveTotalTokens} tok` : '';
 
       /**
        * Anti-black-box clock for the WHOLE prompt (not just pre-first-token).
@@ -500,13 +545,20 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
           }
           const silentSec = Math.max(0, Math.floor((Date.now() - lastActivityAt) / 1000));
           const totalSec = Math.max(0, Math.floor((Date.now() - promptSentAt) / 1000));
+          const tok = tokenBrief();
           if (!firstTokenAt) {
-            setPhase('running', `等待模型首包… ${silentSec}s`);
+            setPhase('running', `等待模型首包… ${silentSec}s${tok}`);
           } else if (toolDepth > 0) {
-            setPhase('tool', `工具执行中 ×${toolDepth} · 已静默 ${silentSec}s · 总 ${totalSec}s`);
+            setPhase(
+              'tool',
+              `工具执行中 ×${toolDepth} · 已静默 ${silentSec}s · 总 ${totalSec}s${tok}`
+            );
           } else if (silentSec >= 1) {
             // Between stages: model planning next tools / next text (no session/update)
-            setPhase('running', `等待模型继续… ${silentSec}s（CLI 段间静默）· 总 ${totalSec}s`);
+            setPhase(
+              'running',
+              `等待模型继续… ${silentSec}s（CLI 段间静默）· 总 ${totalSec}s${tok}`
+            );
           }
         }, 500);
       };
@@ -604,9 +656,11 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
       }
 
       const bindHandlers = () => {
-        client.onUpdate = (update) => {
+        client.onUpdate = (update, params) => {
           // AcpClient already gates on .streaming (active prompt only)
           if (!update || settled) return;
+          // Live totalTokens / turnStartMs ride on params._meta (not inside update)
+          ingestUpdateMeta(params, update);
           const kind = String(update.sessionUpdate || update.type || '');
 
           if (kind === 'agent_message_chunk' || kind === 'agent_message') {
@@ -819,6 +873,8 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
             }
             return;
           }
+          // xAI plane may also carry totalTokens on notification meta
+          ingestUpdateMeta(params, params?.update);
           const update = params?.update || params?.sessionUpdate || params;
           if (!update || typeof update !== 'object') return;
           const kind = String(

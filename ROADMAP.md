@@ -71,6 +71,7 @@ Living plan for the GrokCode open-source ecosystem. Order may change based on co
 - [x] openExternal whitelist · orphan grok reap · Ask YOLO hard-off (v1.10.2)
 - [x] Full ACP host surface: permission picker, ToolStorm, plan/mode/commands, x.ai ext (v1.11.0)
 - [x] ACP residual: storm late-wave, tool-delta progress, multimodal text, reverse-req crumbs (v1.11.1)
+- [x] ACP Desktop clientType + live totalTokens meter (v1.11.2)
 
 ## Now (UI / experience)
 

@@ -11,6 +11,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 - See [ROADMAP.md](ROADMAP.md)
 
+## [1.11.2] — 2026-07-18
+
+### ACP identity + live token meter
+
+- **`clientType: Desktop`**: `initialize` meta dual-writes `clientType: "grok_desktop"`, `clientIdentifier` / `clientSource: "grok-desktop"`, `clientVersion` (upstream `mvp_agent` only reads **meta**, not `clientInfo.name` — name stays `GrokCode` for product branding).
+- **Live `totalTokens`**: each `session/update` / `x.ai/session_notification` `_meta.totalTokens` throttled → `agent:usage` mid-turn; activity clock shows `~N tok`.
+- Tracks `turnStartMs` when present for future turn-relative UI.
+
 ## [1.11.1] — 2026-07-18
 
 ### ACP host residual polish (post 1.11.0 audit)

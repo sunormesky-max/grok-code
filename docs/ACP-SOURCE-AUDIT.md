@@ -51,10 +51,17 @@ Source: `update_chunk_merge.rs` + `mvp_agent/acp_agent.rs`
 
 Window clock is **`_meta.agentTimestampMs` (agent wall clock)**, not client `Date.now()`.
 
-GrokCode ships tight profile:
+GrokCode ships tight profile + Desktop identity (1.11.2):
 
 ```js
-_meta / meta: { bufferingSettings: { maxItems: 1, maxBytes: 1, maxDurationMs: 1 } }
+_meta / meta: {
+  clientType: 'grok_desktop',           // ClientType::Desktop (serde rename)
+  clientIdentifier: 'grok-desktop',     // fallback if clientType parse fails
+  clientSource: 'grok-desktop',         // PromptMetadata preference chain
+  clientVersion: '<package.version>',
+  bufferingSettings: { maxItems: 1, maxBytes: 1, maxDurationMs: 1 },
+}
+// clientInfo.name stays "GrokCode" — NOT used by mvp_agent for ClientType
 ```
 
 **Does not fix:** multi-second/minute **inter-stage silence** (no updates at all).
@@ -93,7 +100,8 @@ GrokCode: local `running… Ns` clock compensates missing mid-flight events.
 
 Upstream documents ACP `_meta.usage` as **full** input (includes cache); headless projects **uncached** input.
 
-GrokCode maps camelCase usage on prompt result; `formatUsageBrief` surfaces cache / incomplete / cost-partial flags (1.11.0+).
+GrokCode maps camelCase usage on prompt result; `formatUsageBrief` surfaces cache / incomplete / cost-partial flags (1.11.0+).  
+Live mid-turn estimate: each `session/update` `_meta.totalTokens` → throttled `agent:usage` (1.11.2).
 
 ---
 
@@ -169,6 +177,8 @@ We advertise **no** client fs/terminal capabilities (correct for “agent runs t
 | P2 ToolStorm late-wave merge + delta args | Done (1.11.1) |
 | P2 multimodal text extract | Done (1.11.1 pickChunkText) |
 | P2 unknown reverse-req breadcrumb | Done (1.11.1 `agent:ext` reverse_request) |
+| P2 clientType Desktop identity | Done (1.11.2 meta clientType/clientIdentifier) |
+| P2 live `_meta.totalTokens` | Done (1.11.2 throttled agent:usage) |
 | Upstream `/feedback` | `patches/grok-build/FEEDBACK.md` |
 
 ---
