@@ -754,6 +754,151 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
             bumpActivity();
           }
         };
+        /**
+         * xAI extension plane (see docs/ACP-SOURCE-AUDIT.md).
+         * ToolCallDeltaChunk and lifecycle events ride `x.ai/session_notification`,
+         * NOT standard `session/update` — dropping them causes black-box tools/compact.
+         */
+        client.onNotification = (method, params) => {
+          if (settled) return;
+          const m = String(method || '');
+          if (m !== 'x.ai/session_notification' && m !== '_x.ai/session_notification') {
+            // Other x.ai/* noise (mcp init, announcements) — sample log only
+            if (/x\.ai\//i.test(m)) {
+              streamDebug(`task=${taskId} acp-ext ${m}`, { force: false });
+            }
+            return;
+          }
+          const update = params?.update || params?.sessionUpdate || params;
+          if (!update || typeof update !== 'object') return;
+          const kind = String(
+            update.sessionUpdate || update.session_update || update.type || ''
+          )
+            .replace(/([a-z])([A-Z])/g, '$1_$2')
+            .toLowerCase();
+
+          bumpActivity();
+
+          if (kind === 'tool_call_delta_chunk' || kind === 'toolcalldeltachunk') {
+            // Partial tool args / streaming tool content — keep tool phase live
+            const id =
+              update.toolCallId ||
+              update.tool_call_id ||
+              update.id ||
+              update.callId ||
+              '';
+            const name = update.title || update.name || update.toolName || 'tool';
+            if (id && !openTools.has(String(id))) {
+              openTools.add(String(id));
+              toolDepth += 1;
+              emitT('agent:tool_start', {
+                id: String(id),
+                name: String(name),
+                args: slimToolArgs(update.rawInput || update.delta || update.args || {}),
+                startedAt: Date.now(),
+                status: 'in_progress',
+                fromDelta: true,
+              });
+            }
+            setPhase('tool', `${name}…`);
+            streamDebug(`task=${taskId} xai tool_delta id=${id} name=${name}`, {
+              force: true,
+            });
+            return;
+          }
+
+          if (kind === 'retry_state' || kind.startsWith('retry')) {
+            const detail =
+              update.message ||
+              update.error ||
+              update.reason ||
+              (update.status && String(update.status)) ||
+              'retrying…';
+            setPhase('retry', String(detail).slice(0, 160));
+            return;
+          }
+
+          if (
+            kind === 'auto_compact_started' ||
+            kind === 'memory_flush_started' ||
+            kind === 'auto_recovery_started'
+          ) {
+            setPhase(
+              'running',
+              kind.includes('compact')
+                ? '上下文压缩中…'
+                : kind.includes('recovery')
+                  ? '自动恢复中…'
+                  : 'Memory flush…'
+            );
+            return;
+          }
+
+          if (
+            kind === 'auto_compact_completed' ||
+            kind === 'auto_compact_failed' ||
+            kind === 'auto_compact_cancelled' ||
+            kind === 'memory_flush_completed' ||
+            kind === 'auto_recovery_exhausted'
+          ) {
+            setPhase(
+              kind.includes('fail') || kind.includes('exhaust') ? 'error' : 'running',
+              kind.includes('fail') || kind.includes('exhaust')
+                ? String(update.error || 'compact/recovery failed').slice(0, 120)
+                : '压缩/恢复完成，继续…'
+            );
+            return;
+          }
+
+          if (kind === 'goal_updated') {
+            const title = update.title || update.goalTitle || 'goal';
+            const progress =
+              typeof update.progress === 'number' ? ` ${update.progress}%` : '';
+            setPhase('running', `目标${progress}: ${String(title).slice(0, 80)}`);
+            return;
+          }
+
+          if (kind === 'turn_completed') {
+            // Usage often on result; still mark activity
+            if (update.usage) {
+              emitT('agent:usage', { usage: plainUsage(update.usage) });
+            }
+            return;
+          }
+
+          if (
+            kind === 'subagent_spawned' ||
+            kind === 'subagent_progress' ||
+            kind === 'subagent_finished'
+          ) {
+            setPhase(
+              'running',
+              kind === 'subagent_spawned'
+                ? `子代理启动…`
+                : kind === 'subagent_finished'
+                  ? '子代理完成'
+                  : '子代理运行中…'
+            );
+            return;
+          }
+
+          if (kind === 'task_completed') {
+            setPhase('running', '后台任务完成');
+            return;
+          }
+
+          if (kind === 'hook_annotation') {
+            const msg = update.message || '';
+            if (msg) setPhase('tool', String(msg).slice(0, 120));
+            return;
+          }
+
+          // Unknown xAI update — log once-ish for audit
+          streamDebug(
+            `task=${taskId} xai unhandled sessionUpdate=${kind || '(empty)'} keys=${Object.keys(update).slice(0, 8).join(',')}`,
+            { force: true }
+          );
+        };
         client.onStderr = (s) => {
           streamDebug(`task=${taskId} acp-stderr ${String(s).slice(0, 200)}`);
         };

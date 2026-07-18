@@ -146,6 +146,18 @@ class AcpClient {
         } catch {
           /* UI handler errors must not kill transport */
         }
+      } else if (
+        msg.method === 'x.ai/session_notification' ||
+        msg.method === '_x.ai/session_notification'
+      ) {
+        // xAI extension plane (ToolCallDeltaChunk, compact, retry, …).
+        // Always deliver during prompt; also allow compact/retry outside if needed.
+        if (!this.streaming) return;
+        try {
+          this.onNotification(msg.method, params);
+        } catch {
+          /* ignore */
+        }
       } else {
         try {
           this.onNotification(msg.method, params);

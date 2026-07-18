@@ -11,6 +11,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 - See [ROADMAP.md](ROADMAP.md)
 
+## [1.10.12] — 2026-07-18
+
+### Audit — wire `x.ai/session_notification` + full ACP source map
+
+- Full audit vs grok-build: `docs/ACP-SOURCE-AUDIT.md`
+- Subscribe to `x.ai/session_notification` (was dropped): tool deltas, retry, auto-compact, goal, subagent, task complete → phase / tool liveness
+- Standard `session/update` path unchanged; inter-stage activity clock from 1.10.11 kept
 ## [1.10.11] — 2026-07-18
 
 ### Fix — anti-black-box clock for whole prompt (not just first token)
