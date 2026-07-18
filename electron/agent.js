@@ -21,6 +21,56 @@ const {
 } = require('./agent-stream');
 
 /**
+ * Map opaque CLI/ACP errors to actionable Chinese (or EN) copy for the UI.
+ * Upstream often wraps 403 as "Internal error" — never surface that bare string.
+ */
+function humanizeAgentError(raw) {
+  const msg = String(raw?.message || raw || '').trim();
+  const blob = msg.toLowerCase();
+  if (
+    /coming soon|don't have access|do not have access|not have access/i.test(msg) ||
+    (/403/.test(msg) && /forbidden|access|grok build/i.test(msg))
+  ) {
+    return (
+      '当前账号无权使用 Grok Build API（403）。\n' +
+      '官方提示：Grok Build is coming soon / You don\'t have access now。\n' +
+      '处理：在终端执行 grok login 重新登录，确认账号已开通 Grok Build；' +
+      '或在设置中填写可用的 XAI_API_KEY。\n' +
+      '这不是 GrokCode 崩溃。'
+    );
+  }
+  if (
+    /authorizationrequired|auth\(authorization|re-authentication|session expired|not authenticated|login required/i.test(
+      blob
+    )
+  ) {
+    return (
+      'Grok CLI 需要重新登录（AuthorizationRequired）。\n' +
+      '请在终端运行：grok login\n' +
+      '完成后重启 GrokCode 再试。'
+    );
+  }
+  if (/401|unauthorized/i.test(msg) && /api|auth|token|key/i.test(msg)) {
+    return 'API 鉴权失败（401）。请检查 XAI_API_KEY 或重新 grok login。';
+  }
+  if (/429|rate.?limit|too many requests/i.test(msg)) {
+    return '请求过于频繁（429）。请稍后再试或降低并发任务。';
+  }
+  if (/enoent|not found|spawn .* failed/i.test(msg) && /grok/i.test(msg)) {
+    return `找不到 Grok CLI：${msg}\n请在设置中指定 grok 路径，或确认已安装。`;
+  }
+  // Strip giant JSON dumps after Internal error
+  if (/^internal error/i.test(msg)) {
+    const inner = msg.replace(/^internal error[:\s]*/i, '').slice(0, 400);
+    if (/403|coming soon|access/i.test(inner)) {
+      return humanizeAgentError(inner);
+    }
+    return `Grok 代理内部错误：${inner || msg}`.slice(0, 500);
+  }
+  return msg.slice(0, 800);
+}
+
+/**
  * Stream diagnostic log (async, batched — never block IPC hot path).
  * File: %TEMP%\grokcode-stream.log
  * Env GROKCODE_STREAM_DEBUG=0 disables; =full logs every NDJSON line.
@@ -626,8 +676,15 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
           /* ignore */
         }
         disposeAcpPool(taskId, { kill: false });
-        emitT('agent:error', { error: err.message || String(err) });
-        reject(err);
+        const friendly = humanizeAgentError(err);
+        const e = err instanceof Error ? err : new Error(friendly);
+        e.message = friendly;
+        emitT('agent:error', { error: friendly });
+        setPhase('error', friendly.split('\n')[0].slice(0, 120));
+        streamDebug(`task=${taskId} FAIL ${friendly.replace(/\n/g, ' | ')}`, {
+          force: true,
+        });
+        reject(e);
       };
 
       const argsKey = acpArgsKey(grokBin, acpArgs, cwd);
@@ -1089,7 +1146,20 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
           });
         };
         client.onStderr = (s) => {
-          streamDebug(`task=${taskId} acp-stderr ${String(s).slice(0, 200)}`);
+          const line = String(s || '');
+          streamDebug(`task=${taskId} acp-stderr ${line.slice(0, 240)}`, {
+            force: /ERROR|403|Forbidden|Authorization|Internal error|coming soon/i.test(
+              line
+            ),
+          });
+          // Surface access errors immediately in phase (don't wait for reject)
+          if (
+            /403|coming soon|don't have access|AuthorizationRequired|Internal error/i.test(
+              line
+            )
+          ) {
+            setPhase('error', humanizeAgentError(line).split('\n')[0].slice(0, 120));
+          }
         };
         client.onExit = () => {
           children.delete(taskId);
@@ -1369,7 +1439,8 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
             reject(e);
             return;
           }
-          fail(err instanceof Error ? err : new Error(msg));
+          // Prefer stderr-rich messages; humanize 403/auth before UI
+          fail(err instanceof Error ? err : new Error(humanizeAgentError(msg)));
         }
       })();
     });
@@ -1976,4 +2047,4 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
   return { run, stop, isRunning, listRunning, listTrackedPids, reapTracked };
 }
 
-module.exports = { createAgent };
+module.exports = { createAgent, humanizeAgentError };

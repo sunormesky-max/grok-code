@@ -326,7 +326,11 @@ function testShellSafe() {
 }
 
 function testAgentExports() {
-  const { createAgent } = require(path.join(root, 'electron', 'agent.js'));
+  const { createAgent, humanizeAgentError } = require(path.join(
+    root,
+    'electron',
+    'agent.js'
+  ));
   const agent = createAgent({
     getConfig: () => ({}),
     workspaceRoot: root,
@@ -338,6 +342,20 @@ function testAgentExports() {
   assert.equal(typeof agent.listTrackedPids, 'function');
   assert.deepEqual(agent.listTrackedPids(), []);
   agent.reapTracked();
+  assert.ok(
+    /无权|403|coming soon|access/i.test(
+      humanizeAgentError(
+        'Internal error: {"message":"API error (status 403 Forbidden): Grok Build is coming soon. You don\'t have access now."}'
+      )
+    ),
+    '403 access mapped'
+  );
+  assert.ok(
+    /登录|Authorization/i.test(
+      humanizeAgentError('Transport channel closed, when Auth(AuthorizationRequired)')
+    ),
+    'auth required mapped'
+  );
   console.log('ok  agent stop/reap exports');
 }
 

@@ -1135,6 +1135,16 @@ ipcMain.handle('agent:run', async (_e, payload) => {
       workMode,
       stylePack,
     };
+  } catch (err) {
+    // electron IPC often surfaces only err.message — ensure 403/auth is human-readable
+    const { humanizeAgentError } = require('./agent');
+    const friendly =
+      typeof humanizeAgentError === 'function'
+        ? humanizeAgentError(err)
+        : err?.message || String(err);
+    const e = new Error(friendly);
+    e.cause = err;
+    throw e;
   } finally {
     p._configOverride = null;
     if (p.aborts.get(tid) === ac) p.aborts.delete(tid);

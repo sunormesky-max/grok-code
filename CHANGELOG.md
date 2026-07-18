@@ -11,9 +11,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 - See [ROADMAP.md](ROADMAP.md)
 
-### Fixed
+## [1.11.4] — 2026-07-18
 
-- **Auto-update**: `latest.yml` was stuck on 1.11.2 after the 1.11.3 release (electron-builder + softprops race with `GH_TOKEN` auto-publish). Release workflow now builds with `--publish never` and only softprops uploads; manifest rewritten to 1.11.3.
+### Fix — humanize Grok API 403 / auth errors
+
+- Root cause of `Error: Internal error` on Craft: upstream API **403**  
+  `Grok Build is coming soon. You don't have access now` (not a GrokCode crash).
+- Map 403 / AuthorizationRequired / Internal-error wrappers to clear Chinese copy + next steps (`grok login` / API key).
+- Log stderr ERROR lines with force; phase shows access error immediately.
+
+### Earlier
+
+- Auto-update `latest.yml` race (publish never in Release workflow).
 
 ## [1.11.3] — 2026-07-18
 
