@@ -305,8 +305,13 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
 
   /**
    * Primary path: ACP (`grok agent stdio`) — streams thought + text + tool_call.
-   * Headless streaming-json is text/thought/end only (no tool progress) and is
-   * kept as emergency fallback (GROKCODE_AGENT_TRANSPORT=headless).
+   * Headless streaming-json is text/thought/end only (no tool progress).
+   *
+   * Some accounts can use `grok -p` / headless but get 403 on agent stdio
+   * (cli-chat-proxy.grok.com/v1/responses "Grok Build is coming soon"). In that
+   * case we fall back to headless so the desktop shell still works for chat.
+   * Override: GROKCODE_AGENT_TRANSPORT=headless|acp|streaming-json
+   * Disable fallback: GROKCODE_ACP_NO_FALLBACK=1
    */
   async function run(opts) {
     const transport = String(process.env.GROKCODE_AGENT_TRANSPORT || 'acp').toLowerCase();
@@ -317,10 +322,52 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
       return await runAcp(opts);
     } catch (err) {
       const msg = err?.message || String(err);
-      // Do not silently fall back mid-run after tools already started — only cold start failures
-      if (err?.code === 'ACP_FALLBACK' || /ENOENT|spawn |initialize|not writable|找不到 Grok/i.test(msg)) {
-        streamDebug(`ACP unavailable → headless fallback: ${msg}`, { force: true });
-        return runHeadless({ ...opts, _acpFallback: true });
+      const dataMsg =
+        err?.data && typeof err.data === 'object'
+          ? String(err.data.message || '')
+          : typeof err?.data === 'string'
+            ? err.data
+            : '';
+      const blob = `${msg}\n${dataMsg}`;
+      const noFallback =
+        process.env.GROKCODE_ACP_NO_FALLBACK === '1' ||
+        process.env.GROKCODE_ACP_NO_FALLBACK === 'true' ||
+        opts?._noHeadlessFallback;
+      // Cold start / transport failures
+      const coldFail =
+        err?.code === 'ACP_FALLBACK' ||
+        /ENOENT|spawn |initialize|not writable|找不到 Grok/i.test(msg);
+      // Account can run -p but agent stdio prompt is gated (403 coming soon)
+      const buildGate403 =
+        /coming soon|don't have access|do not have access/i.test(blob) ||
+        ((/403/.test(blob) || err?.httpStatus === 403) &&
+          /forbidden|access|grok build|cli-chat-proxy|responses/i.test(blob)) ||
+        (/internal error/i.test(blob) && /403|coming soon|access/i.test(blob));
+      if (!noFallback && (coldFail || buildGate403)) {
+        streamDebug(
+          `ACP → headless fallback (${buildGate403 ? 'build-gate-403' : 'cold'}): ${msg.slice(0, 200)}`,
+          { force: true }
+        );
+        try {
+          const reason = buildGate403
+            ? 'ACP agent 路径 403（Build 代理未开放），改用 headless（与 grok -p 同路）…'
+            : 'ACP 不可用，改用 headless…';
+          opts?.emit?.('agent:phase', {
+            taskId: opts.taskId || 'default',
+            phase: 'boot',
+            detail: reason,
+          });
+          // emit via createAgent emit is not on opts — use stream only; headless will set phase
+        } catch {
+          /* ignore */
+        }
+        // Fresh headless session — ACP session id is not valid for -p path
+        return runHeadless({
+          ...opts,
+          sessionId: null,
+          _acpFallback: true,
+          _fallbackReason: buildGate403 ? 'acp_build_403' : 'acp_cold',
+        });
       }
       throw err;
     }
@@ -1234,9 +1281,34 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
 
           if (!reused || !client._acpInitialized) {
             setPhase('boot', 'ACP initialize…');
-            await client.initialize();
+            const initRes = await client.initialize();
             client._acpInitialized = true;
             mark('initialized');
+            // Load session token into agent sampling (matches grok TUI after initialize)
+            try {
+              setPhase('boot', 'ACP authenticate…');
+              const defaultAuth =
+                initRes?._meta?.defaultAuthMethodId ||
+                initRes?.meta?.defaultAuthMethodId ||
+                initRes?.authMethods?.[0]?.id ||
+                'cached_token';
+              const authId =
+                typeof defaultAuth === 'string'
+                  ? defaultAuth
+                  : defaultAuth?.id || 'cached_token';
+              await client.authenticate(authId);
+              mark('authenticated');
+              streamDebug(`task=${taskId} acp authenticate method=${authId}`, {
+                force: true,
+              });
+            } catch (authErr) {
+              // Still try prompt — some builds auto-load disk auth on initialize
+              streamDebug(
+                `task=${taskId} acp authenticate skip/fail: ${authErr?.message || authErr}`,
+                { force: true }
+              );
+              mark('authenticate_skip');
+            }
           } else {
             mark('initialized_skip');
           }
@@ -1420,12 +1492,21 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
             );
             return;
           }
-          // Cold-start style failures → allow outer run() fallback
+          // Cold-start / Build-gate 403 → outer run() may headless-fallback
           const msg = err?.message || String(err);
+          const dataMsg =
+            err?.data && typeof err.data === 'object'
+              ? String(err.data.message || '')
+              : '';
+          const blob = `${msg}\n${dataMsg}`;
+          const noOutputYet = !finalText && !thoughtText && openTools.size === 0;
+          const buildGate =
+            /coming soon|don't have access|403|cli-chat-proxy/i.test(blob) ||
+            err?.httpStatus === 403;
           if (
-            !finalText &&
-            !thoughtText &&
-            /initialize|ENOENT|spawn|not writable|timeout: initialize/i.test(msg)
+            noOutputYet &&
+            (/initialize|ENOENT|spawn|not writable|timeout: initialize/i.test(msg) ||
+              buildGate)
           ) {
             settled = true;
             cleanup();
@@ -1434,8 +1515,12 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
             } catch {
               /* ignore */
             }
-            const e = new Error(msg);
+            const e = new Error(humanizeAgentError(err));
             e.code = 'ACP_FALLBACK';
+            e.httpStatus = err?.httpStatus;
+            e.data = err?.data;
+            // Keep raw blob for outer fallback detector
+            e.message = blob.slice(0, 800) || e.message;
             reject(e);
             return;
           }
@@ -1446,11 +1531,25 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
     });
   }
 
-  async function runHeadless({ message, sessionId = null, signal, taskId = 'default', _resumeRetried = false }) {
+  async function runHeadless({
+    message,
+    sessionId = null,
+    signal,
+    taskId = 'default',
+    _resumeRetried = false,
+    _acpFallback = false,
+    _fallbackReason = '',
+  }) {
     const cfg = getConfig();
     const cwd = workspaceRoot;
     if (!cwd || !fs.existsSync(cwd)) {
       throw new Error('请先打开一个项目工作区');
+    }
+    if (_acpFallback) {
+      streamDebug(
+        `=== RUN headless fallback task=${taskId} reason=${_fallbackReason || 'acp'}`,
+        { force: true }
+      );
     }
 
     // 同一 task 不允许并发叠跑；新请求先停旧的（标记 intentional，避免 4294967295 假错误）

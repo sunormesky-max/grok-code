@@ -11,6 +11,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 - See [ROADMAP.md](ROADMAP.md)
 
+## [1.11.5] — 2026-07-18
+
+### Fix — ACP 403 Build gate → headless fallback (matches working `grok -p`)
+
+Root cause (local probe): `grok -p --output-format streaming-json` works (thought+text,
+model `grok-4.5-build`), but `grok agent stdio` + `session/prompt` hits
+`cli-chat-proxy.grok.com/v1/responses` with **403** *Grok Build is coming soon*
+even after successful `authenticate` (SuperGrok Heavy). GrokCode only used ACP,
+so desktop failed while terminal `-p` worked.
+
+- Call ACP `authenticate` after `initialize` (`cached_token`)
+- Surface JSON-RPC `error.data.message` (403 body) instead of bare "Internal error"
+- On Build-gate 403 / cold ACP failure with no tools yet → **auto headless**
+  (`streaming-json`, same family as `grok -p`); tools progress limited until
+  agent stdio is entitled
+- Env: `GROKCODE_ACP_NO_FALLBACK=1` to disable; `GROKCODE_AGENT_TRANSPORT=headless` force
+
 ## [1.11.4] — 2026-07-18
 
 ### Fix — humanize Grok API 403 / auth errors

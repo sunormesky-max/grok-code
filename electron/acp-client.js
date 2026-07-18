@@ -118,9 +118,22 @@ class AcpClient {
         clearTimeout(p.timer);
         this.pending.delete(msg.id);
         if (msg.error) {
-          const e = new Error(msg.error.message || JSON.stringify(msg.error));
+          // Prefer data.message — grok wraps 403 as "Internal error" + data.http_status
+          const data = msg.error.data;
+          const detail =
+            typeof data === 'string'
+              ? data
+              : data && typeof data === 'object'
+                ? data.message || data.error || JSON.stringify(data)
+                : '';
+          const head = msg.error.message || 'ACP error';
+          const e = new Error(detail && detail !== head ? `${head}: ${detail}` : head);
           e.code = msg.error.code;
           e.data = msg.error.data;
+          e.httpStatus =
+            data && typeof data === 'object'
+              ? data.http_status || data.httpStatus || data.status
+              : undefined;
           p.reject(e);
         } else {
           p.resolve(msg.result);
@@ -293,6 +306,20 @@ class AcpClient {
     this.start();
     // See buildInitializeParams() for clientType / bufferingSettings contract.
     return this.request('initialize', buildInitializeParams(), 30_000);
+  }
+
+  /**
+   * ACP authenticate (required so sampling uses ~/.grok/auth.json session token).
+   * initialize advertises authMethods + defaultAuthMethodId (usually cached_token).
+   * @param {string|object} methodId
+   */
+  async authenticate(methodId = 'cached_token') {
+    const id =
+      typeof methodId === 'string'
+        ? methodId
+        : methodId?.id || methodId?.methodId || 'cached_token';
+    // Wire: AuthenticateRequest.methodId is AuthMethodId (string in 0.2.x)
+    return this.request('authenticate', { methodId: id }, 60_000);
   }
 
   async newSession(cwd, meta = {}) {
