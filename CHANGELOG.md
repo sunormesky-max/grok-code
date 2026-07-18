@@ -11,6 +11,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 - See [ROADMAP.md](ROADMAP.md)
 
+## [1.10.11] — 2026-07-18
+
+### Fix — anti-black-box clock for whole prompt (not just first token)
+
+Root cause of “still black box on 1.10.10”: `bufferingSettings` only refines **within** a text/thought span. Long runs stay silent for minutes **between** tool batches with zero `session/update` — and we **stopped** the wait timer after first token, so UI looked frozen.
+
+- Activity clock runs until prompt completes: 首包 / 工具执行中×N / 等待模型继续…
+- Thought panel stays **expanded** while streaming
+- Tight `bufferingSettings` 1/1/1 + dual `_meta`/`meta` for wire compatibility
 ## [1.10.10] — 2026-07-18
 
 ### ACP stream tuning + upstream patch kit

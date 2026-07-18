@@ -471,12 +471,44 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
 
       let waitTickTimer = null;
       let promptSentAt = 0;
+      /** Last time we saw any agent activity (token/tool). Used for inter-stage silence clock. */
+      let lastActivityAt = 0;
 
       const clearWaitTick = () => {
         if (waitTickTimer) {
           clearInterval(waitTickTimer);
           waitTickTimer = null;
         }
+      };
+
+      const bumpActivity = () => {
+        lastActivityAt = Date.now();
+      };
+
+      /**
+       * Anti-black-box clock for the WHOLE prompt (not just pre-first-token).
+       * Upstream is silent between model spans and tool batches for seconds–minutes.
+       */
+      const startActivityClock = () => {
+        clearWaitTick();
+        promptSentAt = Date.now();
+        lastActivityAt = promptSentAt;
+        waitTickTimer = setInterval(() => {
+          if (settled) {
+            clearWaitTick();
+            return;
+          }
+          const silentSec = Math.max(0, Math.floor((Date.now() - lastActivityAt) / 1000));
+          const totalSec = Math.max(0, Math.floor((Date.now() - promptSentAt) / 1000));
+          if (!firstTokenAt) {
+            setPhase('running', `等待模型首包… ${silentSec}s`);
+          } else if (toolDepth > 0) {
+            setPhase('tool', `工具执行中 ×${toolDepth} · 已静默 ${silentSec}s · 总 ${totalSec}s`);
+          } else if (silentSec >= 1) {
+            // Between stages: model planning next tools / next text (no session/update)
+            setPhase('running', `等待模型继续… ${silentSec}s（CLI 段间静默）· 总 ${totalSec}s`);
+          }
+        }, 500);
       };
 
       const cleanup = () => {
@@ -581,9 +613,9 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
             const chunk = pickChunkText(update);
             if (chunk) finalText += chunk;
             textChunks += 1;
+            bumpActivity();
             if (textChunks === 1) {
               noteFirstToken('text');
-              clearWaitTick();
               streamDebug(
                 `task=${taskId} acp first text chunk len=${chunk.length} total=${finalText.length}`,
                 { force: true }
@@ -610,9 +642,9 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
             const chunk = pickChunkText(update);
             if (chunk) thoughtText += chunk;
             thoughtChunks += 1;
+            bumpActivity();
             if (thoughtChunks === 1) {
               noteFirstToken('thought');
-              clearWaitTick();
               streamDebug(
                 `task=${taskId} acp first thought chunk len=${chunk.length}`,
                 { force: true }
@@ -635,14 +667,12 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
             if (toolDepth <= 0) setPhase('thinking', 'thinking…');
           } else if (kind === 'tool_call') {
             flushStreamIpc();
+            bumpActivity();
             const info = pickToolInfo(update);
             if (!openTools.has(info.id)) {
               openTools.add(info.id);
               toolDepth += 1;
-              if (textChunks === 0 && thoughtChunks === 0) {
-                noteFirstToken('tool');
-                clearWaitTick();
-              }
+              if (textChunks === 0 && thoughtChunks === 0) noteFirstToken('tool');
               emitT('agent:tool_start', {
                 id: info.id,
                 name: info.name,
@@ -656,10 +686,10 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
               );
             }
           } else if (kind === 'tool_call_update') {
+            bumpActivity();
             const info = pickToolInfo(update);
             const status = String(update.status || '').toLowerCase();
-            // in_progress / pending / running: keep tool card alive (upstream may
-            // emit InProgress when execution starts; see patches/grok-build).
+            // in_progress / pending / running: keep tool card alive
             if (
               status === 'in_progress' ||
               status === 'pending' ||
@@ -668,10 +698,7 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
               if (!openTools.has(info.id)) {
                 openTools.add(info.id);
                 toolDepth += 1;
-                if (textChunks === 0 && thoughtChunks === 0) {
-                  noteFirstToken('tool');
-                  clearWaitTick();
-                }
+                if (textChunks === 0 && thoughtChunks === 0) noteFirstToken('tool');
                 emitT('agent:tool_start', {
                   id: info.id,
                   name: info.name,
@@ -719,11 +746,12 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
                 ok: status === 'completed',
                 endedAt: Date.now(),
               });
+              // Do not clear activity clock — next stage may be silent for minutes
               if (toolDepth <= 0 && finalText) setPhase('streaming', 'speaking…');
-              else if (toolDepth <= 0) setPhase('running', 'working…');
+              else if (toolDepth <= 0) setPhase('running', '等待模型继续…');
             }
           } else if (kind === 'user_message_chunk') {
-            /* echo — ignore */
+            bumpActivity();
           }
         };
         client.onStderr = (s) => {
@@ -841,16 +869,13 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
           if (client.child) client.child.__acpSessionId = newSessionId;
           setPhase('running', '已发送 prompt，等待首包…');
           mark('prompt_send');
-          promptSentAt = Date.now();
-          // Upstream CLI is silent between stages — tick so UI never looks frozen
-          waitTickTimer = setInterval(() => {
-            if (settled || firstTokenAt) {
-              clearWaitTick();
-              return;
-            }
-            const s = Math.max(0, Math.floor((Date.now() - promptSentAt) / 1000));
-            setPhase('running', `等待模型（CLI 批量段）… ${s}s`);
-          }, 1000);
+          streamDebug(
+            `task=${taskId} acp bufferingSettings=tight maxItems=1 (initialize meta)`,
+            { force: true }
+          );
+          // Keep ticking until prompt completes — covers first-token silence AND
+          // multi-minute inter-stage gaps (tools / model planning).
+          startActivityClock();
 
           const result = await client.prompt(newSessionId, message);
           if (settled) return;

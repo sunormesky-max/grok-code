@@ -222,12 +222,19 @@ class AcpClient {
       'initialize',
       {
         protocolVersion: 1,
-        clientInfo: { name: 'GrokCode', version: '1.10.10' },
+        clientInfo: { name: 'GrokCode', version: '1.10.11' },
         // Do not advertise fs/terminal �?agent executes tools itself; we only observe.
         clientCapabilities: {},
         _meta: {
           bufferingSettings: {
-            // Tight profile (user-measured): finer wall-clock stream vs omitted meta
+            maxItems: 1,
+            maxBytes: 1,
+            maxDurationMs: 1,
+          },
+        },
+        // Some ACP stacks expose meta without underscore on the wire
+        meta: {
+          bufferingSettings: {
             maxItems: 1,
             maxBytes: 1,
             maxDurationMs: 1,

@@ -10128,8 +10128,10 @@ function upsertThought(text, streaming, task) {
   const summary = el.querySelector('.thought-summary');
   body.textContent = text || '';
   if (streaming) {
-    summary.textContent = 'Thinking…';
-    el.classList.add('collapsed');
+    // Keep thinking OPEN while live so long runs are not a black box
+    const n = (text || '').length;
+    summary.textContent = n ? `Thinking · 流式 ${n} 字` : 'Thinking…';
+    el.classList.remove('collapsed');
   } else {
     summary.textContent = `Thinking · ${(text || '').length} 字 · 点击展开`;
     el.classList.add('collapsed');
