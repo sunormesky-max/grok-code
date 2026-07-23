@@ -48,7 +48,68 @@ Available models:
     available: { x: { name: 'X' }, y: { name: 'Y' } },
   });
   assert.ok(mapShape.models.some((m) => m.id === 'y'));
-  console.log('ok  parse grok models + modelState JSON');
+
+  const {
+    parseEffortOptionsFromMeta,
+    effortOptionsForModel,
+    LEGACY_EFFORT_OPTIONS,
+  } = require(path.join(root, 'electron', 'grok-cli.js'));
+
+  // Unsupported → empty
+  assert.deepEqual(parseEffortOptionsFromMeta({}), []);
+  assert.deepEqual(
+    parseEffortOptionsFromMeta({ supportsReasoningEffort: false }),
+    []
+  );
+
+  // Supported, no list → legacy 4
+  const legacy = parseEffortOptionsFromMeta({ supportsReasoningEffort: true });
+  assert.equal(legacy.length, LEGACY_EFFORT_OPTIONS.length);
+  assert.equal(legacy[0].id, 'xhigh');
+
+  // Server list with remap id
+  const server = parseEffortOptionsFromMeta({
+    supportsReasoningEffort: true,
+    reasoningEfforts: [
+      { id: 'deep', value: 'xhigh', label: 'Deep' },
+      { value: 'high', label: 'High', default: true },
+    ],
+  });
+  assert.equal(server.length, 2);
+  assert.equal(server[0].id, 'deep');
+  assert.equal(server[0].value, 'xhigh');
+  assert.equal(server[1].isDefault, true);
+
+  // Catalog with per-model options
+  const cat = normalizeModelStateJson({
+    currentModelId: 'voice',
+    availableModels: [
+      {
+        modelId: 'voice',
+        name: 'Voice',
+        meta: {
+          supportsReasoningEffort: true,
+          reasoningEfforts: [
+            { value: 'none', label: 'None', default: true },
+            { value: 'high', label: 'High' },
+          ],
+        },
+      },
+      {
+        modelId: 'plain',
+        name: 'Plain',
+        meta: { supportsReasoningEffort: false },
+      },
+    ],
+  });
+  const voice = effortOptionsForModel(cat.models, 'voice');
+  assert.equal(voice.supported, true);
+  assert.ok(voice.options.some((o) => o.value === 'none'));
+  const plain = effortOptionsForModel(cat.models, 'plain');
+  assert.equal(plain.supported, false);
+  assert.equal(plain.options.length, 0);
+
+  console.log('ok  parse grok models + effort meta');
 }
 
 function testCompress() {

@@ -3588,6 +3588,8 @@ async function setModelPreset(id, opts = {}) {
   state.model = id == null ? '' : String(id).trim();
   saveJson(MODEL_KEY, state.model);
   applyModelChip();
+  // Refresh effort chip (may flip to n/a when model lacks supportsReasoningEffort)
+  applyEffortChip();
   try {
     await window.grok.setConfig({
       model: state.model,
@@ -3626,7 +3628,58 @@ async function setModelPreset(id, opts = {}) {
   return live;
 }
 
+/**
+ * Effort menu for current model (from ACP catalog when available).
+ * Gate: supportsReasoningEffort; server list or legacy xhigh|high|medium|low.
+ */
+function currentEffortMenu() {
+  const modelId = state.model || T()?.acpModelId || '';
+  const models = _liveModels.models || [];
+  const m = models.find((x) => x && x.id === modelId);
+  if (m) {
+    if (m.supportsReasoningEffort === false) {
+      return { supported: false, options: [], modelId };
+    }
+    if (Array.isArray(m.effortOptions) && m.effortOptions.length) {
+      return {
+        supported: true,
+        options: m.effortOptions,
+        modelId,
+        defaultValue: m.defaultEffort || '',
+      };
+    }
+    if (m.supportsReasoningEffort === true) {
+      return {
+        supported: true,
+        options: [
+          { id: 'xhigh', value: 'xhigh', label: 'xhigh' },
+          { id: 'high', value: 'high', label: 'high' },
+          { id: 'medium', value: 'medium', label: 'medium' },
+          { id: 'low', value: 'low', label: 'low' },
+        ],
+        modelId,
+      };
+    }
+  }
+  // No catalog meta yet — show generic presets (CLI may still accept)
+  return {
+    supported: true,
+    options: EFFORT_PRESETS.filter((p) => p.id).map((p) => ({
+      id: p.id,
+      value: p.id,
+      label: p.label,
+    })),
+    modelId,
+    generic: true,
+  };
+}
+
 function effortLabel(id) {
+  const menu = currentEffortMenu();
+  const hit = (menu.options || []).find(
+    (o) => o.id === id || o.value === id
+  );
+  if (hit) return hit.label || hit.id || id;
   const p = EFFORT_PRESETS.find((x) => x.id === (id || ''));
   if (p) return p.label;
   return id || (localeIsEn() ? 'effort · default' : 'effort · 默认');
@@ -3636,25 +3689,61 @@ function applyEffortChip() {
   const chip = document.getElementById('effortChip');
   if (!chip) return;
   const id = state.reasoningEffort || '';
-  chip.textContent = id ? `effort · ${id}` : 'effort · default';
-  chip.title =
-    (localeIsEn() ? 'Reasoning effort: ' : '推理强度：') +
-    effortLabel(id) +
-    (localeIsEn()
-      ? ' · CLI /effort · session/set_model meta'
-      : ' · 对齐 CLI /effort · session/set_model meta');
+  const menu = currentEffortMenu();
+  if (!menu.supported && menu.modelId) {
+    chip.textContent = localeIsEn() ? 'effort · n/a' : 'effort · 不支持';
+    chip.title = localeIsEn()
+      ? 'Current model does not support reasoning effort'
+      : '当前模型不支持 reasoning effort';
+    chip.classList.add('effort-na');
+  } else {
+    chip.classList.remove('effort-na');
+    chip.textContent = id ? `effort · ${id}` : 'effort · default';
+    chip.title =
+      (localeIsEn() ? 'Reasoning effort: ' : '推理强度：') +
+      effortLabel(id) +
+      (localeIsEn()
+        ? ' · CLI /effort · session/set_model meta'
+        : ' · 对齐 CLI /effort · session/set_model meta') +
+      (menu.generic
+        ? localeIsEn()
+          ? ' (generic until model catalog loads)'
+          : '（模型目录加载前用通用档位）'
+        : '');
+  }
   chip.dataset.effort = id;
 }
 
 async function setReasoningEffort(id, opts = {}) {
-  state.reasoningEffort = String(id || '')
+  // Map menu option id → canonical value when model remaps (e.g. deep → xhigh)
+  let raw = String(id || '')
     .trim()
     .toLowerCase()
     .replace(/[\s-]+/g, '_');
-  if (state.reasoningEffort === 'x_high' || state.reasoningEffort === 'max') {
-    state.reasoningEffort = 'xhigh';
+  const menu = currentEffortMenu();
+  if (raw && menu.supported) {
+    const opt = (menu.options || []).find(
+      (o) =>
+        String(o.id).toLowerCase() === raw ||
+        String(o.value).toLowerCase() === raw
+    );
+    if (opt?.value) raw = String(opt.value).toLowerCase();
+    else if (raw && !(menu.options || []).some((o) => o.value === raw || o.id === raw)) {
+      // Strict when we have a non-generic catalog
+      if (!menu.generic && menu.options?.length) {
+        toast(
+          localeIsEn()
+            ? `Unknown effort for this model; use: ${menu.options.map((o) => o.id).join(', ')}`
+            : `该模型不支持该强度；可选：${menu.options.map((o) => o.id).join(', ')}`,
+          'err'
+        );
+        return { ok: false, error: 'unknown effort' };
+      }
+    }
   }
-  if (state.reasoningEffort === 'med') state.reasoningEffort = 'medium';
+  if (raw === 'x_high' || raw === 'max') raw = 'xhigh';
+  if (raw === 'med') raw = 'medium';
+  state.reasoningEffort = raw;
   saveJson(EFFORT_KEY, state.reasoningEffort);
   applyEffortChip();
   try {
@@ -3774,15 +3863,49 @@ function bindModelChipUi() {
   };
   const openEffortMenu = () => {
     menu.classList.add('hidden');
-    effortMenu.innerHTML = EFFORT_PRESETS.map(
-      (p) =>
-        `<button type="button" class="model-menu-item${(state.reasoningEffort || '') === p.id ? ' active' : ''}" data-id="${esc(p.id)}" role="menuitem">${esc(p.label)}</button>`
-    ).join('');
+    const em = currentEffortMenu();
+    if (!em.supported && em.modelId) {
+      effortMenu.innerHTML = `<div class="model-menu-item muted" style="pointer-events:none">${
+        localeIsEn()
+          ? 'This model does not support reasoning effort'
+          : '当前模型不支持 reasoning effort'
+      }</div>`;
+      placeMenu(effortMenu, effortChip);
+      effortMenu.classList.remove('hidden');
+      return;
+    }
+    const rows = [
+      {
+        id: '',
+        value: '',
+        label: localeIsEn() ? 'default (unset)' : '默认（未设置）',
+      },
+      ...(em.options || []).map((o) => ({
+        id: o.id || o.value,
+        value: o.value || o.id,
+        label: o.label || o.id || o.value,
+      })),
+    ];
+    effortMenu.innerHTML = rows
+      .map((p) => {
+        const active =
+          (state.reasoningEffort || '') === (p.value || p.id) ||
+          (state.reasoningEffort || '') === p.id;
+        return `<button type="button" class="model-menu-item${active ? ' active' : ''}" data-id="${esc(p.id)}" data-value="${esc(p.value || p.id)}" role="menuitem">${esc(p.label)}</button>`;
+      })
+      .join('');
+    if (em.generic) {
+      effortMenu.innerHTML += `<div class="model-menu-item muted" style="pointer-events:none;font-size:11px;opacity:0.75">${
+        localeIsEn()
+          ? 'Generic list — run a turn to load model meta'
+          : '通用列表 — 跑一轮对话可加载模型 meta'
+      }</div>`;
+    }
     placeMenu(effortMenu, effortChip);
     effortMenu.classList.remove('hidden');
-    effortMenu.querySelectorAll('.model-menu-item').forEach((btn) => {
+    effortMenu.querySelectorAll('button.model-menu-item').forEach((btn) => {
       btn.onclick = async () => {
-        await setReasoningEffort(btn.dataset.id || '');
+        await setReasoningEffort(btn.dataset.value || btn.dataset.id || '');
       };
     });
   };
@@ -3865,11 +3988,25 @@ const SLASH_COMMANDS = () => [
     id: 'effort',
     label: '/effort',
     desc: localeIsEn()
-      ? 'Cycle reasoning effort (low→xhigh, CLI /effort)'
-      : '循环推理强度（low→xhigh，对齐 CLI /effort）',
+      ? 'Cycle reasoning effort for current model (CLI /effort)'
+      : '循环当前模型的推理强度（对齐 CLI /effort）',
     run: async () => {
-      const levels = EFFORT_PRESETS.map((p) => p.id);
-      const i = levels.indexOf(state.reasoningEffort || '');
+      const em = currentEffortMenu();
+      if (!em.supported && em.modelId) {
+        toast(
+          localeIsEn()
+            ? 'Current model does not support reasoning effort'
+            : '当前模型不支持 reasoning effort',
+          'err'
+        );
+        return;
+      }
+      const levels = [
+        '',
+        ...(em.options || []).map((o) => o.value || o.id),
+      ];
+      const cur = state.reasoningEffort || '';
+      const i = levels.indexOf(cur);
       await setReasoningEffort(levels[(i < 0 ? 0 : i + 1) % levels.length]);
     },
   },
@@ -9410,6 +9547,7 @@ function bindAgentEvents() {
         at: Date.now(),
         source: d.source || 'acp',
       };
+      applyEffortChip();
       if (isActiveTask(taskFromEvent(d) || T())) {
         pushLiveEvent({
           kind: 'status',

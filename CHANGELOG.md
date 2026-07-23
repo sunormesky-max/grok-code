@@ -11,6 +11,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 - See [ROADMAP.md](ROADMAP.md)
 
+## [1.20.0] — 2026-07-24
+
+### Host ↔ open-source Grok Build — per-model effort options
+
+CLI `/effort` only offers levels the active model advertises
+(`supportsReasoningEffort` + `reasoningEfforts` meta). GrokCode now mirrors that.
+
+- Parse model meta when normalizing ACP / model catalog
+- Effort chip: model-specific rows (incl. remap ids like `deep` → `xhigh`)
+- Unsupported model → `effort · n/a` (no fake low/high menu)
+- Generic fallback only until catalog loads
+- **Security**: bump transitive `fast-uri` (npm audit high → clean)
+
 ## [1.19.0] — 2026-07-23
 
 ### Host ↔ open-source Grok Build — live model list

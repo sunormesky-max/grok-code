@@ -2196,6 +2196,11 @@ button.pill:hover {
   border-color: rgba(56, 189, 248, 0.6) !important;
   background: rgba(14, 165, 233, 0.1);
 }
+.effort-chip.effort-na {
+  opacity: 0.55;
+  border-color: rgba(113, 113, 122, 0.35) !important;
+  color: #a1a1aa !important;
+}
 .model-menu {
   position: fixed;
   z-index: 13000;

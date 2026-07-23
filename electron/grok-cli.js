@@ -163,9 +163,112 @@ function parseModelsOutput(raw) {
 }
 
 /**
+ * Built-in effort menu when model supports reasoning but omits a server list
+ * (matches open-source pager legacy_effort_options: xhigh|high|medium|low).
+ */
+const LEGACY_EFFORT_OPTIONS = Object.freeze([
+  { id: 'xhigh', value: 'xhigh', label: 'xhigh' },
+  { id: 'high', value: 'high', label: 'high' },
+  { id: 'medium', value: 'medium', label: 'medium' },
+  { id: 'low', value: 'low', label: 'low' },
+]);
+
+/**
+ * Extract effort options from ModelInfo.meta (ACP).
+ * Gate: supportsReasoningEffort must be true; else [].
+ * Server list in meta.reasoningEfforts when present; else legacy 4-row menu.
+ */
+function parseEffortOptionsFromMeta(meta) {
+  if (!meta || typeof meta !== 'object') return [];
+  const supports =
+    meta.supportsReasoningEffort === true ||
+    meta.supports_reasoning_effort === true ||
+    meta.supportsReasoningEffort === 'true';
+  if (!supports) return [];
+
+  const raw =
+    meta.reasoningEfforts ||
+    meta.reasoning_efforts ||
+    meta.effortOptions ||
+    null;
+  if (!Array.isArray(raw) || raw.length === 0) {
+    return LEGACY_EFFORT_OPTIONS.map((o) => ({ ...o }));
+  }
+
+  const out = [];
+  const seen = new Set();
+  for (const row of raw) {
+    if (row == null) continue;
+    if (typeof row === 'string') {
+      const v = String(row).trim().toLowerCase();
+      if (!v || seen.has(v)) continue;
+      seen.add(v);
+      out.push({ id: v, value: v, label: v });
+      continue;
+    }
+    if (typeof row !== 'object') continue;
+    const value = String(row.value || row.level || row.effort || '')
+      .trim()
+      .toLowerCase();
+    if (!value) continue;
+    const id = String(row.id || value).trim() || value;
+    if (seen.has(id)) continue;
+    seen.add(id);
+    out.push({
+      id,
+      value,
+      label: String(row.label || id),
+      description:
+        row.description != null ? String(row.description) : undefined,
+      isDefault: Boolean(row.default || row.isDefault),
+    });
+  }
+  // Present but unusable under version skew → fall back like pager
+  if (!out.length) return LEGACY_EFFORT_OPTIONS.map((o) => ({ ...o }));
+  return out;
+}
+
+/**
+ * Resolve effort menu for a model id from a normalized catalog.
+ * @param {Array} models normalizeModelStateJson().models
+ * @param {string} modelId
+ * @returns {{ supported: boolean, options: Array, defaultValue?: string }}
+ */
+function effortOptionsForModel(models, modelId) {
+  const mid = String(modelId || '').trim();
+  if (!mid || !Array.isArray(models)) {
+    return { supported: false, options: [] };
+  }
+  const m = models.find((x) => x && x.id === mid);
+  if (!m) return { supported: false, options: [] };
+  if (m.supportsReasoningEffort === false) {
+    return { supported: false, options: [] };
+  }
+  const options = Array.isArray(m.effortOptions)
+    ? m.effortOptions
+    : parseEffortOptionsFromMeta(m.meta || {});
+  if (!options.length) {
+    // supports unknown / no meta — treat as unsupported for strict UI
+    if (m.supportsReasoningEffort !== true) {
+      return { supported: false, options: [] };
+    }
+    return {
+      supported: true,
+      options: LEGACY_EFFORT_OPTIONS.map((o) => ({ ...o })),
+    };
+  }
+  const def =
+    options.find((o) => o.isDefault)?.value ||
+    m.defaultEffort ||
+    undefined;
+  return { supported: true, options, defaultValue: def };
+}
+
+/**
  * Normalize ACP modelState / NewSessionResponse.models shapes.
  * Wire varies: { availableModels: [{modelId,name}], currentModelId }
  * or { current, available: { id: ModelInfo } } etc.
+ * Preserves meta.supportsReasoningEffort + reasoningEfforts when present.
  */
 function normalizeModelStateJson(j) {
   if (!j || typeof j !== 'object') {
@@ -188,14 +291,30 @@ function normalizeModelStateJson(j) {
 
   const models = [];
   const seen = new Set();
-  const push = (id, name, isDefault) => {
+  const push = (id, name, isDefault, meta) => {
     const mid = String(id || '').trim();
     if (!mid || seen.has(mid)) return;
     seen.add(mid);
+    const m =
+      meta && typeof meta === 'object' && !Array.isArray(meta) ? meta : {};
+    const supports =
+      m.supportsReasoningEffort === true ||
+      m.supports_reasoning_effort === true ||
+      m.supportsReasoningEffort === 'true';
+    const effortOptions = supports ? parseEffortOptionsFromMeta(m) : [];
+    const defaultEffort =
+      m.reasoningEffort ||
+      m.reasoning_effort ||
+      effortOptions.find((o) => o.isDefault)?.value ||
+      '';
     models.push({
       id: mid,
       name: String(name || mid),
       isDefault: Boolean(isDefault) || mid === defaultId,
+      supportsReasoningEffort: supports,
+      effortOptions,
+      defaultEffort: defaultEffort ? String(defaultEffort) : '',
+      meta: Object.keys(m).length ? m : undefined,
     });
   };
 
@@ -208,21 +327,29 @@ function normalizeModelStateJson(j) {
 
   if (Array.isArray(avail)) {
     for (const m of avail) {
-      if (typeof m === 'string') push(m, m, false);
+      if (typeof m === 'string') push(m, m, false, null);
       else if (m && typeof m === 'object') {
+        const meta = m.meta || m._meta || m;
         push(
           m.modelId || m.model_id || m.id || m.name,
           m.name || m.title || m.modelId || m.id,
-          m.isDefault || m.default
+          m.isDefault || m.default,
+          // Prefer nested meta; else object may itself hold supportsReasoningEffort
+          m.meta || m._meta || (m.supportsReasoningEffort != null ? m : null)
         );
       }
     }
   } else if (avail && typeof avail === 'object') {
     for (const [k, v] of Object.entries(avail)) {
       if (v && typeof v === 'object') {
-        push(v.modelId || v.id || k, v.name || v.title || k, false);
+        push(
+          v.modelId || v.id || k,
+          v.name || v.title || k,
+          false,
+          v.meta || v._meta || (v.supportsReasoningEffort != null ? v : null)
+        );
       } else {
-        push(k, k, false);
+        push(k, k, false, null);
       }
     }
   }
@@ -290,4 +417,7 @@ module.exports = {
   parseModelsOutput,
   normalizeModelStateJson,
   listGrokModels,
+  parseEffortOptionsFromMeta,
+  effortOptionsForModel,
+  LEGACY_EFFORT_OPTIONS,
 };

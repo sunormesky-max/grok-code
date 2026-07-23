@@ -84,11 +84,12 @@ Living plan for the GrokCode open-source ecosystem. Order may change based on co
 - [x] ACP `session/set_model` from host model chip (v1.17.0)
 - [x] Reasoning effort picker via set_model meta + /effort (v1.18.0)
 - [x] Live model list from `grok models` + ACP modelState (v1.19.0)
+- [x] Per-model effort options from model meta (v1.20.0)
 
 ## Next (host ↔ open-source grok-build)
 
 - [ ] Upstream still needs normal-tool InProgress emit for long tools (see patches/grok-build)
-- [ ] Per-model effort options from model meta (when advertised)
+- [ ] Document applying `patches/grok-build/0001-tool-in-progress.patch` in doctor/help
 
 ## Now (UI / experience)
 
