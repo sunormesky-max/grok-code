@@ -311,8 +311,12 @@ function testAgentExports() {
   assert.equal(typeof agent.stop, 'function');
   assert.equal(typeof agent.reapTracked, 'function');
   assert.equal(typeof agent.listTrackedPids, 'function');
+  assert.equal(typeof agent.replyPlanApproval, 'function');
   assert.deepEqual(agent.listTrackedPids(), []);
   agent.reapTracked();
+  const noClient = agent.replyPlanApproval('missing-task', 1, { outcome: 'approved' });
+  assert.equal(noClient.ok, false);
+  assert.ok(/no active ACP|ACP client/i.test(String(noClient.error || '')));
   assert.ok(
     /无权|403|coming soon|access/i.test(
       humanizeAgentError(
@@ -430,6 +434,131 @@ function testAcpInitializeIdentity() {
   console.log('ok  ACP initialize Desktop identity + buffering');
 }
 
+/**
+ * x.ai/exit_plan_mode: park reverse-req, resolveInteractive outcomes.
+ * Aligns with open-source grok-build ExitPlanModeExtResponse
+ * (approved | abandoned | cancelled + optional feedback).
+ */
+function testExitPlanModeApproval() {
+  const { AcpClient } = require(path.join(root, 'electron', 'acp-client.js'));
+  const writes = [];
+  const client = new AcpClient({
+    bin: 'echo',
+    autoApprove: true,
+    planInteractive: true,
+  });
+  // Fake writable stdin so _respond can record JSON-RPC replies
+  client.child = {
+    stdin: {
+      writable: true,
+      write(s) {
+        writes.push(String(s));
+        return true;
+      },
+    },
+  };
+  client.alive = true;
+
+  let parked = null;
+  client.onPlanApproval = (info) => {
+    parked = info;
+  };
+
+  client._handleAgentRequest({
+    id: 42,
+    method: 'x.ai/exit_plan_mode',
+    params: {
+      toolCallId: 'tc-plan-1',
+      planContent: '## Plan\n1. fix acp\n2. ship',
+      sessionId: 'sess-1',
+    },
+  });
+
+  assert.ok(parked, 'onPlanApproval fired');
+  assert.equal(parked.pending, true);
+  assert.equal(parked.mode, 'interactive');
+  assert.equal(parked.requestId, 42);
+  assert.ok(String(parked.planContent).includes('fix acp'));
+  assert.equal(client.pendingInteractive.size, 1);
+  assert.equal(writes.length, 0, 'must not respond until host UI answers');
+
+  const r = client.resolveInteractive(42, {
+    outcome: 'approved',
+  });
+  assert.equal(r.ok, true);
+  assert.equal(r.outcome, 'approved');
+  assert.equal(client.pendingInteractive.size, 0);
+  assert.equal(writes.length, 1);
+  const reply = JSON.parse(writes[0].trim());
+  assert.equal(reply.id, 42);
+  assert.equal(reply.result.outcome, 'approved');
+  assert.equal(reply.result.feedback, undefined);
+
+  // Second resolve is a no-op
+  const again = client.resolveInteractive(42, { outcome: 'abandoned' });
+  assert.equal(again.ok, false);
+
+  // cancelled + feedback (request changes)
+  writes.length = 0;
+  parked = null;
+  client._handleAgentRequest({
+    id: 99,
+    method: '_x.ai/exit_plan_mode',
+    params: {
+      method: 'x.ai/exit_plan_mode',
+      params: { plan_content: 'revise me', tool_call_id: 'tc2' },
+    },
+  });
+  assert.ok(parked?.pending);
+  assert.ok(String(parked.planContent).includes('revise me'));
+  const rev = client.resolveInteractive(99, {
+    outcome: 'cancelled',
+    feedback: 'add tests first',
+  });
+  assert.equal(rev.ok, true);
+  const revBody = JSON.parse(writes[0].trim());
+  assert.equal(revBody.result.outcome, 'cancelled');
+  assert.equal(revBody.result.feedback, 'add tests first');
+
+  // auto-approve path (YOLO + planInteractive false)
+  writes.length = 0;
+  parked = null;
+  const auto = new AcpClient({
+    bin: 'echo',
+    autoApprove: true,
+    planInteractive: false,
+  });
+  auto.child = client.child;
+  auto.alive = true;
+  auto.onPlanApproval = (info) => {
+    parked = info;
+  };
+  auto._handleAgentRequest({
+    id: 7,
+    method: 'x.ai/exit_plan_mode',
+    params: { planContent: 'go' },
+  });
+  assert.equal(parked?.pending, false);
+  assert.equal(parked?.mode, 'auto');
+  assert.equal(parked?.selected, 'approved');
+  assert.equal(auto.pendingInteractive.size, 0);
+  const autoReply = JSON.parse(writes[0].trim());
+  assert.equal(autoReply.result.outcome, 'approved');
+
+  // abandoned
+  writes.length = 0;
+  client._handleAgentRequest({
+    id: 11,
+    method: 'x.ai/exit_plan_mode',
+    params: { planContent: 'x' },
+  });
+  const ab = client.resolveInteractive(11, { outcome: 'abandoned' });
+  assert.equal(ab.ok, true);
+  assert.equal(JSON.parse(writes[0].trim()).result.outcome, 'abandoned');
+
+  console.log('ok  exit_plan_mode park + resolveInteractive');
+}
+
 function testPickChunkTextMultimodal() {
   const { pickChunkText, pickToolInfo, slimToolArgs } = require(path.join(
     root,
@@ -477,9 +606,11 @@ function testIpcChannelContract() {
   assert.ok(AGENT_EVENT_CHANNELS.includes('agent:mode'));
   assert.ok(AGENT_EVENT_CHANNELS.includes('agent:commands'));
   assert.ok(AGENT_EVENT_CHANNELS.includes('agent:permission'));
+  assert.ok(AGENT_EVENT_CHANNELS.includes('agent:plan_approval'));
   assert.ok(AGENT_EVENT_CHANNELS.includes('agent:ext'));
   assert.ok(isAllowedRendererChannel('agent:phase'));
   assert.ok(isAllowedRendererChannel('agent:plan'));
+  assert.ok(isAllowedRendererChannel('agent:plan_approval'));
   assert.ok(isAllowedRendererChannel('fs:changed'));
   assert.ok(!isAllowedRendererChannel('agent:secret'));
   assert.ok(RENDERER_EVENT_CHANNELS.length >= AGENT_EVENT_CHANNELS.length);
@@ -491,6 +622,7 @@ function testIpcChannelContract() {
     'preload must require ipc-channels'
   );
   assert.ok(preloadSrc.includes('isAllowedRendererChannel'), 'preload gates on isAllowedRendererChannel');
+  assert.ok(preloadSrc.includes('replyPlanApproval'), 'preload exposes replyPlanApproval');
 
   const ok = assertAgentPayloadShape('agent:text', { taskId: 't1', text: 'hi' });
   assert.ok(ok.ok, 'text+taskId valid');
@@ -720,6 +852,7 @@ try {
   testAcpPermissionPicker();
   testResolveToolCallDelta();
   testAcpInitializeIdentity();
+  testExitPlanModeApproval();
   testPickChunkTextMultimodal();
   testIpcChannelContract();
   testAgentStreamNdjsonFixture();

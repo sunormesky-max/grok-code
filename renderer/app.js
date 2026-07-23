@@ -9050,6 +9050,32 @@ function bindAgentEvents() {
         projectId: task?.projectId,
       });
     }),
+    window.grok.on('agent:plan_approval', (d) => {
+      const task = taskFromEvent(d);
+      if (!task) return;
+      if (d.pending) {
+        showPlanApprovalBar(task, d);
+        if (isActiveTask(task)) {
+          pushLiveEvent({
+            kind: 'status',
+            title: '计划待审批',
+            sub: localeIsEn()
+              ? 'Approve · request changes · quit (CLI exit_plan_mode)'
+              : '批准执行 · 要求修改 · 放弃（对齐 CLI exit_plan_mode）',
+            projectId: task.projectId,
+            immediate: true,
+          });
+          setLivePhase('计划审批', task.title);
+        }
+      } else if (d.mode === 'auto' && isActiveTask(task)) {
+        pushLiveEvent({
+          kind: 'status',
+          title: '计划已自动批准',
+          sub: d.selected || 'approved',
+          projectId: task.projectId,
+        });
+      }
+    }),
     window.grok.on('agent:ext', (d) => {
       const task = taskFromEvent(d);
       if (!isActiveTask(task) || !d?.kind) return;
@@ -9717,6 +9743,89 @@ function oneLinePlanPreview(text) {
   const m = t.match(/(?:^|\s)(?:1[\.)、]|一[、.)])\s*([^\n]{8,80})/);
   if (m) return (localeIsEn() ? '1. ' : '1. ') + m[1].trim();
   return t.slice(0, 72) + (t.length > 72 ? '…' : '');
+}
+
+/**
+ * ACP x.ai/exit_plan_mode — interactive approve / revise / abandon
+ * (matches open-source grok-build pager plan_approval_view outcomes).
+ */
+function showPlanApprovalBar(task, d) {
+  task = task || T();
+  if (!task?.pane || !d?.requestId) return;
+  const en = localeIsEn();
+  // Replace existing bar for this task
+  task.pane.querySelectorAll('.plan-approval-bar').forEach((el) => el.remove());
+  const bar = document.createElement('div');
+  bar.className = 'plan-approval-bar msg status';
+  bar.dataset.requestId = String(d.requestId);
+  const body = String(d.planContent || '').trim();
+  const preview = body
+    ? esc(body.slice(0, 1200)) + (body.length > 1200 ? '\n…' : '')
+    : en
+      ? '(No plan content — agent exited plan mode empty)'
+      : '（无计划正文 — agent 未写入 plan）';
+  bar.innerHTML = `
+    <div class="plan-approval-head">
+      <strong>${en ? 'Plan approval' : '计划审批'}</strong>
+      <span class="muted">${en ? 'CLI exit_plan_mode' : '对齐 CLI · exit_plan_mode'}</span>
+    </div>
+    <pre class="plan-approval-body">${preview}</pre>
+    <label class="plan-approval-feedback">
+      <span>${en ? 'Feedback (optional, for request changes)' : '修改意见（可选，用于「要求修改」）'}</span>
+      <input type="text" class="plan-feedback-input" placeholder="${en ? 'What should change…' : '希望如何调整…'}" />
+    </label>
+    <div class="retry-actions">
+      <button type="button" class="btn small primary" data-act="approve">✓ ${en ? 'Approve' : '批准执行'}</button>
+      <button type="button" class="btn small ghost" data-act="revise">✎ ${en ? 'Request changes' : '要求修改'}</button>
+      <button type="button" class="btn small ghost" data-act="quit">✕ ${en ? 'Quit plan' : '放弃计划'}</button>
+    </div>`;
+  const send = async (outcome) => {
+    const feedback = bar.querySelector('.plan-feedback-input')?.value || '';
+    bar.querySelectorAll('button').forEach((b) => {
+      b.disabled = true;
+    });
+    try {
+      const r = await window.grok.replyPlanApproval({
+        projectId: task.projectId || pid(),
+        taskId: task.id,
+        requestId: d.requestId,
+        outcome,
+        feedback: outcome === 'cancelled' ? feedback || undefined : undefined,
+      });
+      if (!r?.ok) {
+        toast(r?.error || 'plan reply failed', 'err');
+        bar.querySelectorAll('button').forEach((b) => {
+          b.disabled = false;
+        });
+        return;
+      }
+      bar.remove();
+      toast(
+        outcome === 'approved'
+          ? en
+            ? 'Plan approved'
+            : '已批准计划'
+          : outcome === 'abandoned'
+            ? en
+              ? 'Plan abandoned'
+              : '已放弃计划'
+            : en
+              ? 'Requested plan changes'
+              : '已要求修改计划',
+        'ok'
+      );
+    } catch (err) {
+      toast(err.message || String(err), 'err');
+      bar.querySelectorAll('button').forEach((b) => {
+        b.disabled = false;
+      });
+    }
+  };
+  bar.querySelector('[data-act="approve"]').onclick = () => send('approved');
+  bar.querySelector('[data-act="revise"]').onclick = () => send('cancelled');
+  bar.querySelector('[data-act="quit"]').onclick = () => send('abandoned');
+  task.pane.appendChild(bar);
+  scrollMessages(true, task);
 }
 
 /** Heuristic: assistant reply looks like an actionable plan */

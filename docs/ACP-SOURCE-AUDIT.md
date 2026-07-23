@@ -120,7 +120,8 @@ GrokCode headless path must not be used for Craft/tool UX; ACP is mandatory for 
 | Method | Risk if empty reply |
 |--------|---------------------|
 | `session/request_permission` | Handled (YOLO / cancel) |
-| Other `x.ai/*` reverse methods (plan approval, fs, terminal, …) | **Empty `{}` response** — may fail plan/exit_plan_mode or hang rare paths |
+| `x.ai/exit_plan_mode` | **Handled (1.14.0)** — park + UI approve/revise/quit; outcomes `approved` \| `abandoned` \| `cancelled` + `feedback` |
+| Other `x.ai/*` reverse methods (fs, terminal, ask_user_question, …) | **Empty `{}` / cancelled** — ask_user cancelled non-hanging; fs/terminal not advertised |
 
 We advertise **no** client fs/terminal capabilities (correct for “agent runs tools itself”).
 
@@ -184,6 +185,7 @@ We advertise **no** client fs/terminal capabilities (correct for “agent runs t
 | P1 ACP 403 → headless (like grok -p) | Done (1.11.5+) |
 | P2 agentTransport setting auto/acp/headless | Done (1.13.0) |
 | P2 doctor Build gate + auth.json | Done (1.13.0) |
+| P1 `x.ai/exit_plan_mode` interactive UI | Done (1.14.0 park + approve/revise/quit) |
 | Upstream `/feedback` | `patches/grok-build/FEEDBACK.md` |
 
 ---

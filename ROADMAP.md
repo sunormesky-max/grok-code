@@ -76,10 +76,11 @@ Living plan for the GrokCode open-source ecosystem. Order may change based on co
 - [x] Restore all projects from `~/.grok-code/sessions` on startup (v1.12.1)
 - [x] ACP Build 403 → headless fallback like `grok -p` (v1.11.5+)
 - [x] agentTransport setting + doctor Build-gate / auth.json (v1.13.0)
+- [x] Interactive `x.ai/exit_plan_mode` plan approval UI (v1.14.0)
 
 ## Next (host ↔ open-source grok-build)
 
-- [ ] Surface CLI plan approval UI when agent calls `exit_plan_mode` (ACP reverse req)
+- [ ] Optional `ask_user_question` interactive UI (currently cancelled, non-hanging)
 - [ ] Optional `session/set_mode` if/when ACP exposes it for Plan/Normal from host
 - [ ] Prefer tool mid-flight when upstream emits InProgress (see patches/grok-build)
 - [ ] Deeper doctor: optional timed `grok -p` probe (slow — opt-in)

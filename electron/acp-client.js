@@ -32,18 +32,31 @@ class AcpClient {
     this.onNotification = opts.onNotification || (() => {});
     this.onStderr = opts.onStderr || (() => {});
     this.onExit = opts.onExit || (() => {});
+    this.onPermission = opts.onPermission || null;
+    this.onPlanApproval = opts.onPlanApproval || null;
+    this.onAgentRequest = opts.onAgentRequest || null;
     this.autoApprove = opts.autoApprove !== false;
+    /**
+     * When true (default), exit_plan_mode waits for host UI (approve/revise/quit).
+     * Set false or GROKCODE_AUTO_APPROVE_PLAN=1 to auto-approve like pure YOLO.
+     */
+    this.planInteractive =
+      opts.planInteractive !== undefined
+        ? Boolean(opts.planInteractive)
+        : process.env.GROKCODE_AUTO_APPROVE_PLAN !== '1';
     /** @type {import('child_process').ChildProcess | null} */
     this.child = null;
     this.buf = '';
     this.nextId = 0;
     /** @type {Map<number, { resolve: Function, reject: Function, timer: NodeJS.Timeout }>} */
     this.pending = new Map();
+    /** Open interactive reverse-requests (plan approval etc.) awaiting host reply */
+    this.pendingInteractive = new Map();
     this.alive = false;
     this.stderrBuf = '';
     /**
      * Only true while session/prompt is in flight.
-     * session/load replays history as session/update �?must be ignored or UI
+     * session/load replays history as session/update — must be ignored or UI
      * floods with old tools and looks blank / frozen during the real turn.
      */
     this.streaming = false;
@@ -182,11 +195,28 @@ class AcpClient {
     }
   }
 
+  /**
+   * Unwrap gateway-style `_x.ai/foo` → { method, params }.
+   * Leader may wrap as method=`_x.ai/exit_plan_mode` with params.method + params.params.
+   */
+  _unwrapAgentMethod(msg) {
+    let method = String(msg.method || '');
+    let params = msg.params || {};
+    if (method.startsWith('_') && params && typeof params === 'object' && params.method) {
+      method = String(params.method);
+      params = params.params || params;
+    }
+    return { method, params };
+  }
+
   _handleAgentRequest(msg) {
-    const method = String(msg.method || '');
+    const { method, params } = this._unwrapAgentMethod(msg);
+    const reqId = msg.id;
+
     // Auto-approve tool permissions when YOLO / always-approve
     if (method === 'session/request_permission' || method.endsWith('/request_permission')) {
-      const resolved = resolvePermissionResponse(msg.params || {}, {
+      // exit_plan_mode is NOT request_permission — handled below as x.ai/exit_plan_mode
+      const resolved = resolvePermissionResponse(params || {}, {
         autoApprove: this.autoApprove,
         preferAlways: false, // match grok-build: YOLO uses AllowOnce, not AllowAlways
       });
@@ -194,7 +224,7 @@ class AcpClient {
         if (typeof this.onPermission === 'function') {
           this.onPermission({
             method,
-            params: msg.params,
+            params,
             selected: resolved.selected,
             mode: resolved.mode,
             options: resolved.options,
@@ -203,51 +233,88 @@ class AcpClient {
       } catch {
         /* ignore */
       }
-      this._respond(msg.id, resolved.result);
+      this._respond(reqId, resolved.result);
       return;
     }
 
-    // Plan approval / other x.ai reverse requests — never hang the agent.
-    // Prefer approve/continue options when autoApprove; else cancel-like.
-    if (/exit_plan|plan_approval|request_permission|ask_user/i.test(method)) {
-      const opts = msg.params?.options || msg.params?.choices || [];
-      const pick = Array.isArray(opts)
-        ? opts.find((o) =>
-            /allow|approve|yes|accept|continue|execute/i.test(
-              String(o.optionId || o.id || o.name || o.label || '')
-            )
-          )
-        : null;
-      let selected = null;
-      let mode = 'cancel';
-      if (this.autoApprove && pick) {
-        const oid = pick.optionId || pick.id || pick.name;
-        selected = String(oid);
-        mode = 'auto';
-        this._respond(msg.id, {
-          outcome: { outcome: 'selected', optionId: selected },
-        });
-      } else {
-        this._respond(msg.id, {
-          outcome: { outcome: 'cancelled' },
-          cancelled: true,
-        });
+    // Plan approval reverse-request (upstream: x.ai/exit_plan_mode)
+    // Response shape (ExitPlanModeExtResponse): { outcome, feedback? }
+    // outcomes: approved | abandoned | cancelled
+    if (
+      method === 'x.ai/exit_plan_mode' ||
+      method === '_x.ai/exit_plan_mode' ||
+      /exit_plan_mode/i.test(method)
+    ) {
+      const toolCallId =
+        params.toolCallId ||
+        params.tool_call_id ||
+        params.toolCall?.toolCallId ||
+        params.tool_call?.tool_call_id ||
+        '';
+      const planContent =
+        params.planContent ||
+        params.plan_content ||
+        params.plan ||
+        params.content ||
+        '';
+      const sessionId = params.sessionId || params.session_id || '';
+
+      const autoPlan =
+        this.autoApprove &&
+        (!this.planInteractive || process.env.GROKCODE_AUTO_APPROVE_PLAN === '1');
+
+      if (autoPlan) {
+        this._respond(reqId, { outcome: 'approved' });
+        try {
+          if (typeof this.onPlanApproval === 'function') {
+            this.onPlanApproval({
+              requestId: reqId,
+              method,
+              toolCallId: String(toolCallId),
+              planContent: String(planContent || ''),
+              sessionId: String(sessionId),
+              mode: 'auto',
+              pending: false,
+              selected: 'approved',
+            });
+          }
+        } catch {
+          /* ignore */
+        }
+        return;
       }
+
+      // Park reverse-request until host UI answers (first answer wins)
+      this.pendingInteractive.set(String(reqId), {
+        kind: 'plan_approval',
+        method,
+        toolCallId: String(toolCallId),
+        at: Date.now(),
+      });
       try {
-        if (typeof this.onPermission === 'function') {
-          this.onPermission({
+        if (typeof this.onPlanApproval === 'function') {
+          this.onPlanApproval({
+            requestId: reqId,
             method,
-            params: msg.params,
-            selected,
-            mode,
-            options: Array.isArray(opts)
-              ? opts.map((o) => ({
-                  optionId: o.optionId || o.id,
-                  name: o.name || o.label || '',
-                  kind: o.kind || '',
-                }))
-              : [],
+            toolCallId: String(toolCallId),
+            planContent: String(planContent || ''),
+            sessionId: String(sessionId),
+            mode: 'interactive',
+            pending: true,
           });
+        }
+      } catch {
+        /* ignore */
+      }
+      return;
+    }
+
+    // ask_user_question — cancel for now (host can expand later); don't hang forever
+    if (/ask_user_question/i.test(method)) {
+      this._respond(reqId, { outcome: 'cancelled' });
+      try {
+        if (typeof this.onAgentRequest === 'function') {
+          this.onAgentRequest({ method, params, id: reqId });
         }
       } catch {
         /* ignore */
@@ -258,12 +325,34 @@ class AcpClient {
     // Unknown agent→client request: empty result so agent does not hang
     try {
       if (typeof this.onAgentRequest === 'function') {
-        this.onAgentRequest({ method, params: msg.params || {}, id: msg.id });
+        this.onAgentRequest({ method, params: params || {}, id: reqId });
       }
     } catch {
       /* ignore */
     }
-    this._respond(msg.id, {});
+    this._respond(reqId, {});
+  }
+
+  /**
+   * Host answered a parked plan approval (or other interactive reverse-req).
+   * @param {string|number} requestId
+   * @param {{ outcome: 'approved'|'abandoned'|'cancelled', feedback?: string }} body
+   */
+  resolveInteractive(requestId, body) {
+    const key = String(requestId);
+    if (!this.pendingInteractive.has(key)) {
+      return { ok: false, error: 'no pending request' };
+    }
+    this.pendingInteractive.delete(key);
+    const outcome = String(body?.outcome || 'cancelled');
+    const feedback =
+      body?.feedback != null && String(body.feedback).trim()
+        ? String(body.feedback).trim()
+        : undefined;
+    const result = { outcome };
+    if (feedback) result.feedback = feedback;
+    this._respond(requestId, result);
+    return { ok: true, outcome };
   }
 
   _respond(id, result) {

@@ -3912,6 +3912,85 @@ button.pill:hover {
   flex-wrap: wrap;
   gap: 6px;
 }
+
+/* ACP x.ai/exit_plan_mode — plan approval (aligns with CLI plan_approval_view) */
+.plan-approval-bar {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 10px 12px 14px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid rgba(167, 139, 250, 0.4);
+  background:
+    linear-gradient(135deg, rgba(139, 92, 246, 0.12), rgba(0, 0, 0, 0.28)),
+    rgba(24, 16, 40, 0.92);
+  box-shadow:
+    0 0 0 1px rgba(139, 92, 246, 0.08),
+    0 10px 28px rgba(0, 0, 0, 0.28);
+}
+.plan-approval-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+.plan-approval-head strong {
+  font-size: 13px;
+  letter-spacing: 0.02em;
+  color: #e9d5ff;
+}
+.plan-approval-head .muted {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--muted);
+}
+.plan-approval-body {
+  margin: 0;
+  max-height: 220px;
+  overflow: auto;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid rgba(167, 139, 250, 0.18);
+  background: rgba(0, 0, 0, 0.35);
+  font-family: var(--mono);
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: #e4e4e7;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.plan-approval-feedback {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 11.5px;
+  color: var(--muted);
+}
+.plan-approval-feedback .plan-feedback-input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid rgba(167, 139, 250, 0.28);
+  background: rgba(0, 0, 0, 0.4);
+  color: var(--text);
+  font-size: 12.5px;
+}
+.plan-approval-feedback .plan-feedback-input:focus {
+  outline: none;
+  border-color: rgba(167, 139, 250, 0.55);
+  box-shadow: 0 0 0 2px rgba(139, 92, 246, 0.18);
+}
+.plan-approval-bar .retry-actions {
+  margin-top: 2px;
+}
+.plan-approval-bar .btn.primary {
+  background: linear-gradient(180deg, #8b5cf6, #7c3aed);
+  border-color: rgba(196, 181, 253, 0.35);
+}
+
 .msg.assistant.is-streaming {
   border-color: rgba(125, 211, 252, 0.28);
   box-shadow:

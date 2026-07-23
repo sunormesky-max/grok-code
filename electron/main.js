@@ -1198,6 +1198,22 @@ ipcMain.handle('agent:run', async (_e, payload) => {
   }
 });
 
+/** Reply to parked x.ai/exit_plan_mode reverse-request */
+ipcMain.handle('agent:plan_reply', (_e, payload = {}) => {
+  const { projectId, taskId, requestId, outcome, feedback } = payload || {};
+  if (!projectId || !taskId || requestId == null) {
+    return { ok: false, error: 'projectId, taskId, requestId required' };
+  }
+  const p = projects.get(projectId);
+  if (!p?.agent?.replyPlanApproval) {
+    return { ok: false, error: 'project not open' };
+  }
+  return p.agent.replyPlanApproval(taskId, requestId, {
+    outcome: outcome || 'cancelled',
+    feedback,
+  });
+});
+
 ipcMain.handle('agent:stop', (_e, payload = {}) => {
   const { projectId, taskId } = payload;
   if (projectId) {

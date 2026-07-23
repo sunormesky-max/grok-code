@@ -11,6 +11,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 - See [ROADMAP.md](ROADMAP.md)
 
+## [1.14.0] — 2026-07-23
+
+### Host ↔ open-source Grok Build — plan approval (`x.ai/exit_plan_mode`)
+
+When the CLI agent finishes plan mode it reverse-requests `x.ai/exit_plan_mode`
+(ExitPlanModeExtResponse: `approved` | `abandoned` | `cancelled` + optional
+`feedback`). Earlier hosts answered with `{}` or auto-cancelled, so plan exit
+could hang or skip user review.
+
+- **Park reverse-request** until the desktop UI answers (default even under YOLO)
+- **Plan approval bar**: Approve · Request changes (cancelled + feedback) · Quit
+  (abandoned) — mirrors CLI `plan_approval_view` outcomes
+- IPC: `agent:plan_approval` event + `agent:plan_reply` / `replyPlanApproval`
+- Optional auto-approve: `GROKCODE_AUTO_APPROVE_PLAN=1` (or `planInteractive: false`)
+- Unit tests for park / resolve / gateway unwrap (`_x.ai/exit_plan_mode`)
+
 ## [1.13.0] — 2026-07-18
 
 ### Host ↔ open-source Grok Build CLI
