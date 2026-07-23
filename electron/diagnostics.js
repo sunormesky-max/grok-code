@@ -353,6 +353,93 @@ function checkGrokPromptProbe(bin, opts = {}) {
 }
 
 /**
+ * Resolve packaged or dev path to patches/grok-build (InProgress experimental).
+ */
+function resolvePatchesDir() {
+  const candidates = [];
+  try {
+    // electron: app.getAppPath() → app.asar root or project root in dev
+    candidates.push(path.join(app.getAppPath(), 'patches', 'grok-build'));
+  } catch {
+    /* not in electron */
+  }
+  candidates.push(path.join(__dirname, '..', 'patches', 'grok-build'));
+  candidates.push(path.join(process.cwd(), 'patches', 'grok-build'));
+  for (const c of candidates) {
+    try {
+      if (c && fs.existsSync(path.join(c, 'README.md'))) return c;
+    } catch {
+      /* continue */
+    }
+  }
+  return null;
+}
+
+/**
+ * Informational: stock CLI tools are Pending→Completed; mid-flight needs patch.
+ * Does not fail doctor — pure guidance for power users.
+ */
+function checkToolInProgressPatch() {
+  const dir = resolvePatchesDir();
+  const hasReadme = Boolean(dir);
+  const hasPatch =
+    dir && fs.existsSync(path.join(dir, '0001-tool-in-progress.patch'));
+  const detail = [
+    '开源 grok 主工具循环多为 Pending → Completed，长工具（终端/大文件）中间可能无 InProgress。',
+    'GrokCode 宿主已支持 in_progress 刷新；要 agent 侧发出事件需自建 CLI 并应用实验补丁。',
+    hasPatch
+      ? `补丁目录：${dir}`
+      : '补丁文件未随包找到 — 见仓库 patches/grok-build/ 或 GitHub',
+  ].join('\n');
+  return {
+    id: 'tool_in_progress',
+    name: '长工具 InProgress',
+    ok: true,
+    level: 'warn',
+    detail,
+    path: dir || null,
+    hasPatch: Boolean(hasPatch),
+    fix: hasReadme
+      ? '打开 patches/grok-build/README.md：clone grok-build → git apply 0001 → cargo build → 设置 grok 路径'
+      : 'https://github.com/sunormesky-max/grok-code/tree/main/patches/grok-build',
+    links: {
+      readme: hasReadme ? path.join(dir, 'README.md') : null,
+      feedback: hasReadme ? path.join(dir, 'FEEDBACK.md') : null,
+      github:
+        'https://github.com/sunormesky-max/grok-code/tree/main/patches/grok-build',
+    },
+  };
+}
+
+/**
+ * Load patch help files for UI (copy / open).
+ */
+function getPatchHelp() {
+  const dir = resolvePatchesDir();
+  const read = (name) => {
+    if (!dir) return null;
+    try {
+      const p = path.join(dir, name);
+      if (!fs.existsSync(p)) return null;
+      return { path: p, text: fs.readFileSync(p, 'utf8') };
+    } catch {
+      return null;
+    }
+  };
+  return {
+    ok: Boolean(dir),
+    dir,
+    readme: read('README.md'),
+    feedback: read('FEEDBACK.md'),
+    patch: dir && fs.existsSync(path.join(dir, '0001-tool-in-progress.patch'))
+      ? path.join(dir, '0001-tool-in-progress.patch')
+      : null,
+    github:
+      'https://github.com/sunormesky-max/grok-code/tree/main/patches/grok-build',
+  };
+}
+
+/**
  * @param {{ grokPath?: string, apiKey?: string }} cfg
  * @param {{ probePrompt?: boolean }} [opts]
  */
@@ -384,6 +471,7 @@ function runDoctor(cfg = {}, opts = {}) {
     process.env.GROKCODE_DOCTOR_PROBE === '1' ||
     process.env.GROKCODE_DOCTOR_PROBE === 'true';
   checks.push(checkGrokPromptProbe(bin, { run: wantProbe }));
+  checks.push(checkToolInProgressPatch());
   checks.push(checkSessionsDir());
   checks.push(checkMcp());
   checks.push(checkEditors());
@@ -479,6 +567,19 @@ function exportDiagnostics(cfg = {}, extra = {}) {
     /* ignore */
   }
 
+  // Copy experimental CLI patch docs (InProgress / feedback for upstream)
+  try {
+    const help = getPatchHelp();
+    if (help.readme?.text) {
+      fs.writeFileSync(path.join(dir, 'patch-README.md'), help.readme.text, 'utf8');
+    }
+    if (help.feedback?.text) {
+      fs.writeFileSync(path.join(dir, 'patch-FEEDBACK.md'), help.feedback.text, 'utf8');
+    }
+  } catch {
+    /* ignore */
+  }
+
   // 写 README
   fs.writeFileSync(
     path.join(dir, 'README.txt'),
@@ -491,6 +592,11 @@ function exportDiagnostics(cfg = {}, extra = {}) {
       'Files:',
       '  report.json          — full doctor + env (no secrets)',
       '  sessions-index.json  — session index if present',
+      '  patch-README.md      — optional: how to apply InProgress CLI patch',
+      '  patch-FEEDBACK.md    — optional: paste into grok /feedback',
+      '',
+      'Long-tool mid-flight progress needs a custom grok binary +',
+      'patches/grok-build/0001-tool-in-progress.patch (see patch-README.md).',
       '',
       'Attach this folder (or zip it) when filing a GitHub issue.',
       'https://github.com/sunormesky-max/grok-code/issues',
@@ -501,4 +607,11 @@ function exportDiagnostics(cfg = {}, extra = {}) {
   return { ok: true, dir, file: reportFile };
 }
 
-module.exports = { runDoctor, exportDiagnostics, checkEditors };
+module.exports = {
+  runDoctor,
+  exportDiagnostics,
+  checkEditors,
+  resolvePatchesDir,
+  getPatchHelp,
+  checkToolInProgressPatch,
+};

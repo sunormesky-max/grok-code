@@ -1,6 +1,6 @@
 {
   "name": "grok-code",
-  "version": "1.20.0",
+  "version": "1.21.0",
   "description": "Desktop coding agent powered by local Grok Build CLI — multi-project, multi-task, context inheritance, MCP & Skills",
   "main": "electron/main.js",
   "productName": "GrokCode",
@@ -66,6 +66,8 @@
     "files": [
       "electron/**/*",
       "renderer/**/*",
+      "patches/grok-build/**/*",
+      "docs/ARCHITECTURE.md",
       "package.json",
       "!**/node_modules/*/{CHANGELOG.md,README.md,README,readme.md,readme}",
       "!**/{test,tests,__tests__,coverage}/**"

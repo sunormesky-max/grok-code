@@ -187,7 +187,18 @@ function testDiagnosticsShape() {
   const diag = require(path.join(root, 'electron', 'diagnostics.js'));
   assert.equal(typeof diag.runDoctor, 'function');
   assert.equal(typeof diag.exportDiagnostics, 'function');
-  console.log('ok  diagnostics exports');
+  assert.equal(typeof diag.getPatchHelp, 'function');
+  assert.equal(typeof diag.resolvePatchesDir, 'function');
+  assert.equal(typeof diag.checkToolInProgressPatch, 'function');
+  const tip = diag.checkToolInProgressPatch();
+  assert.equal(tip.id, 'tool_in_progress');
+  assert.equal(tip.ok, true);
+  assert.ok(/InProgress|in_progress|Pending/i.test(tip.detail + tip.fix));
+  const help = diag.getPatchHelp();
+  // Dev tree should find patches/grok-build
+  assert.ok(help.dir, 'patches dir resolvable in repo');
+  assert.ok(help.readme?.text || help.github, 'readme or github fallback');
+  console.log('ok  diagnostics exports + InProgress patch help');
 }
 
 function testPluginsExports() {

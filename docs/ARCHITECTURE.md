@@ -54,8 +54,27 @@ Env overrides: `GROKCODE_AGENT_TRANSPORT`, `GROKCODE_ACP_NO_FALLBACK=1`.
 
 Host **does not** ship Craft/Plan/Ask/Goal prompt prefixes (see `modes.CLI_NATIVE`).
 Session mode updates from the agent arrive as `session/update` → `agent:mode` and
-are shown on the CLI chip. To plan: use the **CLI** (`/plan` in TUI) or let the
-agent call `enter_plan_mode`; host only displays.
+are shown on the CLI chip.
+
+Host **does** dock to open-source ACP reverse methods and mode/model RPCs:
+
+| Host surface | ACP / CLI |
+|--------------|-----------|
+| Plan approval bar | `x.ai/exit_plan_mode` |
+| Questionnaire bar | `x.ai/ask_user_question` |
+| CLI · mode chip | `session/set_mode` (`default` \| `plan` \| `ask`) |
+| Model chip | `session/set_model` + `grok models` catalog |
+| Effort chip | `set_model` meta `reasoning_effort` (per-model options from meta) |
+
+## Long tools / InProgress
+
+Stock `grok` often emits tool **Pending → Completed** only. GrokCode paints
+mid-flight when the agent sends `tool_call_update` with `in_progress`.
+
+To make the **agent** emit that frame for normal tools, build a custom CLI with:
+
+`patches/grok-build/0001-tool-in-progress.patch` — see that folder’s README  
+(Settings → Diagnostics → **CLI InProgress 补丁说明**).
 
 ## Multi-project / multi-task
 
@@ -73,6 +92,14 @@ ACP session/update  or  headless NDJSON
 ```
 
 Upstream silence between stages is normal; host shows activity clock + phase.
+
+## Doctor
+
+Settings → Diagnostics:
+
+- CLI path / auth.json / Build-gate stream log / optional `grok -p` probe  
+- **长工具 InProgress** tip + open `patches/grok-build` + copy `/feedback` text  
+- Export diagnostic zip (may include patch README / FEEDBACK)
 
 ## Related open source
 

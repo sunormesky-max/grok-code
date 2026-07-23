@@ -95,6 +95,9 @@ contextBridge.exposeInMainWorld('grok', {
   // 体检 / 诊断（probePrompt: true → 慢项 grok -p）
   doctorRun: (payload) => ipcRenderer.invoke('doctor:run', payload || {}),
   doctorExport: () => ipcRenderer.invoke('doctor:export'),
+  /** Experimental grok-build InProgress patch help */
+  doctorPatchHelp: () => ipcRenderer.invoke('doctor:patchHelp'),
+  doctorOpenPatches: () => ipcRenderer.invoke('doctor:openPatches'),
 
   // 外部编辑器
   openInEditor: (payload) => ipcRenderer.invoke('editor:open', payload || {}),

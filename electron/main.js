@@ -13,7 +13,12 @@ const {
 const { createPersist } = require('./persist');
 const { compressContext, buildContextPrompt } = require('./context-compress');
 const { enrichContextWithLlm } = require('./context-llm');
-const { runDoctor, exportDiagnostics } = require('./diagnostics');
+const {
+  runDoctor,
+  exportDiagnostics,
+  getPatchHelp,
+  resolvePatchesDir,
+} = require('./diagnostics');
 const { openInExternalEditor, resolveEditorBinary } = require('./external-editor');
 const updater = require('./updater');
 const mcpSkills = require('./mcp-skills');
@@ -766,6 +771,27 @@ ipcMain.handle('doctor:run', (_e, payload = {}) => {
   return runDoctor(getConfig(), {
     probePrompt: Boolean(payload?.probePrompt),
   });
+});
+
+/** Experimental CLI patches (InProgress) — open folder / return help text */
+ipcMain.handle('doctor:patchHelp', () => getPatchHelp());
+
+ipcMain.handle('doctor:openPatches', () => {
+  const dir = resolvePatchesDir();
+  if (!dir) {
+    return {
+      ok: false,
+      error: 'patches/grok-build not found',
+      github:
+        'https://github.com/sunormesky-max/grok-code/tree/main/patches/grok-build',
+    };
+  }
+  try {
+    shell.openPath(dir);
+    return { ok: true, dir };
+  } catch (err) {
+    return { ok: false, error: err.message || String(err), dir };
+  }
 });
 
 ipcMain.handle('doctor:export', async (e) => {

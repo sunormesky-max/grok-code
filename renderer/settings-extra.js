@@ -117,6 +117,57 @@
     }
   }
 
+  async function openPatchesFolder() {
+    try {
+      const r = await window.grok.doctorOpenPatches();
+      if (r?.ok) {
+        window.toast?.(
+          r.dir
+            ? `已打开：${r.dir}`
+            : '已打开补丁目录',
+          'ok'
+        );
+        return;
+      }
+      // Fallback: open GitHub in browser
+      const url =
+        r?.github ||
+        'https://github.com/sunormesky-max/grok-code/tree/main/patches/grok-build';
+      await window.grok.openExternal?.(url);
+      window.toast?.(
+        r?.error ? `${r.error} · 已打开 GitHub` : '已打开 GitHub 补丁页',
+        'ok'
+      );
+    } catch (err) {
+      window.toast?.(err.message || String(err), 'err');
+    }
+  }
+
+  async function copyUpstreamFeedback() {
+    try {
+      const help = await window.grok.doctorPatchHelp();
+      const text =
+        help?.feedback?.text ||
+        help?.readme?.text ||
+        '';
+      if (!text) {
+        await window.grok.openExternal?.(
+          help?.github ||
+            'https://github.com/sunormesky-max/grok-code/tree/main/patches/grok-build'
+        );
+        window.toast?.('本地无 FEEDBACK.md，已打开 GitHub', 'err');
+        return;
+      }
+      await navigator.clipboard.writeText(text);
+      window.toast?.(
+        '已复制 FEEDBACK.md — 在终端 grok 中执行 /feedback 粘贴',
+        'ok'
+      );
+    } catch (err) {
+      window.toast?.(err.message || String(err), 'err');
+    }
+  }
+
   async function exportDiag() {
     try {
       const r = await window.grok.doctorExport();
@@ -186,6 +237,8 @@
   function bind() {
     $('#btnRunDoctor')?.addEventListener('click', () => runDoctorUi());
     $('#btnExportDiag')?.addEventListener('click', () => exportDiag());
+    $('#btnOpenPatches')?.addEventListener('click', () => openPatchesFolder());
+    $('#btnCopyFeedback')?.addEventListener('click', () => copyUpstreamFeedback());
     $('#btnCheckUpdate')?.addEventListener('click', () => checkUpdate());
     $('#btnUpdateInstall')?.addEventListener('click', async () => {
       const ok = await window.grok.updateInstall();

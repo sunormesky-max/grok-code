@@ -85,11 +85,12 @@ Living plan for the GrokCode open-source ecosystem. Order may change based on co
 - [x] Reasoning effort picker via set_model meta + /effort (v1.18.0)
 - [x] Live model list from `grok models` + ACP modelState (v1.19.0)
 - [x] Per-model effort options from model meta (v1.20.0)
+- [x] Document InProgress CLI patch in doctor / settings / ARCHITECTURE (v1.21.0)
 
 ## Next (host ↔ open-source grok-build)
 
-- [ ] Upstream still needs normal-tool InProgress emit for long tools (see patches/grok-build)
-- [ ] Document applying `patches/grok-build/0001-tool-in-progress.patch` in doctor/help
+- [ ] Upstream still needs normal-tool InProgress emit for long tools (stock CLI; patch optional)
+- [ ] Optional auto-detect custom patched grok binary (env marker)
 
 ## Now (UI / experience)
 

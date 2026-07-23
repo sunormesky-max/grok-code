@@ -11,6 +11,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 - See [ROADMAP.md](ROADMAP.md)
 
+## [1.21.0] — 2026-07-24
+
+### Host ↔ open-source — document CLI InProgress patch
+
+Stock Grok CLI tools often skip mid-flight `InProgress`. Host already handles
+that status; applying the experimental agent patch is now discoverable in-app.
+
+- **Doctor** check “长工具 InProgress” (warn tip + path to `patches/grok-build`)
+- **Settings**: open patch folder · copy `FEEDBACK.md` for `grok /feedback`
+- **Packaging**: ship `patches/grok-build/**` with the app
+- Diagnostic export may include `patch-README.md` / `patch-FEEDBACK.md`
+- ARCHITECTURE + patches README updated with apply / verify steps
+
 ## [1.20.0] — 2026-07-24
 
 ### Host ↔ open-source Grok Build — per-model effort options
