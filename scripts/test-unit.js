@@ -312,11 +312,14 @@ function testAgentExports() {
   assert.equal(typeof agent.reapTracked, 'function');
   assert.equal(typeof agent.listTrackedPids, 'function');
   assert.equal(typeof agent.replyPlanApproval, 'function');
+  assert.equal(typeof agent.replyUserQuestion, 'function');
   assert.deepEqual(agent.listTrackedPids(), []);
   agent.reapTracked();
   const noClient = agent.replyPlanApproval('missing-task', 1, { outcome: 'approved' });
   assert.equal(noClient.ok, false);
   assert.ok(/no active ACP|ACP client/i.test(String(noClient.error || '')));
+  const noQ = agent.replyUserQuestion('missing-task', 2, { outcome: 'cancelled' });
+  assert.equal(noQ.ok, false);
   assert.ok(
     /无权|403|coming soon|access/i.test(
       humanizeAgentError(
@@ -559,6 +562,160 @@ function testExitPlanModeApproval() {
   console.log('ok  exit_plan_mode park + resolveInteractive');
 }
 
+/**
+ * x.ai/ask_user_question: park, replace cancels prior, accepted/cancelled shapes.
+ * Aligns with AskUserQuestionExtResponse (tagged outcome).
+ */
+function testAskUserQuestion() {
+  const { AcpClient, normalizeAskUserQuestions } = require(path.join(
+    root,
+    'electron',
+    'acp-client.js'
+  ));
+
+  const norm = normalizeAskUserQuestions([
+    {
+      question: 'Which DB?',
+      multi_select: true,
+      options: [
+        { label: 'Postgres (Recommended)', description: 'SQL' },
+        { label: 'SQLite', description: 'Embedded', preview: 'SELECT 1' },
+      ],
+    },
+    { question: '', options: [{ label: 'x' }] },
+  ]);
+  assert.equal(norm.length, 1);
+  assert.equal(norm[0].multiSelect, true);
+  assert.equal(norm[0].options.length, 2);
+  assert.equal(norm[0].options[1].preview, 'SELECT 1');
+
+  const writes = [];
+  const client = new AcpClient({
+    bin: 'echo',
+    autoApprove: true,
+    userQuestionInteractive: true,
+  });
+  client.child = {
+    stdin: {
+      writable: true,
+      write(s) {
+        writes.push(String(s));
+        return true;
+      },
+    },
+  };
+  client.alive = true;
+
+  let parked = null;
+  client.onUserQuestion = (info) => {
+    parked = info;
+  };
+
+  client._handleAgentRequest({
+    id: 50,
+    method: 'x.ai/ask_user_question',
+    params: {
+      sessionId: 'sess-q',
+      toolCallId: 'tc-q1',
+      mode: 'plan',
+      questions: [
+        {
+          question: 'Pick cache?',
+          options: [
+            { label: 'Redis', description: 'In-memory' },
+            { label: 'Memcached', description: 'Simple' },
+          ],
+        },
+      ],
+    },
+  });
+
+  assert.ok(parked?.pending);
+  assert.equal(parked.mode, 'plan');
+  assert.equal(parked.questions.length, 1);
+  assert.equal(client.pendingInteractive.size, 1);
+  assert.equal(writes.length, 0);
+
+  const accepted = client.resolveInteractive(50, {
+    outcome: 'accepted',
+    answers: { 'Pick cache?': ['Redis'] },
+    annotations: { 'Pick cache?': { notes: 'prefer hot path' } },
+  });
+  assert.equal(accepted.ok, true);
+  assert.equal(accepted.kind, 'ask_user_question');
+  const body = JSON.parse(writes[0].trim());
+  assert.equal(body.result.outcome, 'accepted');
+  assert.deepEqual(body.result.answers['Pick cache?'], ['Redis']);
+  assert.equal(body.result.annotations['Pick cache?'].notes, 'prefer hot path');
+
+  // Replace previous question → cancel old
+  writes.length = 0;
+  client._handleAgentRequest({
+    id: 51,
+    method: 'x.ai/ask_user_question',
+    params: {
+      questions: [{ question: 'Q1?', options: [{ label: 'A', description: 'a' }] }],
+      mode: 'default',
+    },
+  });
+  client._handleAgentRequest({
+    id: 52,
+    method: '_x.ai/ask_user_question',
+    params: {
+      method: 'x.ai/ask_user_question',
+      params: {
+        questions: [{ question: 'Q2?', options: [{ label: 'B', description: 'b' }] }],
+        mode: 'default',
+      },
+    },
+  });
+  // First response should be cancelled for id 51
+  const cancelLine = writes.find((w) => {
+    try {
+      const j = JSON.parse(w.trim());
+      return j.id === 51;
+    } catch {
+      return false;
+    }
+  });
+  assert.ok(cancelLine, 'prior question cancelled');
+  assert.equal(JSON.parse(cancelLine.trim()).result.outcome, 'cancelled');
+  assert.equal(client.pendingInteractive.size, 1);
+  assert.ok(client.pendingInteractive.has('52'));
+
+  const chat = client.resolveInteractive(52, {
+    outcome: 'chat_about_this',
+    partial_answers: { 'Q2?': 'B' },
+  });
+  assert.equal(chat.ok, true);
+  assert.equal(JSON.parse(writes[writes.length - 1].trim()).result.outcome, 'chat_about_this');
+
+  // Auto-cancel path
+  writes.length = 0;
+  parked = null;
+  const auto = new AcpClient({
+    bin: 'echo',
+    userQuestionInteractive: false,
+  });
+  auto.child = client.child;
+  auto.alive = true;
+  auto.onUserQuestion = (info) => {
+    parked = info;
+  };
+  auto._handleAgentRequest({
+    id: 60,
+    method: 'x.ai/ask_user_question',
+    params: {
+      questions: [{ question: 'X?', options: [{ label: 'Y', description: 'y' }] }],
+    },
+  });
+  assert.equal(parked?.pending, false);
+  assert.equal(parked?.selected, 'cancelled');
+  assert.equal(JSON.parse(writes[0].trim()).result.outcome, 'cancelled');
+
+  console.log('ok  ask_user_question park + ExtResponse');
+}
+
 function testPickChunkTextMultimodal() {
   const { pickChunkText, pickToolInfo, slimToolArgs } = require(path.join(
     root,
@@ -607,10 +764,12 @@ function testIpcChannelContract() {
   assert.ok(AGENT_EVENT_CHANNELS.includes('agent:commands'));
   assert.ok(AGENT_EVENT_CHANNELS.includes('agent:permission'));
   assert.ok(AGENT_EVENT_CHANNELS.includes('agent:plan_approval'));
+  assert.ok(AGENT_EVENT_CHANNELS.includes('agent:user_question'));
   assert.ok(AGENT_EVENT_CHANNELS.includes('agent:ext'));
   assert.ok(isAllowedRendererChannel('agent:phase'));
   assert.ok(isAllowedRendererChannel('agent:plan'));
   assert.ok(isAllowedRendererChannel('agent:plan_approval'));
+  assert.ok(isAllowedRendererChannel('agent:user_question'));
   assert.ok(isAllowedRendererChannel('fs:changed'));
   assert.ok(!isAllowedRendererChannel('agent:secret'));
   assert.ok(RENDERER_EVENT_CHANNELS.length >= AGENT_EVENT_CHANNELS.length);
@@ -623,6 +782,7 @@ function testIpcChannelContract() {
   );
   assert.ok(preloadSrc.includes('isAllowedRendererChannel'), 'preload gates on isAllowedRendererChannel');
   assert.ok(preloadSrc.includes('replyPlanApproval'), 'preload exposes replyPlanApproval');
+  assert.ok(preloadSrc.includes('replyUserQuestion'), 'preload exposes replyUserQuestion');
 
   const ok = assertAgentPayloadShape('agent:text', { taskId: 't1', text: 'hi' });
   assert.ok(ok.ok, 'text+taskId valid');
@@ -853,6 +1013,7 @@ try {
   testResolveToolCallDelta();
   testAcpInitializeIdentity();
   testExitPlanModeApproval();
+  testAskUserQuestion();
   testPickChunkTextMultimodal();
   testIpcChannelContract();
   testAgentStreamNdjsonFixture();

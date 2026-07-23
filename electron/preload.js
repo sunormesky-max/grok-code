@@ -68,6 +68,8 @@ contextBridge.exposeInMainWorld('grok', {
   listRunningAgents: () => ipcRenderer.invoke('agent:running'),
   /** Reply to x.ai/exit_plan_mode (approve | abandoned | cancelled + feedback) */
   replyPlanApproval: (payload) => ipcRenderer.invoke('agent:plan_reply', payload || {}),
+  /** Reply to x.ai/ask_user_question (accepted | cancelled | chat_about_this | skip_interview) */
+  replyUserQuestion: (payload) => ipcRenderer.invoke('agent:user_question_reply', payload || {}),
 
   openExternal: (url) => ipcRenderer.invoke('shell:openExternal', url),
   windowMinimize: () => ipcRenderer.invoke('window:minimize'),

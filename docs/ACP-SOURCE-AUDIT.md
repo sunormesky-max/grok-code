@@ -121,7 +121,8 @@ GrokCode headless path must not be used for Craft/tool UX; ACP is mandatory for 
 |--------|---------------------|
 | `session/request_permission` | Handled (YOLO / cancel) |
 | `x.ai/exit_plan_mode` | **Handled (1.14.0)** — park + UI approve/revise/quit; outcomes `approved` \| `abandoned` \| `cancelled` + `feedback` |
-| Other `x.ai/*` reverse methods (fs, terminal, ask_user_question, …) | **Empty `{}` / cancelled** — ask_user cancelled non-hanging; fs/terminal not advertised |
+| `x.ai/ask_user_question` | **Handled (1.15.0)** — park + questionnaire UI; outcomes `accepted` \| `cancelled` \| `chat_about_this` \| `skip_interview` |
+| Other `x.ai/*` reverse methods (fs, terminal, …) | **Empty `{}`** — fs/terminal not advertised |
 
 We advertise **no** client fs/terminal capabilities (correct for “agent runs tools itself”).
 
@@ -186,6 +187,7 @@ We advertise **no** client fs/terminal capabilities (correct for “agent runs t
 | P2 agentTransport setting auto/acp/headless | Done (1.13.0) |
 | P2 doctor Build gate + auth.json | Done (1.13.0) |
 | P1 `x.ai/exit_plan_mode` interactive UI | Done (1.14.0 park + approve/revise/quit) |
+| P1 `x.ai/ask_user_question` interactive UI | Done (1.15.0 park + questionnaire ExtResponse) |
 | Upstream `/feedback` | `patches/grok-build/FEEDBACK.md` |
 
 ---

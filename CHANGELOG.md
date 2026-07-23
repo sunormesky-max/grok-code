@@ -11,6 +11,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 - See [ROADMAP.md](ROADMAP.md)
 
+## [1.15.0] — 2026-07-23
+
+### Host ↔ open-source Grok Build — `x.ai/ask_user_question`
+
+When the agent calls `ask_user_question`, the CLI reverse-requests
+`x.ai/ask_user_question` (AskUserQuestionExtRequest/Response). Hosts that
+auto-`cancelled` blocked interviews; GrokCode now parks and shows a questionnaire.
+
+- **Park reverse-request** until the desktop UI answers (default)
+- **Question bar**: multi/single select + freeform Other + notes
+- **Outcomes** (wire-tagged): `accepted` · `cancelled` · plan-mode
+  `chat_about_this` / `skip_interview` with `partial_answers`
+- Replacing a pending questionnaire cancels the previous (pager parity)
+- IPC: `agent:user_question` + `agent:user_question_reply` / `replyUserQuestion`
+- Opt-out: `GROKCODE_AUTO_CANCEL_ASK_USER=1` (legacy non-hang cancel)
+- Unit tests for normalize / park / replace / ExtResponse shapes
+
 ## [1.14.0] — 2026-07-23
 
 ### Host ↔ open-source Grok Build — plan approval (`x.ai/exit_plan_mode`)

@@ -9076,6 +9076,33 @@ function bindAgentEvents() {
         });
       }
     }),
+    window.grok.on('agent:user_question', (d) => {
+      const task = taskFromEvent(d);
+      if (!task) return;
+      if (d.pending) {
+        showUserQuestionBar(task, d);
+        if (isActiveTask(task)) {
+          const n = Array.isArray(d.questions) ? d.questions.length : 0;
+          pushLiveEvent({
+            kind: 'status',
+            title: localeIsEn() ? 'Question for you' : '需要你回答',
+            sub: localeIsEn()
+              ? `${n} question(s) · CLI ask_user_question`
+              : `${n} 个问题 · 对齐 CLI ask_user_question`,
+            projectId: task.projectId,
+            immediate: true,
+          });
+          setLivePhase(localeIsEn() ? 'User question' : '用户提问', task.title);
+        }
+      } else if (isActiveTask(task)) {
+        pushLiveEvent({
+          kind: 'status',
+          title: localeIsEn() ? 'Question auto-cancelled' : '问题已自动取消',
+          sub: d.selected || 'cancelled',
+          projectId: task.projectId,
+        });
+      }
+    }),
     window.grok.on('agent:ext', (d) => {
       const task = taskFromEvent(d);
       if (!isActiveTask(task) || !d?.kind) return;
@@ -9826,6 +9853,210 @@ function showPlanApprovalBar(task, d) {
   bar.querySelector('[data-act="quit"]').onclick = () => send('abandoned');
   task.pane.appendChild(bar);
   scrollMessages(true, task);
+}
+
+/**
+ * ACP x.ai/ask_user_question — multi-choice questionnaire
+ * (matches open-source grok-build AskUserQuestionExtResponse).
+ * outcomes: accepted | chat_about_this | skip_interview | cancelled
+ */
+function showUserQuestionBar(task, d) {
+  task = task || T();
+  if (!task?.pane || !d?.requestId) return;
+  const en = localeIsEn();
+  task.pane.querySelectorAll('.user-question-bar').forEach((el) => el.remove());
+  const bar = document.createElement('div');
+  bar.className = 'user-question-bar msg status';
+  bar.dataset.requestId = String(d.requestId);
+  const questions = Array.isArray(d.questions) ? d.questions : [];
+  const isPlan = String(d.mode || '').toLowerCase() === 'plan';
+  const modeLabel = isPlan
+    ? en
+      ? 'plan interview'
+      : '计划访谈'
+    : en
+      ? 'default'
+      : '常规';
+
+  const blocks = questions
+    .map((q, qi) => {
+      const qText = esc(String(q.question || '').trim() || `(Q${qi + 1})`);
+      const multi = Boolean(q.multiSelect);
+      const opts = Array.isArray(q.options) ? q.options : [];
+      const optHtml = opts
+        .map((o, oi) => {
+          const label = esc(o.label || '');
+          const desc = o.description ? `<span class="uq-opt-desc">${esc(o.description)}</span>` : '';
+          const prev = o.preview
+            ? `<pre class="uq-opt-preview">${esc(String(o.preview).slice(0, 800))}</pre>`
+            : '';
+          const type = multi ? 'checkbox' : 'radio';
+          const name = multi ? `uq-${qi}-o${oi}` : `uq-${qi}`;
+          return `<label class="uq-option">
+            <input type="${type}" name="${name}" data-q="${qi}" data-label="${escAttr(o.label || '')}" data-preview="${escAttr(String(o.preview || '').slice(0, 500))}" />
+            <span class="uq-opt-main"><strong>${label}</strong>${desc}</span>
+            ${prev}
+          </label>`;
+        })
+        .join('');
+      // Upstream always offers freeform "Other"
+      const other = `<label class="uq-option uq-other">
+          <input type="${multi ? 'checkbox' : 'radio'}" name="${multi ? `uq-${qi}-other` : `uq-${qi}`}" data-q="${qi}" data-label="Other" data-other="1" />
+          <span class="uq-opt-main"><strong>${en ? 'Other' : '其他'}</strong>
+            <span class="uq-opt-desc">${en ? 'Type your own answer' : '自行填写'}</span>
+          </span>
+        </label>
+        <input type="text" class="uq-other-input" data-q="${qi}" placeholder="${en ? 'Your answer…' : '你的回答…'}" />`;
+      const notes = `<label class="uq-notes">
+          <span>${en ? 'Notes (optional)' : '备注（可选）'}</span>
+          <input type="text" class="uq-notes-input" data-q="${qi}" placeholder="${en ? 'Extra context…' : '补充说明…'}" />
+        </label>`;
+      return `<div class="uq-block" data-qi="${qi}" data-question="${escAttr(q.question || '')}" data-multi="${multi ? '1' : '0'}">
+        <div class="uq-qtext">${qi + 1}. ${qText}${multi ? ` <span class="muted">(${en ? 'multi' : '多选'})</span>` : ''}</div>
+        <div class="uq-options">${optHtml}${other}</div>
+        ${notes}
+      </div>`;
+    })
+    .join('');
+
+  bar.innerHTML = `
+    <div class="user-question-head">
+      <strong>${en ? 'Agent asks' : 'Agent 提问'}</strong>
+      <span class="muted">${en ? 'CLI ask_user_question' : '对齐 CLI · ask_user_question'} · ${modeLabel}</span>
+    </div>
+    <div class="user-question-body">${blocks || `<p class="muted">${en ? 'No questions in payload' : '无问题内容'}</p>`}</div>
+    <div class="retry-actions">
+      <button type="button" class="btn small primary" data-act="accept">✓ ${en ? 'Submit answers' : '提交回答'}</button>
+      ${
+        isPlan
+          ? `<button type="button" class="btn small ghost" data-act="chat">💬 ${en ? 'Chat about this' : '继续讨论'}</button>
+             <button type="button" class="btn small ghost" data-act="skip">⏭ ${en ? 'Skip interview' : '跳过访谈'}</button>`
+          : ''
+      }
+      <button type="button" class="btn small ghost" data-act="cancel">✕ ${en ? 'Cancel' : '取消'}</button>
+    </div>`;
+
+  function collectAnswers(partialOnly) {
+    const answers = {};
+    const annotations = {};
+    bar.querySelectorAll('.uq-block').forEach((block) => {
+      const qText = block.dataset.question || '';
+      if (!qText) return;
+      const multi = block.dataset.multi === '1';
+      const selected = [];
+      let otherNotes = '';
+      let preview = null;
+      block.querySelectorAll('input[type="radio"], input[type="checkbox"]').forEach((inp) => {
+        if (!inp.checked) return;
+        const lab = inp.dataset.label || '';
+        if (inp.dataset.other === '1') {
+          selected.push('Other');
+          otherNotes = block.querySelector(`.uq-other-input[data-q="${inp.dataset.q}"]`)?.value?.trim() || '';
+        } else if (lab) {
+          selected.push(lab);
+          if (!multi && inp.dataset.preview) preview = inp.dataset.preview;
+        }
+      });
+      const notesExtra = block.querySelector(`.uq-notes-input`)?.value?.trim() || '';
+      const notes = [otherNotes, notesExtra].filter(Boolean).join('\n') || null;
+      if (selected.length === 0 && !notes) return;
+      if (selected.length === 0 && notes) {
+        selected.push('Other');
+      }
+      if (partialOnly) {
+        // plan-mode partial paths: single label string, notes dropped
+        answers[qText] = selected[0] || 'Other';
+      } else {
+        answers[qText] = selected;
+        if (preview || notes) {
+          annotations[qText] = {};
+          if (preview) annotations[qText].preview = preview;
+          if (notes) annotations[qText].notes = notes;
+        }
+      }
+    });
+    return { answers, annotations };
+  }
+
+  const send = async (outcome) => {
+    bar.querySelectorAll('button').forEach((b) => {
+      b.disabled = true;
+    });
+    let result = { outcome };
+    try {
+      if (outcome === 'accepted') {
+        const { answers, annotations } = collectAnswers(false);
+        if (!Object.keys(answers).length) {
+          toast(en ? 'Pick at least one option' : '请至少选择一个选项', 'err');
+          bar.querySelectorAll('button').forEach((b) => {
+            b.disabled = false;
+          });
+          return;
+        }
+        result = { outcome: 'accepted', answers };
+        if (Object.keys(annotations).length) result.annotations = annotations;
+      } else if (outcome === 'chat_about_this' || outcome === 'skip_interview') {
+        const { answers } = collectAnswers(true);
+        result = { outcome, partial_answers: answers };
+      } else {
+        result = { outcome: 'cancelled' };
+      }
+      const r = await window.grok.replyUserQuestion({
+        projectId: task.projectId || pid(),
+        taskId: task.id,
+        requestId: d.requestId,
+        result,
+      });
+      if (!r?.ok) {
+        toast(r?.error || 'question reply failed', 'err');
+        bar.querySelectorAll('button').forEach((b) => {
+          b.disabled = false;
+        });
+        return;
+      }
+      bar.remove();
+      const msg =
+        outcome === 'accepted'
+          ? en
+            ? 'Answers submitted'
+            : '已提交回答'
+          : outcome === 'chat_about_this'
+            ? en
+              ? 'Continue chat'
+              : '已选择继续讨论'
+            : outcome === 'skip_interview'
+              ? en
+                ? 'Interview skipped'
+                : '已跳过访谈'
+              : en
+                ? 'Question cancelled'
+                : '已取消提问';
+      toast(msg, 'ok');
+    } catch (err) {
+      toast(err.message || String(err), 'err');
+      bar.querySelectorAll('button').forEach((b) => {
+        b.disabled = false;
+      });
+    }
+  };
+
+  bar.querySelector('[data-act="accept"]').onclick = () => send('accepted');
+  bar.querySelector('[data-act="cancel"]').onclick = () => send('cancelled');
+  const chatBtn = bar.querySelector('[data-act="chat"]');
+  const skipBtn = bar.querySelector('[data-act="skip"]');
+  if (chatBtn) chatBtn.onclick = () => send('chat_about_this');
+  if (skipBtn) skipBtn.onclick = () => send('skip_interview');
+  task.pane.appendChild(bar);
+  scrollMessages(true, task);
+}
+
+/** Escape for HTML attribute values */
+function escAttr(s) {
+  return String(s || '')
+    .replace(/&/g, '&amp;')
+    .replace(/"/g, '&quot;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
 }
 
 /** Heuristic: assistant reply looks like an actionable plan */

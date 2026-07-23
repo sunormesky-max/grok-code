@@ -77,10 +77,10 @@ Living plan for the GrokCode open-source ecosystem. Order may change based on co
 - [x] ACP Build 403 → headless fallback like `grok -p` (v1.11.5+)
 - [x] agentTransport setting + doctor Build-gate / auth.json (v1.13.0)
 - [x] Interactive `x.ai/exit_plan_mode` plan approval UI (v1.14.0)
+- [x] Interactive `x.ai/ask_user_question` questionnaire UI (v1.15.0)
 
 ## Next (host ↔ open-source grok-build)
 
-- [ ] Optional `ask_user_question` interactive UI (currently cancelled, non-hanging)
 - [ ] Optional `session/set_mode` if/when ACP exposes it for Plan/Normal from host
 - [ ] Prefer tool mid-flight when upstream emits InProgress (see patches/grok-build)
 - [ ] Deeper doctor: optional timed `grok -p` probe (slow — opt-in)

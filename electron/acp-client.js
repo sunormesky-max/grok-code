@@ -34,6 +34,7 @@ class AcpClient {
     this.onExit = opts.onExit || (() => {});
     this.onPermission = opts.onPermission || null;
     this.onPlanApproval = opts.onPlanApproval || null;
+    this.onUserQuestion = opts.onUserQuestion || null;
     this.onAgentRequest = opts.onAgentRequest || null;
     this.autoApprove = opts.autoApprove !== false;
     /**
@@ -44,6 +45,14 @@ class AcpClient {
       opts.planInteractive !== undefined
         ? Boolean(opts.planInteractive)
         : process.env.GROKCODE_AUTO_APPROVE_PLAN !== '1';
+    /**
+     * When true (default), ask_user_question parks for host UI.
+     * GROKCODE_AUTO_CANCEL_ASK_USER=1 → immediate cancelled (legacy non-hang).
+     */
+    this.userQuestionInteractive =
+      opts.userQuestionInteractive !== undefined
+        ? Boolean(opts.userQuestionInteractive)
+        : process.env.GROKCODE_AUTO_CANCEL_ASK_USER !== '1';
     /** @type {import('child_process').ChildProcess | null} */
     this.child = null;
     this.buf = '';
@@ -288,6 +297,7 @@ class AcpClient {
       this.pendingInteractive.set(String(reqId), {
         kind: 'plan_approval',
         method,
+        requestId: reqId,
         toolCallId: String(toolCallId),
         at: Date.now(),
       });
@@ -309,16 +319,15 @@ class AcpClient {
       return;
     }
 
-    // ask_user_question — cancel for now (host can expand later); don't hang forever
-    if (/ask_user_question/i.test(method)) {
-      this._respond(reqId, { outcome: 'cancelled' });
-      try {
-        if (typeof this.onAgentRequest === 'function') {
-          this.onAgentRequest({ method, params, id: reqId });
-        }
-      } catch {
-        /* ignore */
-      }
+    // ask_user_question reverse-request (upstream: x.ai/ask_user_question)
+    // Response: AskUserQuestionExtResponse tagged on "outcome"
+    //   accepted | chat_about_this | skip_interview | cancelled
+    if (
+      method === 'x.ai/ask_user_question' ||
+      method === '_x.ai/ask_user_question' ||
+      /ask_user_question/i.test(method)
+    ) {
+      this._handleAskUserQuestion(reqId, method, params);
       return;
     }
 
@@ -334,25 +343,106 @@ class AcpClient {
   }
 
   /**
-   * Host answered a parked plan approval (or other interactive reverse-req).
+   * Park x.ai/ask_user_question until host UI answers.
+   * Wire shape (camelCase): sessionId, toolCallId, questions[], mode default|plan
+   */
+  _handleAskUserQuestion(reqId, method, params) {
+    const p = params && typeof params === 'object' ? params : {};
+    const toolCallId =
+      p.toolCallId || p.tool_call_id || p.toolCall?.toolCallId || '';
+    const sessionId = p.sessionId || p.session_id || '';
+    const modeRaw = String(p.mode || 'default').toLowerCase();
+    const mode = modeRaw === 'plan' ? 'plan' : 'default';
+    const questions = normalizeAskUserQuestions(p.questions || p.Questions || []);
+
+    // Replacing an active questionnaire cancels the previous (pager parity)
+    for (const [oldKey, pending] of [...this.pendingInteractive.entries()]) {
+      if (pending.kind === 'ask_user_question') {
+        this.pendingInteractive.delete(oldKey);
+        // Preserve original JSON-RPC id type (number vs string)
+        const oldReqId = pending.requestId != null ? pending.requestId : oldKey;
+        this._respond(oldReqId, { outcome: 'cancelled' });
+      }
+    }
+
+    // Auto-cancel only when host explicitly disables interactive questions
+    const autoCancel =
+      this.userQuestionInteractive === false ||
+      process.env.GROKCODE_AUTO_CANCEL_ASK_USER === '1';
+
+    if (autoCancel) {
+      this._respond(reqId, { outcome: 'cancelled' });
+      try {
+        if (typeof this.onUserQuestion === 'function') {
+          this.onUserQuestion({
+            requestId: reqId,
+            method,
+            toolCallId: String(toolCallId),
+            sessionId: String(sessionId),
+            mode,
+            questions,
+            pending: false,
+            selected: 'cancelled',
+          });
+        }
+      } catch {
+        /* ignore */
+      }
+      return;
+    }
+
+    this.pendingInteractive.set(String(reqId), {
+      kind: 'ask_user_question',
+      method,
+      requestId: reqId,
+      toolCallId: String(toolCallId),
+      at: Date.now(),
+    });
+    try {
+      if (typeof this.onUserQuestion === 'function') {
+        this.onUserQuestion({
+          requestId: reqId,
+          method,
+          toolCallId: String(toolCallId),
+          sessionId: String(sessionId),
+          mode,
+          questions,
+          pending: true,
+        });
+      }
+    } catch {
+      /* ignore */
+    }
+  }
+
+  /**
+   * Host answered a parked interactive reverse-req (plan approval or ask_user).
    * @param {string|number} requestId
-   * @param {{ outcome: 'approved'|'abandoned'|'cancelled', feedback?: string }} body
+   * @param {object} body Full JSON-RPC result (ExitPlanMode / AskUserQuestion ExtResponse)
    */
   resolveInteractive(requestId, body) {
     const key = String(requestId);
     if (!this.pendingInteractive.has(key)) {
       return { ok: false, error: 'no pending request' };
     }
+    const pending = this.pendingInteractive.get(key);
     this.pendingInteractive.delete(key);
-    const outcome = String(body?.outcome || 'cancelled');
-    const feedback =
-      body?.feedback != null && String(body.feedback).trim()
-        ? String(body.feedback).trim()
-        : undefined;
-    const result = { outcome };
-    if (feedback) result.feedback = feedback;
+    const result =
+      body && typeof body === 'object' && !Array.isArray(body)
+        ? { ...body }
+        : { outcome: 'cancelled' };
+    if (!result.outcome) result.outcome = 'cancelled';
+    // Plan-approval feedback convenience (legacy shape)
+    if (
+      pending?.kind === 'plan_approval' &&
+      body?.feedback != null &&
+      String(body.feedback).trim() &&
+      result.feedback == null
+    ) {
+      result.feedback = String(body.feedback).trim();
+    }
     this._respond(requestId, result);
-    return { ok: true, outcome };
+    return { ok: true, kind: pending?.kind || null, outcome: result.outcome };
   }
 
   _respond(id, result) {
@@ -653,6 +743,59 @@ function resolveToolCallDelta(update, state) {
 }
 
 /**
+ * Normalize ask_user_question payload (camelCase + snake_case).
+ * Upstream Question: { question, options[{label,description,preview?}], multiSelect? }
+ */
+function normalizeAskUserQuestions(raw) {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .map((q, qi) => {
+      if (!q || typeof q !== 'object') return null;
+      const question = String(q.question || q.prompt || q.text || '').trim();
+      if (!question) return null;
+      const opts = Array.isArray(q.options) ? q.options : [];
+      const options = opts
+        .map((o, oi) => {
+          if (o == null) return null;
+          if (typeof o === 'string') {
+            return {
+              label: o,
+              description: '',
+              preview: null,
+              id: `q${qi}-o${oi}`,
+            };
+          }
+          const label = String(o.label || o.name || o.text || '').trim();
+          if (!label) return null;
+          return {
+            label,
+            description: String(o.description || o.desc || '').trim(),
+            preview:
+              o.preview != null && String(o.preview).trim()
+                ? String(o.preview).slice(0, 4000)
+                : null,
+            id: o.id != null ? String(o.id) : `q${qi}-o${oi}`,
+          };
+        })
+        .filter(Boolean)
+        .slice(0, 24);
+      const multi =
+        q.multiSelect === true ||
+        q.multi_select === true ||
+        q.multiSelect === 'true' ||
+        q.multi_select === 'true';
+      return {
+        question,
+        options,
+        multiSelect: Boolean(multi),
+        id: q.id != null ? String(q.id) : `q${qi}`,
+      };
+    })
+    .filter(Boolean)
+    .slice(0, 12);
+}
+
+/**
  * Build ACP initialize params (pure — unit-tested).
  * Client identity must land in meta/_meta, not only clientInfo.name.
  * Upstream: mvp_agent/acp_agent.rs reads meta.clientType then meta.clientIdentifier.
@@ -697,4 +840,5 @@ module.exports = {
   safeIpc,
   buildInitializeParams,
   resolveToolCallDelta,
+  normalizeAskUserQuestions,
 };

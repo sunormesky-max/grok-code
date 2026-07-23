@@ -1214,6 +1214,19 @@ ipcMain.handle('agent:plan_reply', (_e, payload = {}) => {
   });
 });
 
+/** Reply to parked x.ai/ask_user_question reverse-request */
+ipcMain.handle('agent:user_question_reply', (_e, payload = {}) => {
+  const { projectId, taskId, requestId, result } = payload || {};
+  if (!projectId || !taskId || requestId == null) {
+    return { ok: false, error: 'projectId, taskId, requestId required' };
+  }
+  const p = projects.get(projectId);
+  if (!p?.agent?.replyUserQuestion) {
+    return { ok: false, error: 'project not open' };
+  }
+  return p.agent.replyUserQuestion(taskId, requestId, result || { outcome: 'cancelled' });
+});
+
 ipcMain.handle('agent:stop', (_e, payload = {}) => {
   const { projectId, taskId } = payload;
   if (projectId) {

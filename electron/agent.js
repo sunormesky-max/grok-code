@@ -1218,6 +1218,25 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
             setPhase('running', '等待计划审批…');
           }
         };
+        // Upstream x.ai/ask_user_question — park until UI answers
+        client.onUserQuestion = (info) => {
+          streamDebug(
+            `task=${taskId} user_question pending=${info?.pending ? 1 : 0} mode=${info?.mode} n=${(info?.questions || []).length} req=${info?.requestId}`,
+            { force: true }
+          );
+          emitT('agent:user_question', {
+            requestId: info.requestId,
+            toolCallId: info.toolCallId || '',
+            sessionId: info.sessionId || newSessionId || '',
+            mode: info.mode || 'default',
+            questions: Array.isArray(info.questions) ? info.questions : [],
+            pending: Boolean(info.pending),
+            selected: info.selected || null,
+          });
+          if (info?.pending) {
+            setPhase('running', '等待用户回答…');
+          }
+        };
         client.onAgentRequest = (info) => {
           // Unknown reverse request (fs/terminal/etc.) — empty {} already sent
           streamDebug(
@@ -2193,12 +2212,38 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
       return { ok: false, error: 'no active ACP client for task' };
     }
     const outcome = String(body.outcome || 'cancelled');
-    const r = c.resolveInteractive(requestId, {
-      outcome,
-      feedback: body.feedback,
-    });
+    const result = { outcome };
+    if (body.feedback != null && String(body.feedback).trim()) {
+      result.feedback = String(body.feedback).trim();
+    }
+    const r = c.resolveInteractive(requestId, result);
     streamDebug(
       `task=${taskId} plan_approval reply req=${requestId} outcome=${outcome} ok=${r.ok ? 1 : 0}`,
+      { force: true }
+    );
+    return r;
+  }
+
+  /**
+   * Host answered x.ai/ask_user_question (AskUserQuestionExtResponse body).
+   * @param {string} taskId
+   * @param {string|number} requestId
+   * @param {{ outcome: string, answers?: object, annotations?: object, partial_answers?: object }} result
+   */
+  function replyUserQuestion(taskId, requestId, result = {}) {
+    const child = children.get(String(taskId));
+    const client = child?.__acpClient;
+    const pooled = !client ? acpPool.get(String(taskId))?.client : null;
+    const c = client || pooled;
+    if (!c || typeof c.resolveInteractive !== 'function') {
+      return { ok: false, error: 'no active ACP client for task' };
+    }
+    const body =
+      result && typeof result === 'object' ? { ...result } : { outcome: 'cancelled' };
+    if (!body.outcome) body.outcome = 'cancelled';
+    const r = c.resolveInteractive(requestId, body);
+    streamDebug(
+      `task=${taskId} user_question reply req=${requestId} outcome=${body.outcome} ok=${r.ok ? 1 : 0}`,
       { force: true }
     );
     return r;
@@ -2212,6 +2257,7 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
     listTrackedPids,
     reapTracked,
     replyPlanApproval,
+    replyUserQuestion,
   };
 }
 
