@@ -190,6 +190,7 @@ We advertise **no** client fs/terminal capabilities (correct for “agent runs t
 | P1 `x.ai/ask_user_question` interactive UI | Done (1.15.0 park + questionnaire ExtResponse) |
 | P1 `session/set_mode` host cycle | Done (1.16.0 default/plan/ask) |
 | P2 doctor `grok -p` probe | Done (1.16.0 opt-in) |
+| P1 `session/set_model` live switch | Done (1.17.0 + ModelChanged mirror) |
 | Upstream `/feedback` | `patches/grok-build/FEEDBACK.md` |
 
 ---

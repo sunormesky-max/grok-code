@@ -1242,6 +1242,22 @@ ipcMain.handle('agent:set_mode', async (_e, payload = {}) => {
   return p.agent.setSessionMode(taskId, modeId, sessionId);
 });
 
+/** ACP session/set_model — live model switch on warm session */
+ipcMain.handle('agent:set_model', async (_e, payload = {}) => {
+  const { projectId, taskId, modelId, sessionId, reasoningEffort } = payload || {};
+  if (!projectId || !taskId) {
+    return { ok: false, error: 'projectId, taskId required' };
+  }
+  const p = projects.get(projectId);
+  if (!p?.agent?.setSessionModel) {
+    return { ok: false, error: 'project not open' };
+  }
+  return p.agent.setSessionModel(taskId, modelId, {
+    sessionId,
+    reasoningEffort,
+  });
+});
+
 ipcMain.handle('agent:stop', (_e, payload = {}) => {
   const { projectId, taskId } = payload;
   if (projectId) {

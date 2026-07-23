@@ -72,6 +72,8 @@ contextBridge.exposeInMainWorld('grok', {
   replyUserQuestion: (payload) => ipcRenderer.invoke('agent:user_question_reply', payload || {}),
   /** ACP session/set_mode — modeId: default | plan | ask */
   setSessionMode: (payload) => ipcRenderer.invoke('agent:set_mode', payload || {}),
+  /** ACP session/set_model — live model switch when ACP warm */
+  setSessionModel: (payload) => ipcRenderer.invoke('agent:set_model', payload || {}),
 
   openExternal: (url) => ipcRenderer.invoke('shell:openExternal', url),
   windowMinimize: () => ipcRenderer.invoke('window:minimize'),

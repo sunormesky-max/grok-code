@@ -314,6 +314,7 @@ function testAgentExports() {
   assert.equal(typeof agent.replyPlanApproval, 'function');
   assert.equal(typeof agent.replyUserQuestion, 'function');
   assert.equal(typeof agent.setSessionMode, 'function');
+  assert.equal(typeof agent.setSessionModel, 'function');
   assert.deepEqual(agent.listTrackedPids(), []);
   agent.reapTracked();
   const noClient = agent.replyPlanApproval('missing-task', 1, { outcome: 'approved' });
@@ -335,11 +336,17 @@ function testAgentExports() {
     ),
     'auth required mapped'
   );
-  return Promise.resolve(agent.setSessionMode('missing-task', 'plan')).then((r) => {
-    assert.equal(r.ok, false);
-    assert.ok(/no active ACP|session/i.test(String(r.error || '')));
-    console.log('ok  agent stop/reap exports');
-  });
+  return Promise.resolve(agent.setSessionMode('missing-task', 'plan'))
+    .then((r) => {
+      assert.equal(r.ok, false);
+      assert.ok(/no active ACP|session/i.test(String(r.error || '')));
+      return agent.setSessionModel('missing-task', 'grok-4');
+    })
+    .then((r2) => {
+      assert.equal(r2.ok, false);
+      assert.ok(r2.deferred || /no active ACP|session/i.test(String(r2.error || '')));
+      console.log('ok  agent stop/reap exports');
+    });
 }
 
 function testAcpPermissionPicker() {
@@ -762,9 +769,29 @@ function testSessionModeNormalize() {
     client.pending.delete(msg.id);
     pend.resolve({});
   }
-  return p.then(() => {
-    console.log('ok  session/set_mode normalize + request');
+  // session/set_model wire
+  writes.length = 0;
+  const p2 = client.setModel('sess-xyz', 'grok-4.5-build', {
+    reasoningEffort: 'high',
   });
+  assert.ok(writes.length === 1);
+  const msg2 = JSON.parse(writes[0].trim());
+  assert.equal(msg2.method, 'session/set_model');
+  assert.equal(msg2.params.sessionId, 'sess-xyz');
+  assert.equal(msg2.params.modelId, 'grok-4.5-build');
+  assert.ok(msg2.params.meta?.reasoning_effort === 'high');
+  const pend2 = client.pending.get(msg2.id);
+  if (pend2) {
+    clearTimeout(pend2.timer);
+    client.pending.delete(msg2.id);
+    pend2.resolve({ meta: { model: 'grok-4.5-build' } });
+  }
+
+  return p
+    .then(() => p2)
+    .then(() => {
+      console.log('ok  session/set_mode + set_model wire');
+    });
 }
 
 function testDoctorPromptProbeSkipped() {
@@ -853,6 +880,9 @@ function testIpcChannelContract() {
   assert.ok(preloadSrc.includes('replyPlanApproval'), 'preload exposes replyPlanApproval');
   assert.ok(preloadSrc.includes('replyUserQuestion'), 'preload exposes replyUserQuestion');
   assert.ok(preloadSrc.includes('setSessionMode'), 'preload exposes setSessionMode');
+  assert.ok(preloadSrc.includes('setSessionModel'), 'preload exposes setSessionModel');
+  assert.ok(AGENT_EVENT_CHANNELS.includes('agent:model'));
+  assert.ok(isAllowedRendererChannel('agent:model'));
 
   const ok = assertAgentPayloadShape('agent:text', { taskId: 't1', text: 'hi' });
   assert.ok(ok.ok, 'text+taskId valid');

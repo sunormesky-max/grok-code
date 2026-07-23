@@ -11,6 +11,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 - See [ROADMAP.md](ROADMAP.md)
 
+## [1.17.0] — 2026-07-23
+
+### Host ↔ open-source Grok Build — `session/set_model`
+
+Composer model chip previously only wrote settings for the *next* spawn.
+Now, when an ACP session is warm/running, the host calls the same
+`session/set_model` the CLI pager uses.
+
+- **ACP** `setModel(sessionId, modelId, { reasoningEffort? })`
+- **IPC** `agent:set_model` / `setSessionModel`; event `agent:model`
+- **UI** model preset/custom applies config + live switch when possible
+- **Mirror** `x.ai/session_notification` `ModelChanged` → chip + Live
+- Empty model id stays “CLI default” (config only, no set_model)
+- Unit tests for set_model wire shape + deferred without warm session
+
 ## [1.16.0] — 2026-07-23
 
 ### Host ↔ open-source Grok Build — `session/set_mode` + doctor probe

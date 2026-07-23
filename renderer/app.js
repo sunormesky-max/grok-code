@@ -3501,15 +3501,49 @@ async function setModelPreset(id, opts = {}) {
   } catch {
     /* ignore */
   }
+  // Live ACP session/set_model when a warm/running session exists
+  const task = T();
+  let live = null;
+  if (state.model && task?.id && window.grok?.setSessionModel) {
+    try {
+      live = await window.grok.setSessionModel({
+        projectId: task.projectId || pid(),
+        taskId: task.id,
+        modelId: state.model,
+        sessionId: task.sessionId || undefined,
+      });
+      if (live?.ok) {
+        task.acpModelId = state.model;
+      }
+    } catch {
+      live = null;
+    }
+  }
   if (opts.toast !== false) {
-    toast(
-      localeIsEn()
-        ? `Model: ${modelLabel(state.model)}`
-        : `模型：${modelLabel(state.model)}`,
-      'ok'
-    );
+    if (live?.ok) {
+      toast(
+        localeIsEn()
+          ? `Model (live): ${modelLabel(state.model)}`
+          : `模型（已热切换）：${modelLabel(state.model)}`,
+        'ok'
+      );
+    } else if (state.model && live && live.ok === false && !live.deferred) {
+      toast(
+        (localeIsEn() ? 'Model saved; live switch failed: ' : '模型已保存；热切换失败：') +
+          (live.error || ''),
+        'err'
+      );
+    } else {
+      toast(
+        localeIsEn()
+          ? `Model: ${modelLabel(state.model)}${state.model ? ' (next run / warm ACP)' : ''}`
+          : `模型：${modelLabel(state.model)}${state.model ? '（下次运行 / 预热后可热切）' : ''}`,
+        'ok'
+      );
+    }
   }
   document.getElementById('modelMenu')?.classList.add('hidden');
+  return live;
 }
 
 function bindModelChipUi() {
@@ -9106,6 +9140,33 @@ function bindAgentEvents() {
           kind: 'status',
           title: `CLI 模式 · ${d.modeId}`,
           sub: d.source === 'set_mode' ? 'session/set_mode' : task.title,
+          projectId: task.projectId,
+        });
+      }
+    }),
+    window.grok.on('agent:model', (d) => {
+      const task = taskFromEvent(d);
+      if (!task) return;
+      if (d.modelId) {
+        task.acpModelId = d.modelId;
+        // Keep composer chip in sync when agent broadcasts ModelChanged
+        if (isActiveTask(task) && d.source === 'model_changed') {
+          state.model = d.modelId;
+          saveJson(MODEL_KEY, state.model);
+          applyModelChip();
+        }
+      }
+      if (isActiveTask(task) && d.modelId) {
+        setLivePhase(`模型 · ${d.modelId}`, task.title);
+        pushLiveEvent({
+          kind: 'status',
+          title: `CLI 模型 · ${d.modelId}`,
+          sub:
+            d.source === 'set_model'
+              ? 'session/set_model'
+              : d.source === 'model_changed'
+                ? 'ModelChanged'
+                : task.title,
           projectId: task.projectId,
         });
       }

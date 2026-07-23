@@ -1061,6 +1061,27 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
             return;
           }
 
+          if (kind === 'model_changed' || kind === 'modelchanged') {
+            const modelId =
+              update.model_id ||
+              update.modelId ||
+              update.model ||
+              '';
+            const effort =
+              update.reasoning_effort ||
+              update.reasoningEffort ||
+              null;
+            if (modelId) {
+              emitT('agent:model', {
+                modelId: String(modelId),
+                reasoningEffort: effort,
+                source: 'model_changed',
+              });
+              setPhase('running', `模型 · ${modelId}`);
+            }
+            return;
+          }
+
           if (kind === 'pending_interaction') {
             // Auto-approve YOLO: still surface that a tool is about to run
             const tid =
@@ -2283,6 +2304,88 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
   }
 
   /**
+   * ACP session/set_model — live switch on warm/running session.
+   * Empty modelId is rejected (use config only for "CLI default" next spawn).
+   * @param {string} taskId
+   * @param {string} modelId
+   * @param {{ sessionId?: string, reasoningEffort?: string }} [opts]
+   */
+  async function setSessionModel(taskId, modelId, opts = {}) {
+    const mid = String(modelId || '').trim();
+    if (!mid) {
+      return {
+        ok: false,
+        error: 'modelId required (empty = next-run config only, not set_model)',
+        modelId: '',
+      };
+    }
+    const { client, sessionId: sid0, source } = resolveAcpSession(taskId);
+    const sid = String(opts.sessionId || sid0 || '').trim();
+    if (!client || typeof client.setModel !== 'function') {
+      return {
+        ok: false,
+        error: 'no active ACP session — model saved for next run only',
+        modelId: mid,
+        deferred: true,
+      };
+    }
+    if (!sid) {
+      return {
+        ok: false,
+        error: 'sessionId unknown — model saved for next run only',
+        modelId: mid,
+        deferred: true,
+      };
+    }
+    try {
+      const resp = await client.setModel(sid, mid, {
+        reasoningEffort: opts.reasoningEffort,
+      });
+      streamDebug(
+        `task=${taskId} session/set_model model=${mid} sid=${sid} via=${source}`,
+        { force: true }
+      );
+      const meta = resp?._meta || resp?.meta || {};
+      try {
+        emit(
+          'agent:model',
+          safeIpc({
+            taskId: String(taskId),
+            modelId: mid,
+            reasoningEffort: opts.reasoningEffort || meta.reasoning_effort || null,
+            source: 'set_model',
+            meta: meta.model || meta || null,
+          })
+        );
+      } catch {
+        /* ignore */
+      }
+      return {
+        ok: true,
+        modelId: mid,
+        sessionId: sid,
+        response: resp || null,
+      };
+    } catch (err) {
+      const msg = err?.message || String(err);
+      // Surface incompatible-agent hint from upstream data when present
+      const data = err?.data || err?.raw?.error?.data;
+      let extra = '';
+      try {
+        const blob = typeof data === 'string' ? data : JSON.stringify(data || '');
+        if (/incompatible|start_new_session|agent.?type/i.test(blob)) {
+          extra =
+            ' · 当前会话 harness 与目标模型不兼容，请新开任务后再切模型';
+        }
+      } catch {
+        /* ignore */
+      }
+      streamDebug(`task=${taskId} session/set_model FAIL ${msg}`, { force: true });
+      return { ok: false, error: msg + extra, modelId: mid };
+    }
+  }
+
+  /**
    * Host answered x.ai/exit_plan_mode (approve | abandoned | cancelled + feedback).
    */
   function replyPlanApproval(taskId, requestId, body = {}) {
@@ -2342,6 +2445,7 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
     replyPlanApproval,
     replyUserQuestion,
     setSessionMode,
+    setSessionModel,
   };
 }
 

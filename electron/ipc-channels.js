@@ -16,6 +16,7 @@ const AGENT_EVENT_CHANNELS = Object.freeze([
   'agent:cli',
   'agent:plan',
   'agent:mode',
+  'agent:model',
   'agent:commands',
   'agent:permission',
   'agent:plan_approval',

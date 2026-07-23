@@ -186,9 +186,24 @@ class AcpClient {
         msg.method === 'x.ai/session_notification' ||
         msg.method === '_x.ai/session_notification'
       ) {
-        // xAI extension plane (ToolCallDeltaChunk, compact, retry, …).
-        // Always deliver during prompt; also allow compact/retry outside if needed.
-        if (!this.streaming) return;
+        // xAI extension plane (ToolCallDeltaChunk, compact, retry, ModelChanged…).
+        // Tool deltas only matter mid-prompt; ModelChanged may arrive between turns
+        // after session/set_model — allow that (and compact/retry) outside streaming.
+        if (!this.streaming) {
+          const u = params?.update || params?.sessionUpdate || params || {};
+          const k = String(
+            u.sessionUpdate || u.session_update || u.type || ''
+          )
+            .replace(/([a-z])([A-Z])/g, '$1_$2')
+            .toLowerCase();
+          if (
+            k !== 'model_changed' &&
+            k !== 'modelchanged' &&
+            !/compact|retry|mode/i.test(k)
+          ) {
+            return;
+          }
+        }
         try {
           this.onNotification(msg.method, params);
         } catch {
@@ -556,6 +571,30 @@ class AcpClient {
       { sessionId: sid, modeId: mid },
       30_000
     );
+  }
+
+  /**
+   * ACP session/set_model — live model switch on warm/running session.
+   * Wire: SetSessionModelRequest { sessionId, modelId, meta? }
+   * Optional meta.reasoning_effort / meta.reasoningEffort.
+   * @param {string} sessionId
+   * @param {string} modelId
+   * @param {{ reasoningEffort?: string, meta?: object }} [opts]
+   */
+  async setModel(sessionId, modelId, opts = {}) {
+    const sid = String(sessionId || '').trim();
+    const mid = String(modelId || '').trim();
+    if (!sid) throw new Error('sessionId required for session/set_model');
+    if (!mid) throw new Error('modelId required for session/set_model');
+    const params = { sessionId: sid, modelId: mid };
+    const meta = { ...(opts.meta && typeof opts.meta === 'object' ? opts.meta : {}) };
+    const effort = opts.reasoningEffort || opts.reasoning_effort || meta.reasoningEffort;
+    if (effort != null && String(effort).trim()) {
+      meta.reasoning_effort = String(effort).trim();
+      meta.reasoningEffort = String(effort).trim();
+    }
+    if (Object.keys(meta).length) params.meta = meta;
+    return this.request('session/set_model', params, 60_000);
   }
 
   kill() {
