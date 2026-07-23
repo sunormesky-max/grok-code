@@ -12,6 +12,7 @@ const {
   safeIpc,
   resolveToolCallDelta,
   normalizeSessionModeId,
+  normalizeReasoningEffort,
 } = require('./acp-client');
 const {
   isKnownHeadlessType,
@@ -2312,11 +2313,15 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
    */
   async function setSessionModel(taskId, modelId, opts = {}) {
     const mid = String(modelId || '').trim();
+    const effort = normalizeReasoningEffort(
+      opts.reasoningEffort != null ? opts.reasoningEffort : ''
+    );
     if (!mid) {
       return {
         ok: false,
         error: 'modelId required (empty = next-run config only, not set_model)',
         modelId: '',
+        reasoningEffort: effort,
       };
     }
     const { client, sessionId: sid0, source } = resolveAcpSession(taskId);
@@ -2326,6 +2331,7 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
         ok: false,
         error: 'no active ACP session — model saved for next run only',
         modelId: mid,
+        reasoningEffort: effort,
         deferred: true,
       };
     }
@@ -2334,15 +2340,16 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
         ok: false,
         error: 'sessionId unknown — model saved for next run only',
         modelId: mid,
+        reasoningEffort: effort,
         deferred: true,
       };
     }
     try {
       const resp = await client.setModel(sid, mid, {
-        reasoningEffort: opts.reasoningEffort,
+        reasoningEffort: effort || undefined,
       });
       streamDebug(
-        `task=${taskId} session/set_model model=${mid} sid=${sid} via=${source}`,
+        `task=${taskId} session/set_model model=${mid} effort=${effort || '-'} sid=${sid} via=${source}`,
         { force: true }
       );
       const meta = resp?._meta || resp?.meta || {};
@@ -2352,7 +2359,11 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
           safeIpc({
             taskId: String(taskId),
             modelId: mid,
-            reasoningEffort: opts.reasoningEffort || meta.reasoning_effort || null,
+            reasoningEffort:
+              effort ||
+              meta.reasoning_effort ||
+              meta.reasoningEffort ||
+              null,
             source: 'set_model',
             meta: meta.model || meta || null,
           })
@@ -2363,6 +2374,7 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
       return {
         ok: true,
         modelId: mid,
+        reasoningEffort: effort || null,
         sessionId: sid,
         response: resp || null,
       };
@@ -2377,11 +2389,20 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
           extra =
             ' · 当前会话 harness 与目标模型不兼容，请新开任务后再切模型';
         }
+        if (/reasoning|effort|not support/i.test(blob + msg)) {
+          extra +=
+            ' · 该模型可能不支持 reasoning effort，已保留设置供下次 spawn';
+        }
       } catch {
         /* ignore */
       }
       streamDebug(`task=${taskId} session/set_model FAIL ${msg}`, { force: true });
-      return { ok: false, error: msg + extra, modelId: mid };
+      return {
+        ok: false,
+        error: msg + extra,
+        modelId: mid,
+        reasoningEffort: effort,
+      };
     }
   }
 

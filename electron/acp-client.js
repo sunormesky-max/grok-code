@@ -828,6 +828,34 @@ function normalizeSessionModeId(modeId) {
 const SESSION_MODE_CYCLE = Object.freeze(['default', 'plan', 'ask']);
 
 /**
+ * Canonical reasoning effort tokens (CLI /effort, set_model meta).
+ * Default menu: low | medium | high | xhigh. Empty = unset (CLI default).
+ * `none` / `minimal` accepted only when explicitly set (some models advertise them).
+ */
+const REASONING_EFFORT_LEVELS = Object.freeze(['low', 'medium', 'high', 'xhigh']);
+
+function normalizeReasoningEffort(raw) {
+  const s = String(raw || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[\s-]+/g, '_');
+  if (!s) return '';
+  if (s === 'x_high' || s === 'extra_high' || s === 'max') return 'xhigh';
+  if (s === 'med') return 'medium';
+  if (s === 'hi') return 'high';
+  if (s === 'lo') return 'low';
+  if (
+    REASONING_EFFORT_LEVELS.includes(s) ||
+    s === 'none' ||
+    s === 'minimal'
+  ) {
+    return s;
+  }
+  // Unknown: pass through for model-specific remaps (e.g. "deep" → upstream)
+  return s;
+}
+
+/**
  * Normalize ask_user_question payload (camelCase + snake_case).
  * Upstream Question: { question, options[{label,description,preview?}], multiSelect? }
  */
@@ -928,4 +956,6 @@ module.exports = {
   normalizeAskUserQuestions,
   normalizeSessionModeId,
   SESSION_MODE_CYCLE,
+  normalizeReasoningEffort,
+  REASONING_EFFORT_LEVELS,
 };

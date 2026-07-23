@@ -570,6 +570,14 @@
             <label class="field">
               <span data-i18n="cfg.model">模型 <em>留空=CLI 默认</em></span>
               <input type="text" id="cfgModel" placeholder="grok-build / grok-4.5" />
+              <span>推理强度 <em>low / medium / high / xhigh · 留空=默认</em></span>
+              <input type="text" id="cfgReasoningEffort" placeholder="high" list="effortList" />
+              <datalist id="effortList">
+                <option value="low"></option>
+                <option value="medium"></option>
+                <option value="high"></option>
+                <option value="xhigh"></option>
+              </datalist>
             </label>
             <label class="field">
               <span data-i18n="cfg.rounds">最大回合</span>

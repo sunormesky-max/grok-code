@@ -42,9 +42,21 @@ const MODEL_PRESETS = [
   { id: 'grok-4', label: 'grok-4' },
 ];
 
+/** CLI /effort levels (session/set_model meta.reasoning_effort) */
+const EFFORT_PRESETS = [
+  { id: '', label: 'effort · default' },
+  { id: 'low', label: 'low' },
+  { id: 'medium', label: 'medium' },
+  { id: 'high', label: 'high' },
+  { id: 'xhigh', label: 'xhigh' },
+];
+const EFFORT_KEY = 'grokcode-reasoning-effort';
+
 const state = {
   // CLI owns session mode (/plan, Shift+Tab, YOLO) — host no longer invents craft/plan/ask/goal
   workMode: 'cli',
+  /** low|medium|high|xhigh|'' — set_model meta + --reasoning-effort */
+  reasoningEffort: loadJson(EFFORT_KEY, '') || '',
   workspace: null,
   treeData: [],
   currentFile: null,
@@ -212,6 +224,16 @@ async function init() {
   try {
     const cfg = await window.grok.getConfig();
     if (cfg.workMode) setWorkMode(cfg.workMode, { persistRemote: false });
+    if (cfg.model != null && cfg.model !== '') {
+      state.model = String(cfg.model);
+      saveJson(MODEL_KEY, state.model);
+      applyModelChip();
+    }
+    if (cfg.reasoningEffort != null) {
+      state.reasoningEffort = String(cfg.reasoningEffort || '');
+      saveJson(EFFORT_KEY, state.reasoningEffort);
+      applyEffortChip();
+    }
   } catch {
     /* ignore */
   }
@@ -3490,41 +3512,50 @@ function applyModelChip() {
   chip.dataset.model = id;
 }
 
+async function applyLiveSessionModel(opts = {}) {
+  const task = T();
+  if (!state.model || !task?.id || !window.grok?.setSessionModel) {
+    return null;
+  }
+  try {
+    const live = await window.grok.setSessionModel({
+      projectId: task.projectId || pid(),
+      taskId: task.id,
+      modelId: state.model,
+      sessionId: task.sessionId || undefined,
+      reasoningEffort: state.reasoningEffort || undefined,
+    });
+    if (live?.ok) {
+      task.acpModelId = state.model;
+      if (live.reasoningEffort != null) task.acpEffort = live.reasoningEffort;
+    }
+    return live;
+  } catch {
+    return null;
+  }
+}
+
 async function setModelPreset(id, opts = {}) {
   state.model = id == null ? '' : String(id).trim();
   saveJson(MODEL_KEY, state.model);
   applyModelChip();
   try {
-    await window.grok.setConfig({ model: state.model });
+    await window.grok.setConfig({
+      model: state.model,
+      reasoningEffort: state.reasoningEffort || '',
+    });
     const cfgInput = document.getElementById('cfgModel');
     if (cfgInput) cfgInput.value = state.model;
   } catch {
     /* ignore */
   }
-  // Live ACP session/set_model when a warm/running session exists
-  const task = T();
-  let live = null;
-  if (state.model && task?.id && window.grok?.setSessionModel) {
-    try {
-      live = await window.grok.setSessionModel({
-        projectId: task.projectId || pid(),
-        taskId: task.id,
-        modelId: state.model,
-        sessionId: task.sessionId || undefined,
-      });
-      if (live?.ok) {
-        task.acpModelId = state.model;
-      }
-    } catch {
-      live = null;
-    }
-  }
+  const live = opts.skipLive ? null : await applyLiveSessionModel();
   if (opts.toast !== false) {
     if (live?.ok) {
       toast(
         localeIsEn()
-          ? `Model (live): ${modelLabel(state.model)}`
-          : `模型（已热切换）：${modelLabel(state.model)}`,
+          ? `Model (live): ${modelLabel(state.model)}${state.reasoningEffort ? ` · ${state.reasoningEffort}` : ''}`
+          : `模型（已热切换）：${modelLabel(state.model)}${state.reasoningEffort ? ` · ${state.reasoningEffort}` : ''}`,
         'ok'
       );
     } else if (state.model && live && live.ok === false && !live.deferred) {
@@ -3546,6 +3577,73 @@ async function setModelPreset(id, opts = {}) {
   return live;
 }
 
+function effortLabel(id) {
+  const p = EFFORT_PRESETS.find((x) => x.id === (id || ''));
+  if (p) return p.label;
+  return id || (localeIsEn() ? 'effort · default' : 'effort · 默认');
+}
+
+function applyEffortChip() {
+  const chip = document.getElementById('effortChip');
+  if (!chip) return;
+  const id = state.reasoningEffort || '';
+  chip.textContent = id ? `effort · ${id}` : 'effort · default';
+  chip.title =
+    (localeIsEn() ? 'Reasoning effort: ' : '推理强度：') +
+    effortLabel(id) +
+    (localeIsEn()
+      ? ' · CLI /effort · session/set_model meta'
+      : ' · 对齐 CLI /effort · session/set_model meta');
+  chip.dataset.effort = id;
+}
+
+async function setReasoningEffort(id, opts = {}) {
+  state.reasoningEffort = String(id || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[\s-]+/g, '_');
+  if (state.reasoningEffort === 'x_high' || state.reasoningEffort === 'max') {
+    state.reasoningEffort = 'xhigh';
+  }
+  if (state.reasoningEffort === 'med') state.reasoningEffort = 'medium';
+  saveJson(EFFORT_KEY, state.reasoningEffort);
+  applyEffortChip();
+  try {
+    await window.grok.setConfig({ reasoningEffort: state.reasoningEffort });
+    const cfgInput = document.getElementById('cfgReasoningEffort');
+    if (cfgInput) cfgInput.value = state.reasoningEffort;
+  } catch {
+    /* ignore */
+  }
+  // Live: re-set_model with same model + new effort when possible
+  const live = opts.skipLive ? null : await applyLiveSessionModel();
+  if (opts.toast !== false) {
+    if (live?.ok) {
+      toast(
+        localeIsEn()
+          ? `Effort (live): ${effortLabel(state.reasoningEffort)}`
+          : `推理强度（已热切）：${effortLabel(state.reasoningEffort)}`,
+        'ok'
+      );
+    } else if (live && live.ok === false && !live.deferred) {
+      toast(
+        (localeIsEn() ? 'Effort saved; live apply failed: ' : '强度已保存；热切失败：') +
+          (live.error || ''),
+        'err'
+      );
+    } else {
+      toast(
+        localeIsEn()
+          ? `Effort: ${effortLabel(state.reasoningEffort)} (next run / warm ACP)`
+          : `推理强度：${effortLabel(state.reasoningEffort)}（下次运行 / 预热后可热切）`,
+        'ok'
+      );
+    }
+  }
+  document.getElementById('effortMenu')?.classList.add('hidden');
+  return live;
+}
+
 function bindModelChipUi() {
   const host = document.querySelector('.composer-hints');
   if (!host) return;
@@ -3557,6 +3655,15 @@ function bindModelChipUi() {
     chip.className = 'hint-chip model-chip';
     host.insertBefore(chip, host.firstChild);
   }
+  let effortChip = document.getElementById('effortChip');
+  if (!effortChip) {
+    effortChip = document.createElement('button');
+    effortChip.type = 'button';
+    effortChip.id = 'effortChip';
+    effortChip.className = 'hint-chip effort-chip';
+    if (chip.nextSibling) host.insertBefore(effortChip, chip.nextSibling);
+    else host.appendChild(effortChip);
+  }
   let menu = document.getElementById('modelMenu');
   if (!menu) {
     menu = document.createElement('div');
@@ -3565,16 +3672,28 @@ function bindModelChipUi() {
     menu.setAttribute('role', 'menu');
     document.body.appendChild(menu);
   }
+  let effortMenu = document.getElementById('effortMenu');
+  if (!effortMenu) {
+    effortMenu = document.createElement('div');
+    effortMenu.id = 'effortMenu';
+    effortMenu.className = 'model-menu hidden';
+    effortMenu.setAttribute('role', 'menu');
+    document.body.appendChild(effortMenu);
+  }
+  const placeMenu = (el, anchor) => {
+    const rect = anchor.getBoundingClientRect();
+    el.style.left = `${Math.max(8, rect.left)}px`;
+    el.style.bottom = `${window.innerHeight - rect.top + 6}px`;
+  };
   const openMenu = () => {
+    effortMenu.classList.add('hidden');
     menu.innerHTML = MODEL_PRESETS.map(
       (p) =>
         `<button type="button" class="model-menu-item${(state.model || '') === p.id ? ' active' : ''}" data-id="${esc(p.id)}" role="menuitem">${esc(p.label)}</button>`
     ).join('');
     // custom
     menu.innerHTML += `<button type="button" class="model-menu-item" data-act="custom" role="menuitem">${localeIsEn() ? 'Custom…' : '自定义…'}</button>`;
-    const rect = chip.getBoundingClientRect();
-    menu.style.left = `${Math.max(8, rect.left)}px`;
-    menu.style.bottom = `${window.innerHeight - rect.top + 6}px`;
+    placeMenu(menu, chip);
     menu.classList.remove('hidden');
     menu.querySelectorAll('.model-menu-item').forEach((btn) => {
       btn.onclick = async () => {
@@ -3589,21 +3708,48 @@ function bindModelChipUi() {
       };
     });
   };
+  const openEffortMenu = () => {
+    menu.classList.add('hidden');
+    effortMenu.innerHTML = EFFORT_PRESETS.map(
+      (p) =>
+        `<button type="button" class="model-menu-item${(state.reasoningEffort || '') === p.id ? ' active' : ''}" data-id="${esc(p.id)}" role="menuitem">${esc(p.label)}</button>`
+    ).join('');
+    placeMenu(effortMenu, effortChip);
+    effortMenu.classList.remove('hidden');
+    effortMenu.querySelectorAll('.model-menu-item').forEach((btn) => {
+      btn.onclick = async () => {
+        await setReasoningEffort(btn.dataset.id || '');
+      };
+    });
+  };
   chip.onclick = (e) => {
     e.stopPropagation();
     if (menu.classList.contains('hidden')) openMenu();
     else menu.classList.add('hidden');
   };
+  effortChip.onclick = (e) => {
+    e.stopPropagation();
+    if (effortMenu.classList.contains('hidden')) openEffortMenu();
+    else effortMenu.classList.add('hidden');
+  };
   document.addEventListener('click', (e) => {
     if (!menu.contains(e.target) && e.target !== chip) menu.classList.add('hidden');
+    if (!effortMenu.contains(e.target) && e.target !== effortChip) {
+      effortMenu.classList.add('hidden');
+    }
   });
   // hydrate from config later in init; local fallback
   const local = loadJson(MODEL_KEY, null);
   if (typeof local === 'string') state.model = local;
+  const localEff = loadJson(EFFORT_KEY, null);
+  if (typeof localEff === 'string') state.reasoningEffort = localEff;
   applyModelChip();
+  applyEffortChip();
 }
 window.setModelPreset = setModelPreset;
+window.setReasoningEffort = setReasoningEffort;
 window.getComposerModel = () => state.model || '';
+window.getComposerEffort = () => state.reasoningEffort || '';
 window.navigateDiffFile = navigateDiffFile;
 window.markDiffReviewed = markDiffReviewed;
 
@@ -3649,6 +3795,18 @@ const SLASH_COMMANDS = () => [
       const presets = MODEL_PRESETS.map((p) => p.id);
       const i = presets.indexOf(state.model || '');
       await setModelPreset(presets[(i + 1) % presets.length]);
+    },
+  },
+  {
+    id: 'effort',
+    label: '/effort',
+    desc: localeIsEn()
+      ? 'Cycle reasoning effort (low→xhigh, CLI /effort)'
+      : '循环推理强度（low→xhigh，对齐 CLI /effort）',
+    run: async () => {
+      const levels = EFFORT_PRESETS.map((p) => p.id);
+      const i = levels.indexOf(state.reasoningEffort || '');
+      await setReasoningEffort(levels[(i < 0 ? 0 : i + 1) % levels.length]);
     },
   },
   {
@@ -9156,11 +9314,20 @@ function bindAgentEvents() {
           applyModelChip();
         }
       }
+      if (d.reasoningEffort != null && d.reasoningEffort !== '') {
+        task.acpEffort = d.reasoningEffort;
+        if (isActiveTask(task)) {
+          state.reasoningEffort = String(d.reasoningEffort);
+          saveJson(EFFORT_KEY, state.reasoningEffort);
+          applyEffortChip();
+        }
+      }
       if (isActiveTask(task) && d.modelId) {
-        setLivePhase(`模型 · ${d.modelId}`, task.title);
+        const eff = d.reasoningEffort ? ` · ${d.reasoningEffort}` : '';
+        setLivePhase(`模型 · ${d.modelId}${eff}`, task.title);
         pushLiveEvent({
           kind: 'status',
-          title: `CLI 模型 · ${d.modelId}`,
+          title: `CLI 模型 · ${d.modelId}${eff}`,
           sub:
             d.source === 'set_model'
               ? 'session/set_model'
@@ -11105,6 +11272,8 @@ async function refreshConfigUi() {
     ? `已保存 ${cfg.apiKey}（留空不修改）`
     : 'xai-… 或留空，使用 grok login';
   $('#cfgModel').value = cfg.model || '';
+  const cfgEff = document.getElementById('cfgReasoningEffort');
+  if (cfgEff) cfgEff.value = cfg.reasoningEffort || '';
   $('#cfgGrokPath').value = cfg.grokPath || '';
   $('#cfgRounds').value = cfg.maxTurns || 30;
   $('#cfgYolo').checked = cfg.alwaysApprove !== false;
@@ -11119,6 +11288,9 @@ async function refreshConfigUi() {
   state.model = cfg.model || '';
   saveJson(MODEL_KEY, state.model);
   applyModelChip();
+  state.reasoningEffort = cfg.reasoningEffort || '';
+  saveJson(EFFORT_KEY, state.reasoningEffort);
+  applyEffortChip();
 
   window.GrokSettingsExtra?.fillFromConfig?.(cfg);
 
@@ -11131,6 +11303,9 @@ async function refreshConfigUi() {
 async function saveSettings() {
   const partial = {
     model: $('#cfgModel').value.trim(),
+    reasoningEffort: (
+      document.getElementById('cfgReasoningEffort')?.value || ''
+    ).trim(),
     grokPath: $('#cfgGrokPath').value.trim(),
     maxTurns: Number($('#cfgRounds').value) || 30,
     alwaysApprove: $('#cfgYolo').checked,
@@ -11144,6 +11319,15 @@ async function saveSettings() {
   state.model = partial.model || '';
   saveJson(MODEL_KEY, state.model);
   applyModelChip();
+  state.reasoningEffort = partial.reasoningEffort || '';
+  saveJson(EFFORT_KEY, state.reasoningEffort);
+  applyEffortChip();
+  // Live set_model with effort when warm
+  try {
+    await applyLiveSessionModel();
+  } catch {
+    /* ignore */
+  }
   window.refreshRulesChip?.();
   closeSettings();
   await refreshCliStatus();

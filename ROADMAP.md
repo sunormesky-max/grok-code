@@ -82,12 +82,12 @@ Living plan for the GrokCode open-source ecosystem. Order may change based on co
 - [x] Doctor optional timed `grok -p` probe (v1.16.0)
 - [x] Prefer tool mid-flight partial text when upstream emits InProgress (v1.16.0 host side)
 - [x] ACP `session/set_model` from host model chip (v1.17.0)
+- [x] Reasoning effort picker via set_model meta + /effort (v1.18.0)
 
 ## Next (host ↔ open-source grok-build)
 
 - [ ] Upstream still needs normal-tool InProgress emit for long tools (see patches/grok-build)
 - [ ] Surface model-list / available models from ACP if exposed
-- [ ] Reasoning effort picker wired through set_model meta
 
 ## Now (UI / experience)
 

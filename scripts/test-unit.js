@@ -732,6 +732,8 @@ function testSessionModeNormalize() {
   const {
     normalizeSessionModeId,
     SESSION_MODE_CYCLE,
+    normalizeReasoningEffort,
+    REASONING_EFFORT_LEVELS,
   } = require(path.join(root, 'electron', 'acp-client.js'));
   assert.equal(normalizeSessionModeId('plan'), 'plan');
   assert.equal(normalizeSessionModeId('PLAN'), 'plan');
@@ -740,6 +742,12 @@ function testSessionModeNormalize() {
   assert.equal(normalizeSessionModeId('ask'), 'ask');
   assert.equal(normalizeSessionModeId(''), 'default');
   assert.deepEqual([...SESSION_MODE_CYCLE], ['default', 'plan', 'ask']);
+  assert.equal(normalizeReasoningEffort(''), '');
+  assert.equal(normalizeReasoningEffort('HIGH'), 'high');
+  assert.equal(normalizeReasoningEffort('x-high'), 'xhigh');
+  assert.equal(normalizeReasoningEffort('max'), 'xhigh');
+  assert.equal(normalizeReasoningEffort('med'), 'medium');
+  assert.ok(REASONING_EFFORT_LEVELS.includes('xhigh'));
 
   // setMode request shape (mock stdin)
   const { AcpClient } = require(path.join(root, 'electron', 'acp-client.js'));

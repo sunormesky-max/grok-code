@@ -2184,6 +2184,18 @@ button.pill:hover {
   border-color: rgba(167, 139, 250, 0.6) !important;
   background: rgba(167, 139, 250, 0.1);
 }
+.effort-chip {
+  border-color: rgba(56, 189, 248, 0.35) !important;
+  color: #7dd3fc !important;
+  cursor: pointer;
+  max-width: 130px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.effort-chip:hover {
+  border-color: rgba(56, 189, 248, 0.6) !important;
+  background: rgba(14, 165, 233, 0.1);
+}
 .model-menu {
   position: fixed;
   z-index: 13000;

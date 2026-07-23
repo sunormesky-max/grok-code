@@ -70,6 +70,8 @@ const store = new Store({
   defaults: {
     apiKey: process.env.XAI_API_KEY || '',
     model: '',
+    /** low | medium | high | xhigh | '' (CLI default) — session/set_model meta + --reasoning-effort */
+    reasoningEffort: '',
     grokPath: '',
     /** @type {string[]} 最近打开的项目路径 */
     recentProjects: [],
@@ -144,6 +146,7 @@ function getConfig() {
   return {
     apiKey: store.get('apiKey'),
     model: store.get('model'),
+    reasoningEffort: store.get('reasoningEffort') || '',
     grokPath: store.get('grokPath'),
     alwaysApprove: store.get('alwaysApprove'),
     maxTurns: store.get('maxTurns'),
@@ -531,6 +534,7 @@ ipcMain.handle('config:get', () => {
     apiKey: store.get('apiKey') ? '••••••••' + String(store.get('apiKey')).slice(-4) : '',
     hasApiKey: Boolean(store.get('apiKey') || process.env.XAI_API_KEY),
     model: store.get('model') || '',
+    reasoningEffort: store.get('reasoningEffort') || '',
     grokPath: store.get('grokPath') || '',
     alwaysApprove: store.get('alwaysApprove') !== false,
     maxTurns: store.get('maxTurns') || 30,
@@ -563,6 +567,13 @@ ipcMain.handle('config:set', (_e, partial) => {
     store.set('apiKey', String(partial.apiKey).trim());
   }
   if (partial.model !== undefined) store.set('model', String(partial.model).trim());
+  if (partial.reasoningEffort !== undefined) {
+    const { normalizeReasoningEffort } = require('./acp-client');
+    store.set(
+      'reasoningEffort',
+      normalizeReasoningEffort(partial.reasoningEffort)
+    );
+  }
   if (partial.grokPath !== undefined) store.set('grokPath', String(partial.grokPath).trim());
   if (partial.alwaysApprove !== undefined) store.set('alwaysApprove', Boolean(partial.alwaysApprove));
   if (partial.maxTurns !== undefined) store.set('maxTurns', Number(partial.maxTurns) || 30);
@@ -1461,6 +1472,7 @@ ipcMain.handle('profile:export', async (e, payload = {}) => {
     name: payload.name || p.name,
     rules: cfg.rules,
     model: cfg.model,
+    reasoningEffort: cfg.reasoningEffort || '',
     maxTurns: cfg.maxTurns,
     alwaysApprove: cfg.alwaysApprove,
     contextMode: cfg.contextMode,
@@ -1494,6 +1506,10 @@ ipcMain.handle('profile:import', async (e) => {
   const c = result.config || {};
   if (c.rules !== undefined) store.set('rules', c.rules);
   if (c.model !== undefined) store.set('model', c.model);
+  if (c.reasoningEffort !== undefined) {
+    const { normalizeReasoningEffort } = require('./acp-client');
+    store.set('reasoningEffort', normalizeReasoningEffort(c.reasoningEffort));
+  }
   if (c.maxTurns !== undefined) store.set('maxTurns', c.maxTurns);
   if (c.alwaysApprove !== undefined) store.set('alwaysApprove', c.alwaysApprove);
   if (c.contextMode !== undefined) store.set('contextMode', c.contextMode);

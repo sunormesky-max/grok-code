@@ -68,6 +68,7 @@ function exportProfile(opts = {}) {
     config: {
       rules: opts.rules || '',
       model: opts.model || '',
+      reasoningEffort: opts.reasoningEffort || '',
       maxTurns: opts.maxTurns || 30,
       alwaysApprove: opts.alwaysApprove !== false,
       contextMode: opts.contextMode || 'heuristic',

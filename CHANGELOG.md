@@ -11,6 +11,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 - See [ROADMAP.md](ROADMAP.md)
 
+## [1.18.0] — 2026-07-23
+
+### Host ↔ open-source Grok Build — reasoning effort (`/effort`)
+
+CLI sets reasoning effort via `/effort` and `session/set_model` meta
+(`reasoning_effort`). GrokCode now mirrors that path.
+
+- **Config** `reasoningEffort` (`low` | `medium` | `high` | `xhigh` | empty)
+- **Spawn** already passed `--reasoning-effort`; now driven from settings
+- **Live** model chip + effort chip re-call `session/set_model` with effort meta
+- **UI** composer `effort · …` chip, settings field, slash `/effort` cycle
+- **Normalize** aliases (`x-high`/`max` → `xhigh`, `med` → `medium`)
+- Unit tests for effort normalize
+
 ## [1.17.0] — 2026-07-23
 
 ### Host ↔ open-source Grok Build — `session/set_model`
