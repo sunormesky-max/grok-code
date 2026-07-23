@@ -1,6 +1,6 @@
 {
   "name": "grok-code",
-  "version": "1.15.0",
+  "version": "1.16.0",
   "description": "Desktop coding agent powered by local Grok Build CLI — multi-project, multi-task, context inheritance, MCP & Skills",
   "main": "electron/main.js",
   "productName": "GrokCode",

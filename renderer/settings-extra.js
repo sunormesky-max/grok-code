@@ -77,19 +77,25 @@
     return partial;
   }
 
-  async function runDoctorUi() {
+  async function runDoctorUi(opts = {}) {
     const host = $('#doctorResults');
     if (!host) return;
-    host.innerHTML = '<div class="muted pad">体检中…</div>';
+    const probeEl = $('#cfgDoctorProbe');
+    const probePrompt =
+      opts.probePrompt === true ||
+      (probeEl ? Boolean(probeEl.checked) : false);
+    host.innerHTML = probePrompt
+      ? '<div class="muted pad">体检中…（含 grok -p 探测，可能需数十秒）</div>'
+      : '<div class="muted pad">体检中…</div>';
     try {
-      const report = await window.grok.doctorRun();
+      const report = await window.grok.doctorRun({ probePrompt });
       host.innerHTML = `
         <div class="doctor-summary ${report.ready ? 'ok' : 'bad'}">${esc(report.summary)}</div>
         ${(report.checks || [])
           .map(
             (c) => `
           <div class="doctor-item ${c.level === 'ok' ? 'ok' : c.level === 'warn' ? 'warn' : 'bad'}">
-            <div class="di-head"><strong>${esc(c.name)}</strong> · ${esc(c.level)}</div>
+            <div class="di-head"><strong>${esc(c.name)}</strong> · ${esc(c.level)}${c.skipped ? ' · skip' : ''}</div>
             <div class="di-detail">${esc(c.detail || '').replace(/\n/g, '<br>')}</div>
             ${c.fix ? `<div class="di-fix">→ ${esc(c.fix)}</div>` : ''}
           </div>`

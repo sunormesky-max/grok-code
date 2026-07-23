@@ -725,8 +725,10 @@ ipcMain.handle('paste:saveImage', (_e, payload = {}) => {
 ipcMain.handle('cli:probe', () => probeGrok(store.get('grokPath')));
 
 // ── 体检 / 诊断 / 首启 ──────────────────────────────────
-ipcMain.handle('doctor:run', () => {
-  return runDoctor(getConfig());
+ipcMain.handle('doctor:run', (_e, payload = {}) => {
+  return runDoctor(getConfig(), {
+    probePrompt: Boolean(payload?.probePrompt),
+  });
 });
 
 ipcMain.handle('doctor:export', async (e) => {
@@ -1225,6 +1227,19 @@ ipcMain.handle('agent:user_question_reply', (_e, payload = {}) => {
     return { ok: false, error: 'project not open' };
   }
   return p.agent.replyUserQuestion(taskId, requestId, result || { outcome: 'cancelled' });
+});
+
+/** ACP session/set_mode — default | plan | ask (open-source SessionMode) */
+ipcMain.handle('agent:set_mode', async (_e, payload = {}) => {
+  const { projectId, taskId, modeId, sessionId } = payload || {};
+  if (!projectId || !taskId || !modeId) {
+    return { ok: false, error: 'projectId, taskId, modeId required' };
+  }
+  const p = projects.get(projectId);
+  if (!p?.agent?.setSessionMode) {
+    return { ok: false, error: 'project not open' };
+  }
+  return p.agent.setSessionMode(taskId, modeId, sessionId);
 });
 
 ipcMain.handle('agent:stop', (_e, payload = {}) => {

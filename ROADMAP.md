@@ -78,12 +78,14 @@ Living plan for the GrokCode open-source ecosystem. Order may change based on co
 - [x] agentTransport setting + doctor Build-gate / auth.json (v1.13.0)
 - [x] Interactive `x.ai/exit_plan_mode` plan approval UI (v1.14.0)
 - [x] Interactive `x.ai/ask_user_question` questionnaire UI (v1.15.0)
+- [x] ACP `session/set_mode` (default/plan/ask) from host chip + slash (v1.16.0)
+- [x] Doctor optional timed `grok -p` probe (v1.16.0)
+- [x] Prefer tool mid-flight partial text when upstream emits InProgress (v1.16.0 host side)
 
 ## Next (host ↔ open-source grok-build)
 
-- [ ] Optional `session/set_mode` if/when ACP exposes it for Plan/Normal from host
-- [ ] Prefer tool mid-flight when upstream emits InProgress (see patches/grok-build)
-- [ ] Deeper doctor: optional timed `grok -p` probe (slow — opt-in)
+- [ ] Upstream still needs normal-tool InProgress emit for long tools (see patches/grok-build)
+- [ ] Optional `session/set_model` from host model chip (ACP)
 
 ## Now (UI / experience)
 

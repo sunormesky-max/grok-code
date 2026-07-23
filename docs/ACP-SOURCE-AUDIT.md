@@ -188,6 +188,8 @@ We advertise **no** client fs/terminal capabilities (correct for “agent runs t
 | P2 doctor Build gate + auth.json | Done (1.13.0) |
 | P1 `x.ai/exit_plan_mode` interactive UI | Done (1.14.0 park + approve/revise/quit) |
 | P1 `x.ai/ask_user_question` interactive UI | Done (1.15.0 park + questionnaire ExtResponse) |
+| P1 `session/set_mode` host cycle | Done (1.16.0 default/plan/ask) |
+| P2 doctor `grok -p` probe | Done (1.16.0 opt-in) |
 | Upstream `/feedback` | `patches/grok-build/FEEDBACK.md` |
 
 ---

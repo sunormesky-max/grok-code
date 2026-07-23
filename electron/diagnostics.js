@@ -277,9 +277,86 @@ function checkEditors() {
 }
 
 /**
- * @param {{ grokPath?: string, apiKey?: string }} cfg
+ * Opt-in live probe: `grok -p` one-shot (slow — network + model).
+ * @param {string|null} bin
+ * @param {{ run?: boolean }} opts  run=false → skipped placeholder
  */
-function runDoctor(cfg = {}) {
+function checkGrokPromptProbe(bin, opts = {}) {
+  if (!opts.run) {
+    return {
+      id: 'prompt_probe',
+      name: 'CLI -p 探测',
+      ok: true,
+      level: 'ok',
+      detail:
+        '未运行（慢项）。需要时设 GROKCODE_DOCTOR_PROBE=1 或体检时勾选「探测 -p」',
+      fix: null,
+      skipped: true,
+    };
+  }
+  if (!bin) {
+    return {
+      id: 'prompt_probe',
+      name: 'CLI -p 探测',
+      ok: false,
+      level: 'bad',
+      detail: '无 CLI 二进制，跳过 -p',
+      fix: '先修好 Grok CLI 路径',
+    };
+  }
+  const ms = Math.min(
+    120_000,
+    Math.max(8_000, Number(process.env.GROKCODE_DOCTOR_PROBE_MS) || 45_000)
+  );
+  const t0 = Date.now();
+  // Minimal headless-style prompt — same family as desktop headless fallback
+  const r = safeExec(
+    bin,
+    ['-p', 'Reply with exactly: pong', '--output-format', 'text'],
+    { timeout: ms }
+  );
+  const elapsed = Date.now() - t0;
+  if (r.ok && /pong/i.test(r.out || '')) {
+    return {
+      id: 'prompt_probe',
+      name: 'CLI -p 探测',
+      ok: true,
+      level: 'ok',
+      detail: `grok -p 成功 · ${elapsed}ms · 输出含 pong`,
+      elapsedMs: elapsed,
+      fix: null,
+    };
+  }
+  if (r.ok && (r.out || '').trim()) {
+    return {
+      id: 'prompt_probe',
+      name: 'CLI -p 探测',
+      ok: true,
+      level: 'warn',
+      detail: `grok -p 有输出但未见 pong · ${elapsed}ms · ${(r.out || '').slice(0, 120)}`,
+      elapsedMs: elapsed,
+      fix: '检查模型/网络；agent stdio 仍可能 403',
+    };
+  }
+  return {
+    id: 'prompt_probe',
+    name: 'CLI -p 探测',
+    ok: false,
+    level: 'bad',
+    detail: `grok -p 失败 · ${elapsed}ms · ${r.error || r.stderr || 'no output'}`.slice(
+      0,
+      400
+    ),
+    elapsedMs: elapsed,
+    fix: '终端试 grok login 后 grok -p "hi"；对照 Build 门控',
+  };
+}
+
+/**
+ * @param {{ grokPath?: string, apiKey?: string }} cfg
+ * @param {{ probePrompt?: boolean }} [opts]
+ */
+function runDoctor(cfg = {}, opts = {}) {
   const probe = probeGrok(cfg.grokPath);
   const bin = probe.binary || resolveGrokBinary(cfg.grokPath);
   const checks = [];
@@ -302,6 +379,11 @@ function runDoctor(cfg = {}) {
   checks.push(checkAuth(bin, cfg.apiKey));
   checks.push(checkGrokAuthFile());
   checks.push(checkBuildGateLog());
+  const wantProbe =
+    opts.probePrompt === true ||
+    process.env.GROKCODE_DOCTOR_PROBE === '1' ||
+    process.env.GROKCODE_DOCTOR_PROBE === 'true';
+  checks.push(checkGrokPromptProbe(bin, { run: wantProbe }));
   checks.push(checkSessionsDir());
   checks.push(checkMcp());
   checks.push(checkEditors());

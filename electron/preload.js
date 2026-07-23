@@ -70,6 +70,8 @@ contextBridge.exposeInMainWorld('grok', {
   replyPlanApproval: (payload) => ipcRenderer.invoke('agent:plan_reply', payload || {}),
   /** Reply to x.ai/ask_user_question (accepted | cancelled | chat_about_this | skip_interview) */
   replyUserQuestion: (payload) => ipcRenderer.invoke('agent:user_question_reply', payload || {}),
+  /** ACP session/set_mode — modeId: default | plan | ask */
+  setSessionMode: (payload) => ipcRenderer.invoke('agent:set_mode', payload || {}),
 
   openExternal: (url) => ipcRenderer.invoke('shell:openExternal', url),
   windowMinimize: () => ipcRenderer.invoke('window:minimize'),
@@ -85,8 +87,8 @@ contextBridge.exposeInMainWorld('grok', {
   persistRoot: () => ipcRenderer.invoke('persist:root'),
   compressContext: (payload) => ipcRenderer.invoke('context:compress', payload),
 
-  // 体检 / 诊断
-  doctorRun: () => ipcRenderer.invoke('doctor:run'),
+  // 体检 / 诊断（probePrompt: true → 慢项 grok -p）
+  doctorRun: (payload) => ipcRenderer.invoke('doctor:run', payload || {}),
   doctorExport: () => ipcRenderer.invoke('doctor:export'),
 
   // 外部编辑器

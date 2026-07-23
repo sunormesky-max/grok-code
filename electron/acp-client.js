@@ -540,6 +540,24 @@ class AcpClient {
     }
   }
 
+  /**
+   * ACP session/set_mode — open-source SessionMode wire ids: default | plan | ask.
+   * Affects next turn start mode (and plan tracker when mode=plan).
+   * @param {string} sessionId
+   * @param {string} modeId
+   */
+  async setMode(sessionId, modeId) {
+    const sid = String(sessionId || '').trim();
+    const mid = normalizeSessionModeId(modeId);
+    if (!sid) throw new Error('sessionId required for session/set_mode');
+    // Wire: SetSessionModeRequest { sessionId, modeId }
+    return this.request(
+      'session/set_mode',
+      { sessionId: sid, modeId: mid },
+      30_000
+    );
+  }
+
   kill() {
     const child = this.child;
     this.child = null;
@@ -743,6 +761,34 @@ function resolveToolCallDelta(update, state) {
 }
 
 /**
+ * Canonical CLI SessionMode ids (xai-grok-tools SessionMode).
+ * Unknown → default (upstream from_id behavior).
+ */
+function normalizeSessionModeId(modeId) {
+  const raw = String(modeId || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[\s-]+/g, '_');
+  if (raw === 'plan' || raw === 'planning') return 'plan';
+  if (raw === 'ask' || raw === 'ask_mode' || raw === 'readonly') return 'ask';
+  if (
+    raw === 'default' ||
+    raw === 'agent' ||
+    raw === 'normal' ||
+    raw === 'craft' ||
+    raw === ''
+  ) {
+    return 'default';
+  }
+  // Unknown custom agent names still pass through (upstream falls back to Default
+  // for unknown plan/ask bits but may resolve agent definitions by name).
+  return raw || 'default';
+}
+
+/** Ordered cycle matching pager Shift+Tab (session modes only; YOLO is separate). */
+const SESSION_MODE_CYCLE = Object.freeze(['default', 'plan', 'ask']);
+
+/**
  * Normalize ask_user_question payload (camelCase + snake_case).
  * Upstream Question: { question, options[{label,description,preview?}], multiSelect? }
  */
@@ -841,4 +887,6 @@ module.exports = {
   buildInitializeParams,
   resolveToolCallDelta,
   normalizeAskUserQuestions,
+  normalizeSessionModeId,
+  SESSION_MODE_CYCLE,
 };

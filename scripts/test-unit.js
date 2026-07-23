@@ -313,6 +313,7 @@ function testAgentExports() {
   assert.equal(typeof agent.listTrackedPids, 'function');
   assert.equal(typeof agent.replyPlanApproval, 'function');
   assert.equal(typeof agent.replyUserQuestion, 'function');
+  assert.equal(typeof agent.setSessionMode, 'function');
   assert.deepEqual(agent.listTrackedPids(), []);
   agent.reapTracked();
   const noClient = agent.replyPlanApproval('missing-task', 1, { outcome: 'approved' });
@@ -334,7 +335,11 @@ function testAgentExports() {
     ),
     'auth required mapped'
   );
-  console.log('ok  agent stop/reap exports');
+  return Promise.resolve(agent.setSessionMode('missing-task', 'plan')).then((r) => {
+    assert.equal(r.ok, false);
+    assert.ok(/no active ACP|session/i.test(String(r.error || '')));
+    console.log('ok  agent stop/reap exports');
+  });
 }
 
 function testAcpPermissionPicker() {
@@ -716,6 +721,70 @@ function testAskUserQuestion() {
   console.log('ok  ask_user_question park + ExtResponse');
 }
 
+function testSessionModeNormalize() {
+  const {
+    normalizeSessionModeId,
+    SESSION_MODE_CYCLE,
+  } = require(path.join(root, 'electron', 'acp-client.js'));
+  assert.equal(normalizeSessionModeId('plan'), 'plan');
+  assert.equal(normalizeSessionModeId('PLAN'), 'plan');
+  assert.equal(normalizeSessionModeId('agent'), 'default');
+  assert.equal(normalizeSessionModeId('normal'), 'default');
+  assert.equal(normalizeSessionModeId('ask'), 'ask');
+  assert.equal(normalizeSessionModeId(''), 'default');
+  assert.deepEqual([...SESSION_MODE_CYCLE], ['default', 'plan', 'ask']);
+
+  // setMode request shape (mock stdin)
+  const { AcpClient } = require(path.join(root, 'electron', 'acp-client.js'));
+  const writes = [];
+  const client = new AcpClient({ bin: 'echo' });
+  client.child = {
+    stdin: {
+      writable: true,
+      write(s) {
+        writes.push(String(s));
+        return true;
+      },
+    },
+  };
+  client.alive = true;
+  // Fire request without waiting for response (will timeout in real use)
+  const p = client.setMode('sess-xyz', 'plan');
+  assert.ok(writes.length === 1);
+  const msg = JSON.parse(writes[0].trim());
+  assert.equal(msg.method, 'session/set_mode');
+  assert.equal(msg.params.sessionId, 'sess-xyz');
+  assert.equal(msg.params.modeId, 'plan');
+  // Resolve pending so promise doesn't hang the process
+  const pend = client.pending.get(msg.id);
+  if (pend) {
+    clearTimeout(pend.timer);
+    client.pending.delete(msg.id);
+    pend.resolve({});
+  }
+  return p.then(() => {
+    console.log('ok  session/set_mode normalize + request');
+  });
+}
+
+function testDoctorPromptProbeSkipped() {
+  const { runDoctor } = require(path.join(root, 'electron', 'diagnostics.js'));
+  // Without env, probe is skipped (fast)
+  const prev = process.env.GROKCODE_DOCTOR_PROBE;
+  delete process.env.GROKCODE_DOCTOR_PROBE;
+  try {
+    const report = runDoctor({}, { probePrompt: false });
+    assert.ok(Array.isArray(report.checks));
+    const pp = report.checks.find((c) => c.id === 'prompt_probe');
+    assert.ok(pp, 'prompt_probe check present');
+    assert.equal(pp.skipped, true);
+    assert.ok(/未运行|skip/i.test(pp.detail));
+  } finally {
+    if (prev !== undefined) process.env.GROKCODE_DOCTOR_PROBE = prev;
+  }
+  console.log('ok  doctor -p probe skipped by default');
+}
+
 function testPickChunkTextMultimodal() {
   const { pickChunkText, pickToolInfo, slimToolArgs } = require(path.join(
     root,
@@ -783,6 +852,7 @@ function testIpcChannelContract() {
   assert.ok(preloadSrc.includes('isAllowedRendererChannel'), 'preload gates on isAllowedRendererChannel');
   assert.ok(preloadSrc.includes('replyPlanApproval'), 'preload exposes replyPlanApproval');
   assert.ok(preloadSrc.includes('replyUserQuestion'), 'preload exposes replyUserQuestion');
+  assert.ok(preloadSrc.includes('setSessionMode'), 'preload exposes setSessionMode');
 
   const ok = assertAgentPayloadShape('agent:text', { taskId: 't1', text: 'hi' });
   assert.ok(ok.ok, 'text+taskId valid');
@@ -1008,18 +1078,21 @@ try {
   testOutlineExtract();
   testDiffHunks();
   testToolsSearchExports();
-  testAgentExports();
   testAcpPermissionPicker();
   testResolveToolCallDelta();
   testAcpInitializeIdentity();
   testExitPlanModeApproval();
   testAskUserQuestion();
+  testDoctorPromptProbeSkipped();
   testPickChunkTextMultimodal();
   testIpcChannelContract();
   testAgentStreamNdjsonFixture();
   testAgentStreamAcpFixture();
   testStreamFairness();
-  Promise.resolve(testShellSafe())
+  Promise.resolve()
+    .then(() => testAgentExports())
+    .then(() => testSessionModeNormalize())
+    .then(() => testShellSafe())
     .then(() => {
       console.log('\nAll unit tests passed');
     })

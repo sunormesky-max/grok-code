@@ -650,6 +650,10 @@
             <button type="button" class="btn small ghost" id="btnExportDiag" data-i18n="cfg.doctor.export">导出诊断包</button>
             <button type="button" class="btn small ghost" id="btnShowOnboarding" data-i18n="cfg.doctor.onb">首启向导</button>
           </div>
+          <label class="diag-probe-opt muted" style="display:flex;align-items:center;gap:8px;margin:8px 0 4px;font-size:12px;cursor:pointer">
+            <input type="checkbox" id="cfgDoctorProbe" />
+            <span>同时探测 <code>grok -p</code>（慢 · 需网络/登录；等同 <code>GROKCODE_DOCTOR_PROBE=1</code>）</span>
+          </label>
           <div id="doctorResults" class="doctor-results"></div>
         </div>
 

@@ -11,6 +11,7 @@ const {
   slimToolArgs,
   safeIpc,
   resolveToolCallDelta,
+  normalizeSessionModeId,
 } = require('./acp-client');
 const {
   isKnownHeadlessType,
@@ -884,15 +885,25 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
                   status,
                 });
               } else {
+                const partial =
+                  pickToolResultText(update) ||
+                  pickChunkText(update.content || update.output || update) ||
+                  '';
                 emitT('agent:tool_start', {
                   id: info.id,
                   name: info.name,
                   args: slimToolArgs(info.args),
                   status,
                   progress: true,
+                  result: partial ? String(partial).slice(0, 4000) : undefined,
                 });
               }
-              setPhase('tool', `${info.name}…`);
+              setPhase(
+                'tool',
+                status === 'in_progress'
+                  ? `${info.name} · 执行中…`
+                  : `${info.name}…`
+              );
             } else if (
               !openTools.has(info.id) &&
               status !== 'completed' &&
@@ -2200,6 +2211,78 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
   }
 
   /**
+   * Resolve ACP client + sessionId for a task (running turn or warm pool).
+   */
+  function resolveAcpSession(taskId) {
+    const tid = String(taskId);
+    const child = children.get(tid);
+    if (child?.__acpClient) {
+      return {
+        client: child.__acpClient,
+        sessionId: child.__acpSessionId || null,
+        source: 'running',
+      };
+    }
+    const pooled = acpPool.get(tid);
+    if (pooled?.client) {
+      return {
+        client: pooled.client,
+        sessionId: pooled.sessionId || null,
+        source: 'pool',
+      };
+    }
+    return { client: null, sessionId: null, source: null };
+  }
+
+  /**
+   * ACP session/set_mode — host mirrors CLI Shift+Tab plan/default/ask.
+   * @param {string} taskId
+   * @param {string} modeId default | plan | ask
+   * @param {string} [sessionId] override if known from renderer
+   */
+  async function setSessionMode(taskId, modeId, sessionId) {
+    const mid = normalizeSessionModeId(modeId);
+    const { client, sessionId: sid0, source } = resolveAcpSession(taskId);
+    const sid = String(sessionId || sid0 || '').trim();
+    if (!client || typeof client.setMode !== 'function') {
+      return {
+        ok: false,
+        error:
+          'no active ACP session — run a prompt first (warm pool) or use CLI /plan',
+        modeId: mid,
+      };
+    }
+    if (!sid) {
+      return { ok: false, error: 'sessionId unknown', modeId: mid };
+    }
+    try {
+      await client.setMode(sid, mid);
+      streamDebug(
+        `task=${taskId} session/set_mode mode=${mid} sid=${sid} via=${source}`,
+        { force: true }
+      );
+      // Optimistic host mirror; agent also emits current_mode_update
+      try {
+        emit(
+          'agent:mode',
+          safeIpc({
+            taskId: String(taskId),
+            modeId: mid,
+            source: 'set_mode',
+          })
+        );
+      } catch {
+        /* ignore */
+      }
+      return { ok: true, modeId: mid, sessionId: sid };
+    } catch (err) {
+      const msg = err?.message || String(err);
+      streamDebug(`task=${taskId} session/set_mode FAIL ${msg}`, { force: true });
+      return { ok: false, error: msg, modeId: mid };
+    }
+  }
+
+  /**
    * Host answered x.ai/exit_plan_mode (approve | abandoned | cancelled + feedback).
    */
   function replyPlanApproval(taskId, requestId, body = {}) {
@@ -2258,6 +2341,7 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
     reapTracked,
     replyPlanApproval,
     replyUserQuestion,
+    setSessionMode,
   };
 }
 

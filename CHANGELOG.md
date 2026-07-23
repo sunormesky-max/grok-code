@@ -11,6 +11,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 - See [ROADMAP.md](ROADMAP.md)
 
+## [1.16.0] — 2026-07-23
+
+### Host ↔ open-source Grok Build — `session/set_mode` + doctor probe
+
+CLI owns session modes (`default` | `plan` | `ask`). GrokCode now calls the same
+ACP method the pager uses on Shift+Tab / `/plan`, instead of inventing host modes.
+
+- **`session/set_mode`**: IPC `agent:set_mode` / `setSessionMode`; warm-pool aware
+- **UI**: status chip cycles default → plan → ask; slash `/plan` `/agent` `/ask` `/cli`
+- **Doctor**: optional timed `grok -p` probe (checkbox or `GROKCODE_DOCTOR_PROBE=1`)
+- **Tools**: mid-flight `in_progress` updates surface partial result text when present
+- Unit tests for mode normalize + set_mode wire shape + doctor skip path
+
 ## [1.15.0] — 2026-07-23
 
 ### Host ↔ open-source Grok Build — `x.ai/ask_user_question`

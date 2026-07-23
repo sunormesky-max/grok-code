@@ -3205,17 +3205,13 @@ function setWorkMode(mode, opts = {}) {
     }
   }
   if (sb) {
-    sb.textContent = 'CLI';
-    sb.dataset.mode = 'cli';
-    sb.title =
-      (loc === 'en' ? 'Session mode is owned by Grok CLI' : '会话模式由本机 Grok CLI 控制') +
-      ' · /plan · Shift+Tab · YOLO';
+    paintCliModeChip(T()?.acpModeId || 'default');
   }
   if (opts.toast) {
     toast(
       loc === 'en'
-        ? 'Mode: CLI (use /plan in CLI; host no longer fakes Craft/Plan)'
-        : '模式：CLI（请用 CLI 的 /plan 等；宿主不再伪造 Craft/Plan）',
+        ? 'Host docks CLI modes · click status chip or /plan /agent /ask'
+        : '宿主对接 CLI 模式 · 点状态栏模式或 /plan /agent /ask',
       'ok'
     );
   }
@@ -3224,9 +3220,78 @@ function setWorkMode(mode, opts = {}) {
   }
 }
 
-function cycleWorkMode() {
-  // No host-side mode cycle — CLI Shift+Tab owns this
-  setWorkMode('cli', { toast: true });
+/** Paint status bar CLI · {mode} from ACP SessionMode id */
+function paintCliModeChip(modeId) {
+  const mid = String(modeId || 'default').toLowerCase() || 'default';
+  const sb = document.getElementById('sbMode');
+  if (sb) {
+    sb.textContent = mid === 'default' ? 'CLI · default' : `CLI · ${mid}`;
+    sb.dataset.mode = mid;
+    sb.dataset.cliMode = mid;
+    sb.title = localeIsEn()
+      ? `Click to cycle CLI session mode (session/set_mode): default → plan → ask · current ${mid}`
+      : `点击循环 CLI 会话模式（session/set_mode）：default → plan → ask · 当前 ${mid}`;
+  }
+  const hint = document.getElementById('modeHint');
+  if (hint) {
+    const labels = {
+      default: localeIsEn() ? 'Agent (default)' : 'Agent（默认）',
+      plan: localeIsEn() ? 'Plan mode' : '计划模式',
+      ask: localeIsEn() ? 'Ask (read-only tools)' : 'Ask（只读工具）',
+    };
+    hint.textContent = labels[mid] || `CLI · ${mid}`;
+  }
+}
+
+/**
+ * Cycle / set ACP session mode via session/set_mode (open-source SessionMode).
+ * Needs a warm or running ACP session for the task.
+ */
+async function setCliSessionMode(modeId, opts = {}) {
+  const task = T();
+  if (!task?.id || !window.grok?.setSessionMode) {
+    toast(
+      localeIsEn() ? 'No active task' : '无当前任务',
+      'err'
+    );
+    return { ok: false };
+  }
+  const r = await window.grok.setSessionMode({
+    projectId: task.projectId || pid(),
+    taskId: task.id,
+    modeId,
+    sessionId: task.sessionId || task.acpSessionId || undefined,
+  });
+  if (!r?.ok) {
+    toast(
+      r?.error ||
+        (localeIsEn()
+          ? 'set_mode failed — send a prompt first to warm ACP'
+          : 'set_mode 失败 — 请先发一轮对话以预热 ACP'),
+      'err'
+    );
+    return r || { ok: false };
+  }
+  task.acpModeId = r.modeId || modeId;
+  paintCliModeChip(task.acpModeId);
+  if (opts.toast !== false) {
+    toast(
+      localeIsEn()
+        ? `CLI mode → ${task.acpModeId}`
+        : `CLI 模式 → ${task.acpModeId}`,
+      'ok'
+    );
+  }
+  return r;
+}
+
+async function cycleWorkMode() {
+  setWorkMode('cli', { toast: false });
+  const cycle = ['default', 'plan', 'ask'];
+  const cur = String(T()?.acpModeId || 'default').toLowerCase();
+  const i = cycle.indexOf(cur);
+  const next = cycle[(i < 0 ? 0 : i + 1) % cycle.length];
+  return setCliSessionMode(next, { toast: true });
 }
 
 /** Parse lightweight 【目标进度】 from assistant text (mirrors modes.js) */
@@ -3380,11 +3445,10 @@ function bindWorkModeUi() {
   };
   document.addEventListener('click', onModeClick, true);
 
-  // Ctrl/Cmd+1..4 no longer switch host modes (CLI owns mode)
-  // status badge: remind CLI ownership
+  // status badge: cycle CLI session mode (session/set_mode)
   document.addEventListener('click', (e) => {
     if (e.target?.id === 'sbMode' || e.target?.closest?.('#sbMode')) {
-      setWorkMode('cli', { toast: true });
+      cycleWorkMode().catch(() => {});
     }
     if (e.target?.id === 'btnClearGoal' || e.target?.closest?.('#btnClearGoal')) {
       e.preventDefault();
@@ -3395,13 +3459,15 @@ function bindWorkModeUi() {
   document.addEventListener('keydown', (e) => {
     if (e.target?.id === 'sbMode' && (e.key === 'Enter' || e.key === ' ')) {
       e.preventDefault();
-      cycleWorkMode();
+      cycleWorkMode().catch(() => {});
     }
   });
   setWorkMode(state.workMode || 'craft', { persistRemote: false });
 }
 window.setWorkMode = setWorkMode;
 window.cycleWorkMode = cycleWorkMode;
+window.setCliSessionMode = setCliSessionMode;
+window.paintCliModeChip = paintCliModeChip;
 window.applySendLabel = applySendLabel;
 window.renderGoalTrack = renderGoalTrack;
 window.clearTaskGoal = clearTaskGoal;
@@ -3513,9 +3579,33 @@ const SLASH_COMMANDS = () => [
     id: 'cli-mode',
     label: '/cli',
     desc: localeIsEn()
-      ? 'Host uses CLI modes only (/plan in grok TUI)'
-      : '宿主仅对接 CLI 模式（在 grok TUI 用 /plan）',
-    run: () => setWorkMode('cli', { toast: true }),
+      ? 'Cycle CLI session mode (session/set_mode)'
+      : '循环 CLI 会话模式（session/set_mode）',
+    run: () => cycleWorkMode(),
+  },
+  {
+    id: 'plan',
+    label: '/plan',
+    desc: localeIsEn()
+      ? 'Enter CLI plan mode (session/set_mode plan)'
+      : '进入 CLI 计划模式（session/set_mode plan）',
+    run: () => setCliSessionMode('plan', { toast: true }),
+  },
+  {
+    id: 'agent',
+    label: '/agent',
+    desc: localeIsEn()
+      ? 'CLI default agent mode (session/set_mode default)'
+      : 'CLI 默认 Agent 模式（session/set_mode default）',
+    run: () => setCliSessionMode('default', { toast: true }),
+  },
+  {
+    id: 'ask',
+    label: '/ask',
+    desc: localeIsEn()
+      ? 'CLI ask mode (session/set_mode ask)'
+      : 'CLI Ask 模式（session/set_mode ask）',
+    run: () => setCliSessionMode('ask', { toast: true }),
   },
   {
     id: 'model',
@@ -9008,20 +9098,14 @@ function bindAgentEvents() {
       const task = taskFromEvent(d);
       if (!task) return;
       task.acpModeId = d.modeId || '';
-      // Mirror CLI session mode on host chip (from session/update current_mode_update)
+      // Mirror CLI session mode on host chip (current_mode_update / set_mode)
       if (isActiveTask(task) && d.modeId) {
-        const sb = document.getElementById('sbMode');
-        if (sb) {
-          sb.textContent = `CLI · ${d.modeId}`;
-          sb.title = `CLI session mode (from agent): ${d.modeId}`;
-        }
-        const hint = document.getElementById('modeHint');
-        if (hint) hint.textContent = `CLI mode · ${d.modeId}`;
+        paintCliModeChip(d.modeId);
         setLivePhase(`模式 · ${d.modeId}`, task.title);
         pushLiveEvent({
           kind: 'status',
           title: `CLI 模式 · ${d.modeId}`,
-          sub: task.title,
+          sub: d.source === 'set_mode' ? 'session/set_mode' : task.title,
           projectId: task.projectId,
         });
       }
