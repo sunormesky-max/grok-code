@@ -4,7 +4,12 @@ const fs = require('fs');
 const Store = require('electron-store');
 const { createAgent } = require('./agent');
 const { createTools } = require('./tools');
-const { resolveGrokBinary, probeGrok } = require('./grok-cli');
+const {
+  resolveGrokBinary,
+  probeGrok,
+  listGrokModels,
+  normalizeModelStateJson,
+} = require('./grok-cli');
 const { createPersist } = require('./persist');
 const { compressContext, buildContextPrompt } = require('./context-compress');
 const { enrichContextWithLlm } = require('./context-llm');
@@ -734,6 +739,27 @@ ipcMain.handle('paste:saveImage', (_e, payload = {}) => {
 });
 
 ipcMain.handle('cli:probe', () => probeGrok(store.get('grokPath')));
+
+/** List models via open-source `grok models` (text parse; no --json on CLI). */
+ipcMain.handle('cli:models', () => {
+  // Prefer last ACP-captured list if fresher than 10 min
+  const cached = global.__grokcodeModelsCache;
+  if (
+    cached &&
+    cached.ok &&
+    Array.isArray(cached.models) &&
+    cached.models.length &&
+    Date.now() - (cached.at || 0) < 10 * 60 * 1000 &&
+    cached.source === 'acp'
+  ) {
+    return { ...cached, fromCache: true };
+  }
+  const live = listGrokModels(store.get('grokPath'));
+  if (live.ok) {
+    global.__grokcodeModelsCache = { ...live, at: Date.now() };
+  }
+  return { ...live, fromCache: false };
+});
 
 // ── 体检 / 诊断 / 首启 ──────────────────────────────────
 ipcMain.handle('doctor:run', (_e, payload = {}) => {

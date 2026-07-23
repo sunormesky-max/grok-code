@@ -62,6 +62,9 @@ contextBridge.exposeInMainWorld('grok', {
   runTerminal: (projectId, command) =>
     ipcRenderer.invoke('terminal:run', { projectId, command }),
 
+  /** List models from `grok models` (CLI) / recent ACP session models */
+  listModels: () => ipcRenderer.invoke('cli:models'),
+
   runAgent: (payload) => ipcRenderer.invoke('agent:run', payload),
   stopAgent: (payload) => ipcRenderer.invoke('agent:stop', payload || {}),
   clearSession: (payload) => ipcRenderer.invoke('agent:clearSession', payload || {}),

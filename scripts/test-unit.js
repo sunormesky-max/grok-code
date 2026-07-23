@@ -9,6 +9,48 @@ const fs = require('fs');
 const root = path.join(__dirname, '..');
 const { compressContext, buildContextPrompt } = require(path.join(root, 'electron', 'context-compress.js'));
 
+function testParseGrokModels() {
+  const {
+    parseModelsOutput,
+    normalizeModelStateJson,
+  } = require(path.join(root, 'electron', 'grok-cli.js'));
+
+  const sample = `
+You are logged in with grok.com.
+
+Default model: grok-4.5
+
+Available models:
+  * grok-4.5 (default)
+  * grok-4
+  * grok-build
+`;
+  const p = parseModelsOutput(sample);
+  assert.equal(p.ok, true);
+  assert.equal(p.defaultId, 'grok-4.5');
+  assert.ok(p.models.some((m) => m.id === 'grok-4.5' && m.isDefault));
+  assert.ok(p.models.some((m) => m.id === 'grok-4'));
+  assert.ok(p.models.some((m) => m.id === 'grok-build'));
+
+  const j = normalizeModelStateJson({
+    currentModelId: 'm1',
+    availableModels: [
+      { modelId: 'm1', name: 'Model One' },
+      { id: 'm2', name: 'Model Two' },
+    ],
+  });
+  assert.equal(j.ok, true);
+  assert.equal(j.defaultId, 'm1');
+  assert.equal(j.models.length, 2);
+
+  const mapShape = normalizeModelStateJson({
+    current: 'x',
+    available: { x: { name: 'X' }, y: { name: 'Y' } },
+  });
+  assert.ok(mapShape.models.some((m) => m.id === 'y'));
+  console.log('ok  parse grok models + modelState JSON');
+}
+
 function testCompress() {
   const { extractPaths } = require(path.join(root, 'electron', 'context-compress.js'));
   const msgs = [
@@ -889,8 +931,11 @@ function testIpcChannelContract() {
   assert.ok(preloadSrc.includes('replyUserQuestion'), 'preload exposes replyUserQuestion');
   assert.ok(preloadSrc.includes('setSessionMode'), 'preload exposes setSessionMode');
   assert.ok(preloadSrc.includes('setSessionModel'), 'preload exposes setSessionModel');
+  assert.ok(preloadSrc.includes('listModels'), 'preload exposes listModels');
   assert.ok(AGENT_EVENT_CHANNELS.includes('agent:model'));
+  assert.ok(AGENT_EVENT_CHANNELS.includes('agent:models'));
   assert.ok(isAllowedRendererChannel('agent:model'));
+  assert.ok(isAllowedRendererChannel('agent:models'));
 
   const ok = assertAgentPayloadShape('agent:text', { taskId: 't1', text: 'hi' });
   assert.ok(ok.ok, 'text+taskId valid');
@@ -1107,6 +1152,7 @@ try {
   testExtractJson();
   testExternalEditorResolve();
   testDiagnosticsShape();
+  testParseGrokModels();
   testPluginsExports();
   testProfilesRoundtrip();
   testCatalogBuild();

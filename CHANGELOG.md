@@ -11,6 +11,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 - See [ROADMAP.md](ROADMAP.md)
 
+## [1.19.0] — 2026-07-23
+
+### Host ↔ open-source Grok Build — live model list
+
+Model chip used static presets only. Now docks to CLI + ACP catalogs.
+
+- **`grok models`**: parse text output (`Default model` + `* id` list)
+- **IPC** `cli:models` / `listModels` (10 min ACP cache preference)
+- **ACP** capture `initialize.meta.modelState` and `session/new.models`
+- **UI** model menu loads live list (★ default), refresh action, still
+  merges static presets + custom id
+- Unit tests for CLI text + modelState JSON shapes
+
 ## [1.18.0] — 2026-07-23
 
 ### Host ↔ open-source Grok Build — reasoning effort (`/effort`)

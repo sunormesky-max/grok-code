@@ -34,13 +34,62 @@ const MODEL_KEY = 'grokcode-model-chip';
   }
 })();
 
-/** Common model presets — empty string = CLI default */
+/** Common model presets — empty string = CLI default (fallback if grok models fails) */
 const MODEL_PRESETS = [
   { id: '', label: 'CLI 默认' },
   { id: 'grok-build', label: 'grok-build' },
   { id: 'grok-4.5', label: 'grok-4.5' },
   { id: 'grok-4', label: 'grok-4' },
 ];
+
+/** Live catalog from `grok models` / ACP modelState (merged into chip menu) */
+let _liveModels = { models: [], defaultId: '', at: 0, source: '' };
+
+function mergeModelMenuItems() {
+  const items = [{ id: '', label: localeIsEn() ? 'CLI default' : 'CLI 默认' }];
+  const seen = new Set(['']);
+  const live = Array.isArray(_liveModels.models) ? _liveModels.models : [];
+  for (const m of live) {
+    const id = String(m.id || m.name || '').trim();
+    if (!id || seen.has(id)) continue;
+    seen.add(id);
+    const star = m.isDefault || id === _liveModels.defaultId ? ' ★' : '';
+    items.push({ id, label: `${id}${star}` });
+  }
+  // Keep static presets that aren't already listed
+  for (const p of MODEL_PRESETS) {
+    if (!p.id || seen.has(p.id)) continue;
+    seen.add(p.id);
+    items.push({ id: p.id, label: p.label });
+  }
+  return items;
+}
+
+async function refreshLiveModels(opts = {}) {
+  if (!window.grok?.listModels) return _liveModels;
+  // Cache 2 min unless force
+  if (
+    !opts.force &&
+    _liveModels.models?.length &&
+    Date.now() - (_liveModels.at || 0) < 120_000
+  ) {
+    return _liveModels;
+  }
+  try {
+    const r = await window.grok.listModels();
+    if (r?.ok && Array.isArray(r.models) && r.models.length) {
+      _liveModels = {
+        models: r.models,
+        defaultId: r.defaultId || '',
+        at: Date.now(),
+        source: r.source || (r.fromCache ? 'cache' : 'cli'),
+      };
+    }
+  } catch {
+    /* keep previous */
+  }
+  return _liveModels;
+}
 
 /** CLI /effort levels (session/set_model meta.reasoning_effort) */
 const EFFORT_PRESETS = [
@@ -3685,18 +3734,33 @@ function bindModelChipUi() {
     el.style.left = `${Math.max(8, rect.left)}px`;
     el.style.bottom = `${window.innerHeight - rect.top + 6}px`;
   };
-  const openMenu = () => {
+  const openMenu = async () => {
     effortMenu.classList.add('hidden');
-    menu.innerHTML = MODEL_PRESETS.map(
-      (p) =>
-        `<button type="button" class="model-menu-item${(state.model || '') === p.id ? ' active' : ''}" data-id="${esc(p.id)}" role="menuitem">${esc(p.label)}</button>`
-    ).join('');
-    // custom
-    menu.innerHTML += `<button type="button" class="model-menu-item" data-act="custom" role="menuitem">${localeIsEn() ? 'Custom…' : '自定义…'}</button>`;
+    menu.innerHTML = `<div class="model-menu-item muted" style="pointer-events:none;opacity:0.7">${localeIsEn() ? 'Loading models…' : '加载模型列表…'}</div>`;
     placeMenu(menu, chip);
     menu.classList.remove('hidden');
+    await refreshLiveModels({ force: false });
+    const items = mergeModelMenuItems();
+    const src = _liveModels.source
+      ? ` · ${_liveModels.source}`
+      : '';
+    menu.innerHTML =
+      items
+        .map(
+          (p) =>
+            `<button type="button" class="model-menu-item${(state.model || '') === p.id ? ' active' : ''}" data-id="${esc(p.id)}" role="menuitem">${esc(p.label)}</button>`
+        )
+        .join('') +
+      `<button type="button" class="model-menu-item" data-act="refresh" role="menuitem">${localeIsEn() ? '↻ Refresh list' : '↻ 刷新列表'}${esc(src)}</button>` +
+      `<button type="button" class="model-menu-item" data-act="custom" role="menuitem">${localeIsEn() ? 'Custom…' : '自定义…'}</button>`;
+    placeMenu(menu, chip);
     menu.querySelectorAll('.model-menu-item').forEach((btn) => {
       btn.onclick = async () => {
+        if (btn.dataset.act === 'refresh') {
+          await refreshLiveModels({ force: true });
+          openMenu();
+          return;
+        }
         if (btn.dataset.act === 'custom') {
           const cur = state.model || '';
           const v = prompt(localeIsEn() ? 'Model id (empty = CLI default)' : '模型 ID（空=CLI 默认）', cur);
@@ -9335,6 +9399,23 @@ function bindAgentEvents() {
                 ? 'ModelChanged'
                 : task.title,
           projectId: task.projectId,
+        });
+      }
+    }),
+    window.grok.on('agent:models', (d) => {
+      if (!d?.ok && !(Array.isArray(d?.models) && d.models.length)) return;
+      _liveModels = {
+        models: d.models || [],
+        defaultId: d.defaultId || '',
+        at: Date.now(),
+        source: d.source || 'acp',
+      };
+      if (isActiveTask(taskFromEvent(d) || T())) {
+        pushLiveEvent({
+          kind: 'status',
+          title: localeIsEn() ? 'Model list' : '模型列表',
+          sub: `${_liveModels.models.length} · ${_liveModels.source}`,
+          projectId: (taskFromEvent(d) || T())?.projectId,
         });
       }
     }),

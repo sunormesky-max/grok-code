@@ -3,6 +3,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { resolveGrokBinary } = require('./grok-cli');
+const { normalizeModelStateJson } = require('./grok-cli');
 const {
   AcpClient,
   pickToolInfo,
@@ -14,6 +15,23 @@ const {
   normalizeSessionModeId,
   normalizeReasoningEffort,
 } = require('./acp-client');
+
+/** Remember ACP-advertised models for host model chip */
+function cacheAcpModels(payload, source) {
+  try {
+    const parsed = normalizeModelStateJson(payload);
+    if (!parsed.ok || !parsed.models.length) return;
+    global.__grokcodeModelsCache = {
+      ok: true,
+      defaultId: parsed.defaultId,
+      models: parsed.models,
+      source: source || 'acp',
+      at: Date.now(),
+    };
+  } catch {
+    /* ignore */
+  }
+}
 const {
   isKnownHeadlessType,
   createStreamState,
@@ -1373,6 +1391,23 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
             const initRes = await client.initialize();
             client._acpInitialized = true;
             mark('initialized');
+            // ACP initialize meta.modelState — available models for host chip
+            try {
+              const ms =
+                initRes?._meta?.modelState ||
+                initRes?.meta?.modelState ||
+                initRes?._meta?.model_state ||
+                initRes?.meta?.model_state;
+              if (ms) {
+                cacheAcpModels(ms, 'acp-initialize');
+                emitT('agent:models', {
+                  ...normalizeModelStateJson(ms),
+                  source: 'initialize',
+                });
+              }
+            } catch {
+              /* ignore */
+            }
             // Load session token into agent sampling (matches grok TUI after initialize)
             try {
               setPhase('boot', 'ACP authenticate…');
@@ -1429,6 +1464,24 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
               mark('session_new');
             }
             newSessionId = sess?.sessionId || sess?.session_id || newSessionId;
+            // NewSessionResponse.models — live catalog for host model chip
+            try {
+              const modelsPayload =
+                sess?.models ||
+                sess?._meta?.models ||
+                sess?.meta?.models ||
+                sess?._meta?.modelState ||
+                sess?.meta?.modelState;
+              if (modelsPayload) {
+                cacheAcpModels(modelsPayload, 'acp-session');
+                emitT('agent:models', {
+                  ...normalizeModelStateJson(modelsPayload),
+                  source: 'session',
+                });
+              }
+            } catch {
+              /* ignore */
+            }
           }
 
           if (client.child) client.child.__acpSessionId = newSessionId;

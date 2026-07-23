@@ -192,6 +192,7 @@ We advertise **no** client fs/terminal capabilities (correct for “agent runs t
 | P2 doctor `grok -p` probe | Done (1.16.0 opt-in) |
 | P1 `session/set_model` live switch | Done (1.17.0 + ModelChanged mirror) |
 | P2 reasoning effort /effort | Done (1.18.0 set_model meta + chip) |
+| P2 model list CLI + ACP modelState | Done (1.19.0 `grok models` + init/session) |
 | Upstream `/feedback` | `patches/grok-build/FEEDBACK.md` |
 
 ---
