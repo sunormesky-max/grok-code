@@ -581,8 +581,18 @@
             <input type="checkbox" id="cfgYolo" checked />
             <span>
               <strong data-i18n="cfg.yolo">自动批准工具</strong>
-              <small>--always-approve（YOLO）</small>
+              <small>--always-approve（YOLO，对齐 CLI）</small>
             </span>
+          </label>
+
+          <label class="field">
+            <span>Agent 传输 <em>对齐开源 grok agent / -p</em></span>
+            <select id="cfgAgentTransport">
+              <option value="auto">auto · ACP 优先，403 回退 headless</option>
+              <option value="acp">acp · 仅 grok agent stdio（完整工具流）</option>
+              <option value="headless">headless · 同 grok -p streaming-json</option>
+            </select>
+            <small>GrokCode 是 CLI 宿主。agent stdio 被 403 门控时用 headless/auto。</small>
           </label>
 
           <label class="field">

@@ -104,6 +104,13 @@ const store = new Store({
     trashOnDelete: true,
     /** inject skill name+description index into agent prompt */
     injectSkillsIndex: true,
+    /**
+     * Agent transport (host over open-source grok CLI):
+     * auto — ACP first, headless on Build 403
+     * acp — always grok agent stdio
+     * headless — always streaming-json (like grok -p)
+     */
+    agentTransport: 'auto',
   },
 });
 
@@ -545,6 +552,7 @@ ipcMain.handle('config:get', () => {
     personalProtect: getConfig().personalProtect,
     trashOnDelete: getConfig().trashOnDelete,
     injectSkillsIndex: getConfig().injectSkillsIndex,
+    agentTransport: getConfig().agentTransport || 'auto',
     modes: modes.listModes(),
     styles: modes.listStyles(),
   };
@@ -572,6 +580,13 @@ ipcMain.handle('config:set', (_e, partial) => {
     );
   }
   if (partial.autoUpdate !== undefined) store.set('autoUpdate', Boolean(partial.autoUpdate));
+  if (partial.agentTransport !== undefined) {
+    const t = String(partial.agentTransport || 'auto').toLowerCase();
+    store.set(
+      'agentTransport',
+      ['auto', 'acp', 'headless'].includes(t) ? t : 'auto'
+    );
+  }
   if (partial.locale !== undefined) {
     store.set('locale', String(partial.locale) === 'en' ? 'en' : 'zh');
   }

@@ -1,94 +1,85 @@
 # Architecture
 
-GrokCode is a thin **desktop control plane** over the local **Grok Build CLI**.
+GrokCode is a thin **desktop host** over the local open-source **Grok Build CLI**
+([xai-org/grok-build](https://github.com/xai-org/grok-build)).
 
 ## Principles
 
-1. **CLI is the brain** — tools, MCP, skills, permissions live in `grok`, not reimplemented.
+1. **CLI is the brain** — tools, MCP, skills, plan mode, permissions live in `grok`.
 2. **UI is the flight deck** — multi-project, multi-task, Live/Code/Diff, settings.
-3. **Local-first** — sessions under `~/.grok-code/`, secrets never in the repo.
-4. **Stream first** — every run paints tokens/tools/path live; no black-box-until-done.
-5. **Converge chrome** — default shell is Work (Agent + Live); advanced layouts stay tucked.
+3. **Do not reimplement agent modes** — session mode is CLI-owned (`/plan`, Shift+Tab,
+   `enter_plan_mode` / `exit_plan_mode`). Host injects only user + project rules.
+4. **Local-first** — sessions under `~/.grok-code/`, CLI auth under `~/.grok/auth.json`.
+5. **Stream first** — paint tokens/tools live; activity clock for inter-stage silence.
+6. **Transport honesty** — prefer ACP (`grok agent stdio`); fall back to headless
+   (`streaming-json`, same family as `grok -p`) when Build agent API is 403-gated.
 
 ## Process model
 
 ```text
 ┌──────────────────────────────────────────────────────────┐
-│ Renderer (Chromium)                                      │
-│  projects · tasks · modes · Live/Code/Diff · StreamFair  │
-│  LiveBatcher · goal track · layout-simple                │
+│ Renderer                                                 │
+│  projects · tasks · Live/Code/Diff · StreamFair          │
+│  CLI mode chip (mirrors agent:mode) · ToolStorm          │
 └───────────────────────────┬──────────────────────────────┘
-                            │ contextBridge IPC (preload allowlist)
+                            │ preload IPC allowlist
 ┌───────────────────────────▼──────────────────────────────┐
-│ Main (Node)                                              │
-│  electron/main.js     multi-project map, IPC             │
-│  electron/agent.js    spawn grok headless per task       │
-│  electron/modes.js    Craft / Plan / Goal / Ask + rules  │
-│  electron/tools.js    sandbox FS + terminal for UI       │
-│  electron/persist.js  session JSON (+ task.goal)         │
-│  electron/context-compress.js  L0–L3 heuristics          │
-│  electron/mcp-skills.js  grok mcp + ~/.grok/skills       │
+│ Main                                                     │
+│  agent.js     ACP primary · headless fallback            │
+│  acp-client   initialize · authenticate · prompt         │
+│  persist      ~/.grok-code/sessions                      │
+│  diagnostics  doctor (CLI + auth.json + Build gate log)  │
 └───────────────────────────┬──────────────────────────────┘
-                            │ child_process (ACP stdio primary;
-                            │   headless streaming-json fallback)
+                            │ child_process
 ┌───────────────────────────▼──────────────────────────────┐
-│ grok CLI  (user install)                                 │
-│  primary: grok agent stdio (ACP session/update + tools)  │
-│  fallback: --prompt-file streaming-json (text only)      │
-│  --always-approve · MCP · Skills · same as TUI           │
+│ grok CLI  (user install · same binary as TUI)            │
+│  primary:  grok agent … stdio   (ACP session/update)     │
+│  fallback: grok -p … streaming-json                      │
+│  YOLO:     --always-approve  ← settings alwaysApprove    │
+│  plan:     CLI /plan · Shift+Tab · tools (not host UI)   │
 └──────────────────────────────────────────────────────────┘
 ```
 
-## Work modes
+## Transports (settings → `agentTransport`)
 
-| Mode | Intent | Tools | Notes |
-|------|--------|-------|--------|
-| **Craft** | Act now | Full | Default flight |
-| **Plan** | Design first | Limited turns | 「执行」→ Craft |
-| **Goal** | Anchor outcome | Full (+ turns) | Sticky `task.goal` + progress parse |
-| **Ask** | Read-only Q&A | No writes | Soft + hard blocks |
+| Value | Behavior |
+|-------|----------|
+| **auto** (default) | ACP first; on Build 403 / cold fail → headless |
+| **acp** | Only `grok agent stdio` (full tool stream when entitled) |
+| **headless** | Only `streaming-json` (like `grok -p`; weak tool UX) |
 
-Goal state lives on the task (`title`, `status`, `progress`, `next`), is persisted, and is re-injected into each prompt via `modePromptPrefix(..., { goal })`.
+Env overrides: `GROKCODE_AGENT_TRANSPORT`, `GROKCODE_ACP_NO_FALLBACK=1`.
+
+## Mode policy (CLI-native)
+
+Host **does not** ship Craft/Plan/Ask/Goal prompt prefixes (see `modes.CLI_NATIVE`).
+Session mode updates from the agent arrive as `session/update` → `agent:mode` and
+are shown on the CLI chip. To plan: use the **CLI** (`/plan` in TUI) or let the
+agent call `enter_plan_mode`; host only displays.
 
 ## Multi-project / multi-task
 
-- **Project** = absolute workspace path + tools + agent + watcher + task map  
-- **Task** = UI conversation + optional CLI `sessionId` + messages + L0–L3 context + optional goal  
-- Concurrent: many projects × many tasks, each with its own `grok` process  
+- **Project** = workspace path + tools + agent + watcher  
+- **Task** = conversation + optional CLI `sessionId` + L0–L3 context  
+- Restart restore: seed from `~/.grok-code/sessions` index (not only electron-store recent)
 
-## Streaming & performance path
+## Streaming path
 
 ```text
-CLI stdout (NDJSON)  or  ACP session/update
-  → electron/agent-stream.js  pure reduce (headless NDJSON / ACP)
-  → agent.js apply actions → emit IPC
-  → preload ipc-channels allowlist
-  → renderer bindAgentEvents
-       ├─ StreamFair + stream-scheduler.js  (active first · bg throttle)
-       ├─ upsertAssistant / upsertThought / tool rows  (Chat)
-       ├─ LiveBatcher    coalesce timeline rebuilds (~56ms)
-       └─ live mirrors   sticky think/stream cards mid-run
+ACP session/update  or  headless NDJSON
+  → agent-stream.js reduce
+  → agent.js emit IPC
+  → StreamFair / ToolStorm / Live mirrors
 ```
 
-Contract tests: `scripts/fixtures/agent-stream-*.ndjson|json` + `npm test`
-(IPC shape, NDJSON/ACP reduce, multi-task fairness, L0–L3 golden).
+Upstream silence between stages is normal; host shows activity clock + phase.
 
-Hot paths to keep cheap:
+## Related open source
 
-- Prefer **append** over full Live rebuild when filter is `all`
-- Active task stream paint has **zero min delay** (rAF coalesce only)
-- Tabs / project strip throttle under multi-run
-- Background Live tool noise is batched
+| Upstream | Role |
+|----------|------|
+| [xai-org/grok-build](https://github.com/xai-org/grok-build) | Agent runtime, ACP server, plan mode, tools |
+| [Agent Client Protocol](https://agentclientprotocol.com) | JSON-RPC host↔agent wire |
+| This repo | Electron host + multi-project UX |
 
-## Context inheritance
-
-- On disk: `~/.grok-code/sessions/<hash(path)>.json`  
-- On each run: compress history → inject L3→L2→L1→L0 + mode prefix + optional goal block + current prompt  
-- CLI `--resume` used when session id still valid  
-
-## Security boundaries
-
-- File tools resolve under project root only  
-- YOLO auto-approves CLI tools — treat workspace as trusted  
-- Renderer has no Node integration; all FS/agent via IPC  
-- Preload only exposes an allowlisted set of IPC event channels
+See also: `docs/ACP-SOURCE-AUDIT.md`, `patches/grok-build/`.

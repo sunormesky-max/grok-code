@@ -11,6 +11,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 - See [ROADMAP.md](ROADMAP.md)
 
+## [1.13.0] — 2026-07-18
+
+### Host ↔ open-source Grok Build CLI
+
+Continues the “thin host” line: GrokCode does not invent agent modes; it docks to
+[xai-org/grok-build](https://github.com/xai-org/grok-build).
+
+- **agentTransport** setting: `auto` (ACP → headless on 403) | `acp` | `headless`
+- **Doctor**: `~/.grok/auth.json` presence; recent stream log Build 403 / cli-chat-proxy gate
+- **CLI mode chip**: mirrors `agent:mode` (`current_mode_update` from ACP)
+- **Architecture / ROADMAP / ACP audit** updated for CLI-native host model
+
 ## [1.12.1] — 2026-07-18
 
 ### Fixed

@@ -135,6 +135,110 @@ function checkMcp() {
   }
 }
 
+/** Local CLI login file from open-source grok-build (~/.grok/auth.json) */
+function checkGrokAuthFile() {
+  const authPath = path.join(os.homedir(), '.grok', 'auth.json');
+  try {
+    if (!fs.existsSync(authPath)) {
+      return {
+        id: 'cli_auth_file',
+        name: 'CLI 登录文件',
+        ok: true,
+        level: 'warn',
+        detail: '未找到 ~/.grok/auth.json',
+        fix: '终端执行 grok login（与开源 grok-build 相同凭据路径）',
+      };
+    }
+    const st = fs.statSync(authPath);
+    const raw = fs.readFileSync(authPath, 'utf8');
+    const hasRefresh = /refresh_token|refreshToken/i.test(raw);
+    return {
+      id: 'cli_auth_file',
+      name: 'CLI 登录文件',
+      ok: true,
+      level: hasRefresh ? 'ok' : 'warn',
+      detail: hasRefresh
+        ? `auth.json 存在 · ${Math.round(st.size / 1024)}KB · 含 refresh`
+        : `auth.json 存在 · ${Math.round(st.size / 1024)}KB · 可能缺 refresh`,
+      path: authPath,
+      fix: hasRefresh ? null : '建议重新 grok login',
+    };
+  } catch (err) {
+    return {
+      id: 'cli_auth_file',
+      name: 'CLI 登录文件',
+      ok: true,
+      level: 'warn',
+      detail: err.message || String(err),
+      fix: null,
+    };
+  }
+}
+
+/**
+ * Recent stream log: ACP agent stdio 403 (cli-chat-proxy) while -p may still work.
+ * Aligns with upstream: host uses grok agent stdio; Build gate is server-side.
+ */
+function checkBuildGateLog() {
+  const logPath = path.join(os.tmpdir(), 'grokcode-stream.log');
+  try {
+    if (!fs.existsSync(logPath)) {
+      return {
+        id: 'build_gate',
+        name: 'Build API 门控',
+        ok: true,
+        level: 'ok',
+        detail: '尚无 stream 日志（未跑过 agent）',
+        fix: null,
+      };
+    }
+    const st = fs.statSync(logPath);
+    const max = 120_000;
+    const fd = fs.openSync(logPath, 'r');
+    const buf = Buffer.alloc(Math.min(max, st.size));
+    const start = Math.max(0, st.size - buf.length);
+    fs.readSync(fd, buf, 0, buf.length, start);
+    fs.closeSync(fd);
+    const tail = buf.toString('utf8');
+    const gated =
+      /coming soon|don't have access|cli-chat-proxy\.grok\.com\/v1\/responses/i.test(
+        tail
+      ) && /403|Forbidden|Internal error/i.test(tail);
+    if (gated) {
+      return {
+        id: 'build_gate',
+        name: 'Build API 门控',
+        ok: true,
+        level: 'warn',
+        detail:
+          '最近 stream 日志出现 ACP/agent stdio 403（Grok Build coming soon）。' +
+          '终端 grok -p 可能仍可用。GrokCode 会自动 headless 回退。',
+        path: logPath,
+        fix:
+          '设置 → Agent transport 选 headless 或 auto；或待账号开通 agent stdio / cli-chat-proxy',
+      };
+    }
+    return {
+      id: 'build_gate',
+      name: 'Build API 门控',
+      ok: true,
+      level: 'ok',
+      detail: '最近日志未见 agent 403 门控',
+      path: logPath,
+      fix: null,
+    };
+  } catch (err) {
+    return {
+      id: 'build_gate',
+      name: 'Build API 门控',
+      ok: true,
+      level: 'ok',
+      detail: err.message || String(err),
+      fix: null,
+    };
+  }
+}
+
 function checkEditors() {
   const found = [];
   const tryWhich = (name) => {
@@ -196,6 +300,8 @@ function runDoctor(cfg = {}) {
   });
 
   checks.push(checkAuth(bin, cfg.apiKey));
+  checks.push(checkGrokAuthFile());
+  checks.push(checkBuildGateLog());
   checks.push(checkSessionsDir());
   checks.push(checkMcp());
   checks.push(checkEditors());

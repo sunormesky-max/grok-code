@@ -178,7 +178,12 @@ We advertise **no** client fs/terminal capabilities (correct for “agent runs t
 | P2 multimodal text extract | Done (1.11.1 pickChunkText) |
 | P2 unknown reverse-req breadcrumb | Done (1.11.1 `agent:ext` reverse_request) |
 | P2 clientType Desktop identity | Done (1.11.2 meta clientType/clientIdentifier) |
-| P2 live `_meta.totalTokens` | Done (1.11.2 throttled agent:usage) |
+| P2 live `_meta.totalTokens` | Done (1.12.x throttled agent:usage) |
+| P1 CLI-native modes (no host Craft/Plan inject) | Done (1.12.0) |
+| P1 project restore from sessions index | Done (1.12.1) |
+| P1 ACP 403 → headless (like grok -p) | Done (1.11.5+) |
+| P2 agentTransport setting auto/acp/headless | Done (1.13.0) |
+| P2 doctor Build gate + auth.json | Done (1.13.0) |
 | Upstream `/feedback` | `patches/grok-build/FEEDBACK.md` |
 
 ---

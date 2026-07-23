@@ -9008,11 +9008,19 @@ function bindAgentEvents() {
       const task = taskFromEvent(d);
       if (!task) return;
       task.acpModeId = d.modeId || '';
+      // Mirror CLI session mode on host chip (from session/update current_mode_update)
       if (isActiveTask(task) && d.modeId) {
+        const sb = document.getElementById('sbMode');
+        if (sb) {
+          sb.textContent = `CLI · ${d.modeId}`;
+          sb.title = `CLI session mode (from agent): ${d.modeId}`;
+        }
+        const hint = document.getElementById('modeHint');
+        if (hint) hint.textContent = `CLI mode · ${d.modeId}`;
         setLivePhase(`模式 · ${d.modeId}`, task.title);
         pushLiveEvent({
           kind: 'status',
-          title: `会话模式 · ${d.modeId}`,
+          title: `CLI 模式 · ${d.modeId}`,
           sub: task.title,
           projectId: task.projectId,
         });
@@ -10616,6 +10624,12 @@ async function refreshConfigUi() {
   $('#cfgRounds').value = cfg.maxTurns || 30;
   $('#cfgYolo').checked = cfg.alwaysApprove !== false;
   $('#cfgRules').value = cfg.rules || '';
+  const tr = document.getElementById('cfgAgentTransport');
+  if (tr) {
+    tr.value = ['auto', 'acp', 'headless'].includes(cfg.agentTransport)
+      ? cfg.agentTransport
+      : 'auto';
+  }
 
   state.model = cfg.model || '';
   saveJson(MODEL_KEY, state.model);
@@ -10635,6 +10649,7 @@ async function saveSettings() {
     grokPath: $('#cfgGrokPath').value.trim(),
     maxTurns: Number($('#cfgRounds').value) || 30,
     alwaysApprove: $('#cfgYolo').checked,
+    agentTransport: document.getElementById('cfgAgentTransport')?.value || 'auto',
     rules: $('#cfgRules').value,
     ...(window.GrokSettingsExtra?.collectPartial?.() || {}),
   };

@@ -314,10 +314,16 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
    * Disable fallback: GROKCODE_ACP_NO_FALLBACK=1
    */
   async function run(opts) {
-    const transport = String(process.env.GROKCODE_AGENT_TRANSPORT || 'acp').toLowerCase();
+    const cfg0 = getConfig();
+    const transport = String(
+      process.env.GROKCODE_AGENT_TRANSPORT || cfg0.agentTransport || 'auto'
+    ).toLowerCase();
+    // headless | streaming-json: force -p style path (matches open-source grok -p)
     if (transport === 'headless' || transport === 'streaming-json') {
       return runHeadless(opts);
     }
+    // acp: never fall back unless env allows (default acp still falls back on 403 via auto)
+    const forceAcpOnly = transport === 'acp';
     try {
       return await runAcp(opts);
     } catch (err) {
@@ -330,6 +336,7 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
             : '';
       const blob = `${msg}\n${dataMsg}`;
       const noFallback =
+        forceAcpOnly ||
         process.env.GROKCODE_ACP_NO_FALLBACK === '1' ||
         process.env.GROKCODE_ACP_NO_FALLBACK === 'true' ||
         opts?._noHeadlessFallback;

@@ -72,6 +72,17 @@ Living plan for the GrokCode open-source ecosystem. Order may change based on co
 - [x] Full ACP host surface: permission picker, ToolStorm, plan/mode/commands, x.ai ext (v1.11.0)
 - [x] ACP residual: storm late-wave, tool-delta progress, multimodal text, reverse-req crumbs (v1.11.1)
 - [x] ACP Desktop clientType + live totalTokens meter (v1.11.2)
+- [x] CLI-native modes only — no host Craft/Plan/Ask/Goal inject (v1.12.0)
+- [x] Restore all projects from `~/.grok-code/sessions` on startup (v1.12.1)
+- [x] ACP Build 403 → headless fallback like `grok -p` (v1.11.5+)
+- [x] agentTransport setting + doctor Build-gate / auth.json (v1.13.0)
+
+## Next (host ↔ open-source grok-build)
+
+- [ ] Surface CLI plan approval UI when agent calls `exit_plan_mode` (ACP reverse req)
+- [ ] Optional `session/set_mode` if/when ACP exposes it for Plan/Normal from host
+- [ ] Prefer tool mid-flight when upstream emits InProgress (see patches/grok-build)
+- [ ] Deeper doctor: optional timed `grok -p` probe (slow — opt-in)
 
 ## Now (UI / experience)
 
