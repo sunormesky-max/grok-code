@@ -376,20 +376,133 @@ function resolvePatchesDir() {
 }
 
 /**
- * Informational: stock CLI tools are Pending→Completed; mid-flight needs patch.
- * Does not fail doctor — pure guidance for power users.
+ * Detect user-built CLI that includes tool InProgress patch.
+ *
+ * Signals (any one):
+ * - env GROKCODE_PATCHED_CLI=1|true|inprogress
+ * - env GROK_PATCHED=1|true|inprogress
+ * - cfg.grokPatched / cfg.patchedCli truthy
+ * - marker file next to binary: .grokcode-cli-patched (or grokcode-patch.marker)
+ * - binary path contains "patched" / "in-progress" / "inprogress" (weak heuristic)
+ *
+ * @param {string|null} bin
+ * @param {{ grokPatched?: boolean|string, patchedCli?: boolean|string }} [cfg]
  */
-function checkToolInProgressPatch() {
+function detectPatchedCli(bin, cfg = {}) {
+  const reasons = [];
+  const envRaw = String(
+    process.env.GROKCODE_PATCHED_CLI || process.env.GROK_PATCHED || ''
+  )
+    .trim()
+    .toLowerCase();
+  if (
+    envRaw === '1' ||
+    envRaw === 'true' ||
+    envRaw === 'yes' ||
+    envRaw === 'inprogress' ||
+    envRaw === 'in_progress' ||
+    envRaw === 'tool-in-progress'
+  ) {
+    reasons.push(`env=${envRaw}`);
+  }
+
+  const cfgFlag = cfg.grokPatched != null ? cfg.grokPatched : cfg.patchedCli;
+  if (cfgFlag === true || cfgFlag === 1 || cfgFlag === '1' || cfgFlag === 'true') {
+    reasons.push('settings.grokPatched');
+  } else if (
+    typeof cfgFlag === 'string' &&
+    /in.?progress|patched|yes/i.test(cfgFlag)
+  ) {
+    reasons.push(`settings=${cfgFlag}`);
+  }
+
+  if (bin) {
+    try {
+      const dir = path.dirname(bin);
+      const markers = [
+        path.join(dir, '.grokcode-cli-patched'),
+        path.join(dir, 'grokcode-patch.marker'),
+        path.join(dir, '.grokcode-patch'),
+      ];
+      for (const m of markers) {
+        if (fs.existsSync(m)) {
+          let body = '';
+          try {
+            body = fs.readFileSync(m, 'utf8').trim().slice(0, 80);
+          } catch {
+            /* ignore */
+          }
+          reasons.push(
+            body
+              ? `marker=${path.basename(m)}(${body})`
+              : `marker=${path.basename(m)}`
+          );
+          break;
+        }
+      }
+      if (/patched|in[-_]?progress|inprogress/i.test(String(bin))) {
+        reasons.push('path-heuristic');
+      }
+    } catch {
+      /* ignore */
+    }
+  }
+
+  return {
+    patched: reasons.length > 0,
+    reasons,
+    binary: bin || null,
+  };
+}
+
+/**
+ * Informational: stock CLI tools are Pending→Completed; mid-flight needs patch.
+ * Becomes level=ok when detectPatchedCli says patched.
+ */
+function checkToolInProgressPatch(cfg = {}) {
   const dir = resolvePatchesDir();
   const hasReadme = Boolean(dir);
   const hasPatch =
     dir && fs.existsSync(path.join(dir, '0001-tool-in-progress.patch'));
+  const bin = resolveGrokBinary(cfg.grokPath);
+  const det = detectPatchedCli(bin, cfg);
+
+  if (det.patched) {
+    return {
+      id: 'tool_in_progress',
+      name: '长工具 InProgress',
+      ok: true,
+      level: 'ok',
+      detail: [
+        '已标记：当前 Grok CLI 包含（或声明）InProgress 工具补丁。',
+        `信号：${det.reasons.join(' · ')}`,
+        bin ? `二进制：${bin}` : '',
+        '宿主会在 tool_call_update status=in_progress 时刷新工具卡计时。',
+      ]
+        .filter(Boolean)
+        .join('\n'),
+      path: dir || null,
+      hasPatch: Boolean(hasPatch),
+      patched: true,
+      reasons: det.reasons,
+      fix: null,
+      links: {
+        readme: hasReadme ? path.join(dir, 'README.md') : null,
+        feedback: hasReadme ? path.join(dir, 'FEEDBACK.md') : null,
+        github:
+          'https://github.com/sunormesky-max/grok-code/tree/main/patches/grok-build',
+      },
+    };
+  }
+
   const detail = [
     '开源 grok 主工具循环多为 Pending → Completed，长工具（终端/大文件）中间可能无 InProgress。',
     'GrokCode 宿主已支持 in_progress 刷新；要 agent 侧发出事件需自建 CLI 并应用实验补丁。',
     hasPatch
       ? `补丁目录：${dir}`
       : '补丁文件未随包找到 — 见仓库 patches/grok-build/ 或 GitHub',
+    '打补丁后：设置勾选「CLI 含 InProgress 补丁」，或设 GROKCODE_PATCHED_CLI=1，',
+    '或在二进制同目录放 .grokcode-cli-patched 空文件。',
   ].join('\n');
   return {
     id: 'tool_in_progress',
@@ -399,8 +512,10 @@ function checkToolInProgressPatch() {
     detail,
     path: dir || null,
     hasPatch: Boolean(hasPatch),
+    patched: false,
+    reasons: [],
     fix: hasReadme
-      ? '打开 patches/grok-build/README.md：clone grok-build → git apply 0001 → cargo build → 设置 grok 路径'
+      ? '打开 patches/grok-build/README.md：clone → git apply 0001 → cargo build → 设置 grok 路径 → 勾选补丁标记'
       : 'https://github.com/sunormesky-max/grok-code/tree/main/patches/grok-build',
     links: {
       readme: hasReadme ? path.join(dir, 'README.md') : null,
@@ -471,7 +586,13 @@ function runDoctor(cfg = {}, opts = {}) {
     process.env.GROKCODE_DOCTOR_PROBE === '1' ||
     process.env.GROKCODE_DOCTOR_PROBE === 'true';
   checks.push(checkGrokPromptProbe(bin, { run: wantProbe }));
-  checks.push(checkToolInProgressPatch());
+  checks.push(
+    checkToolInProgressPatch({
+      grokPath: cfg.grokPath,
+      grokPatched: cfg.grokPatched,
+      patchedCli: cfg.patchedCli,
+    })
+  );
   checks.push(checkSessionsDir());
   checks.push(checkMcp());
   checks.push(checkEditors());
@@ -614,4 +735,5 @@ module.exports = {
   resolvePatchesDir,
   getPatchHelp,
   checkToolInProgressPatch,
+  detectPatchedCli,
 };

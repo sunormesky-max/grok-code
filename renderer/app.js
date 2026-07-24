@@ -11496,6 +11496,8 @@ async function refreshConfigUi() {
   $('#cfgGrokPath').value = cfg.grokPath || '';
   $('#cfgRounds').value = cfg.maxTurns || 30;
   $('#cfgYolo').checked = cfg.alwaysApprove !== false;
+  const patchedEl = document.getElementById('cfgGrokPatched');
+  if (patchedEl) patchedEl.checked = Boolean(cfg.grokPatched);
   $('#cfgRules').value = cfg.rules || '';
   const tr = document.getElementById('cfgAgentTransport');
   if (tr) {
@@ -11528,6 +11530,7 @@ async function saveSettings() {
     grokPath: $('#cfgGrokPath').value.trim(),
     maxTurns: Number($('#cfgRounds').value) || 30,
     alwaysApprove: $('#cfgYolo').checked,
+    grokPatched: Boolean(document.getElementById('cfgGrokPatched')?.checked),
     agentTransport: document.getElementById('cfgAgentTransport')?.value || 'auto',
     rules: $('#cfgRules').value,
     ...(window.GrokSettingsExtra?.collectPartial?.() || {}),

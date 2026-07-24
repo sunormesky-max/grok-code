@@ -123,6 +123,11 @@ const store = new Store({
      * headless — always streaming-json (like grok -p)
      */
     agentTransport: 'auto',
+    /**
+     * User asserts custom grok binary includes tool InProgress patch
+     * (patches/grok-build/0001). Also: GROKCODE_PATCHED_CLI=1 or marker file.
+     */
+    grokPatched: false,
   },
 });
 
@@ -173,6 +178,7 @@ function getConfig() {
     personalProtect: store.get('personalProtect') || 'standard',
     trashOnDelete: store.get('trashOnDelete') !== false,
     injectSkillsIndex: store.get('injectSkillsIndex') !== false,
+    grokPatched: Boolean(store.get('grokPatched')),
   };
 }
 
@@ -546,6 +552,7 @@ ipcMain.handle('config:get', () => {
     model: store.get('model') || '',
     reasoningEffort: store.get('reasoningEffort') || '',
     grokPath: store.get('grokPath') || '',
+    grokPatched: Boolean(store.get('grokPatched')),
     alwaysApprove: store.get('alwaysApprove') !== false,
     maxTurns: store.get('maxTurns') || 30,
     rules: store.get('rules') || '',
@@ -583,6 +590,12 @@ ipcMain.handle('config:set', (_e, partial) => {
       'reasoningEffort',
       normalizeReasoningEffort(partial.reasoningEffort)
     );
+  }
+  if (partial.grokPatched !== undefined) {
+    store.set('grokPatched', Boolean(partial.grokPatched));
+  }
+  if (partial.patchedCli !== undefined && partial.grokPatched === undefined) {
+    store.set('grokPatched', Boolean(partial.patchedCli));
   }
   if (partial.grokPath !== undefined) store.set('grokPath', String(partial.grokPath).trim());
   if (partial.alwaysApprove !== undefined) store.set('alwaysApprove', Boolean(partial.alwaysApprove));

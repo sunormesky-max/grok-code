@@ -62,6 +62,22 @@ Point GrokCode **Settings → Grok path** at that binary, or:
 $env:PATH = "C:\path\to\target\release;" + $env:PATH
 ```
 
+## Tell GrokCode the binary is patched
+
+Doctor stays at **warn** until one of:
+
+| Signal | How |
+|--------|-----|
+| Settings | **CLI 含 InProgress 补丁** checkbox |
+| Env | `$env:GROKCODE_PATCHED_CLI = "1"` (or `GROK_PATCHED=1`) |
+| Marker file | Next to `grok.exe`: empty file `.grokcode-cli-patched` |
+| Path name | Binary path contains `patched` / `in-progress` (weak) |
+
+```powershell
+# marker next to custom binary
+New-Item -ItemType File -Path "C:\path\to\target\release\.grokcode-cli-patched" -Force
+```
+
 ## Verify
 
 1. Open GrokCode → Settings → Diagnostics → **一键体检**  

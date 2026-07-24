@@ -593,6 +593,19 @@
             </span>
           </label>
 
+          <label class="field check">
+            <input type="checkbox" id="cfgGrokPatched" />
+            <span>
+              <strong>CLI 含 InProgress 补丁</strong>
+              <small>
+                自建 grok 已 apply
+                <code>patches/grok-build/0001-tool-in-progress.patch</code>
+                （等同 <code>GROKCODE_PATCHED_CLI=1</code> 或二进制旁
+                <code>.grokcode-cli-patched</code>）
+              </small>
+            </span>
+          </label>
+
           <label class="field">
             <span>Agent 传输 <em>对齐开源 grok agent / -p</em></span>
             <select id="cfgAgentTransport">

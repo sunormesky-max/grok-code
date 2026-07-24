@@ -48,7 +48,8 @@ GrokCode is a thin **desktop host** over the local open-source **Grok Build CLI*
 | **acp** | Only `grok agent stdio` (full tool stream when entitled) |
 | **headless** | Only `streaming-json` (like `grok -p`; weak tool UX) |
 
-Env overrides: `GROKCODE_AGENT_TRANSPORT`, `GROKCODE_ACP_NO_FALLBACK=1`.
+Env overrides: `GROKCODE_AGENT_TRANSPORT`, `GROKCODE_ACP_NO_FALLBACK=1`,
+`GROKCODE_PATCHED_CLI=1` (custom InProgress-patched binary).
 
 ## Mode policy (CLI-native)
 
@@ -75,6 +76,12 @@ To make the **agent** emit that frame for normal tools, build a custom CLI with:
 
 `patches/grok-build/0001-tool-in-progress.patch` — see that folder’s README  
 (Settings → Diagnostics → **CLI InProgress 补丁说明**).
+
+Mark the binary as patched so Doctor turns green:
+
+- Settings → **CLI 含 InProgress 补丁**
+- or `GROKCODE_PATCHED_CLI=1`
+- or file `.grokcode-cli-patched` next to the binary
 
 ## Multi-project / multi-task
 

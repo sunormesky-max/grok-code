@@ -190,15 +190,41 @@ function testDiagnosticsShape() {
   assert.equal(typeof diag.getPatchHelp, 'function');
   assert.equal(typeof diag.resolvePatchesDir, 'function');
   assert.equal(typeof diag.checkToolInProgressPatch, 'function');
+  assert.equal(typeof diag.detectPatchedCli, 'function');
   const tip = diag.checkToolInProgressPatch();
   assert.equal(tip.id, 'tool_in_progress');
   assert.equal(tip.ok, true);
-  assert.ok(/InProgress|in_progress|Pending/i.test(tip.detail + tip.fix));
+  assert.ok(/InProgress|in_progress|Pending/i.test(tip.detail + (tip.fix || '')));
+  // Unmarked → warn
+  assert.equal(tip.patched, false);
+  assert.equal(tip.level, 'warn');
+  // Settings flag → ok
+  const marked = diag.checkToolInProgressPatch({ grokPatched: true });
+  assert.equal(marked.patched, true);
+  assert.equal(marked.level, 'ok');
+  assert.ok(marked.reasons.some((r) => /settings/i.test(r)));
+  // Env marker
+  const prev = process.env.GROKCODE_PATCHED_CLI;
+  process.env.GROKCODE_PATCHED_CLI = '1';
+  try {
+    const envDet = diag.detectPatchedCli(null, {});
+    assert.equal(envDet.patched, true);
+  } finally {
+    if (prev === undefined) delete process.env.GROKCODE_PATCHED_CLI;
+    else process.env.GROKCODE_PATCHED_CLI = prev;
+  }
+  // Path heuristic
+  const pathDet = diag.detectPatchedCli(
+    'C:\\\\tools\\\\grok-patched\\\\grok.exe',
+    {}
+  );
+  assert.equal(pathDet.patched, true);
+  assert.ok(pathDet.reasons.includes('path-heuristic'));
   const help = diag.getPatchHelp();
   // Dev tree should find patches/grok-build
   assert.ok(help.dir, 'patches dir resolvable in repo');
   assert.ok(help.readme?.text || help.github, 'readme or github fallback');
-  console.log('ok  diagnostics exports + InProgress patch help');
+  console.log('ok  diagnostics exports + patched CLI detect');
 }
 
 function testPluginsExports() {

@@ -195,6 +195,7 @@ We advertise **no** client fs/terminal capabilities (correct for “agent runs t
 | P2 model list CLI + ACP modelState | Done (1.19.0 `grok models` + init/session) |
 | P2 per-model effort options meta | Done (1.20.0 supportsReasoningEffort + reasoningEfforts) |
 | P2 document InProgress patch in doctor | Done (1.21.0) |
+| P2 detect patched InProgress CLI | Done (1.22.0 env/settings/marker) |
 | Upstream `/feedback` | `patches/grok-build/FEEDBACK.md` |
 
 ---

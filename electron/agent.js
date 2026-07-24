@@ -4,6 +4,7 @@ const os = require('os');
 const path = require('path');
 const { resolveGrokBinary } = require('./grok-cli');
 const { normalizeModelStateJson } = require('./grok-cli');
+const { detectPatchedCli } = require('./diagnostics');
 const {
   AcpClient,
   pickToolInfo,
@@ -1332,7 +1333,7 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
 
       mark(reused ? 'reused' : 'spawned');
       streamDebug(
-        `=== RUN start task=${taskId} transport=acp reused=${reused ? 1 : 0} pid=${client.pid || '?'} cwd=${cwd} resume=${sessionId || '-'} bin=${grokBin} prepMs=${prepMs || 0}`,
+        `=== RUN start task=${taskId} transport=acp reused=${reused ? 1 : 0} pid=${client.pid || '?'} cwd=${cwd} resume=${sessionId || '-'} bin=${grokBin} prepMs=${prepMs || 0} patchedCli=${detectPatchedCli(grokBin, getConfig()).patched ? 1 : 0}`,
         { force: true }
       );
       streamDebug(`task=${taskId} acp-args=${acpArgs.join(' ')}`, { force: true });

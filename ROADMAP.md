@@ -86,11 +86,11 @@ Living plan for the GrokCode open-source ecosystem. Order may change based on co
 - [x] Live model list from `grok models` + ACP modelState (v1.19.0)
 - [x] Per-model effort options from model meta (v1.20.0)
 - [x] Document InProgress CLI patch in doctor / settings / ARCHITECTURE (v1.21.0)
+- [x] Detect/mark patched InProgress CLI (env · settings · marker file) (v1.22.0)
 
 ## Next (host ↔ open-source grok-build)
 
 - [ ] Upstream still needs normal-tool InProgress emit for long tools (stock CLI; patch optional)
-- [ ] Optional auto-detect custom patched grok binary (env marker)
 
 ## Now (UI / experience)
 

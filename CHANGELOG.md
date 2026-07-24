@@ -11,6 +11,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 - See [ROADMAP.md](ROADMAP.md)
 
+## [1.22.0] — 2026-07-24
+
+### Host — detect patched InProgress CLI
+
+Doctor no longer always warns about long-tool progress when you use a custom
+patched `grok`. Mark the binary via settings, env, or a side-car marker file.
+
+- **Settings**: “CLI 含 InProgress 补丁” (`grokPatched`)
+- **Env**: `GROKCODE_PATCHED_CLI=1` or `GROK_PATCHED=1`
+- **Marker**: `.grokcode-cli-patched` (or `grokcode-patch.marker`) next to binary
+- **Path heuristic**: path contains `patched` / `in-progress`
+- Doctor **长工具 InProgress** → `ok` when any signal matches
+- Stream log notes `patchedCli=0|1` on ACP run start
+
 ## [1.21.0] — 2026-07-24
 
 ### Host ↔ open-source — document CLI InProgress patch
