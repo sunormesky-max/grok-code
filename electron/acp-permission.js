@@ -105,9 +105,11 @@ function buildPermissionResult(outcome, optionId) {
 }
 
 /**
- * Full handler for session/request_permission params.
+ * Full handler for session/request_permission params (auto path only).
+ * When autoApprove is false, callers should **park** for host UI instead of
+ * using mode:'deny' — cancel-without-UI was a footgun for careful plan exec.
  * @param {object} params
- * @param {{ autoApprove?: boolean }} cfg
+ * @param {{ autoApprove?: boolean, preferAlways?: boolean }} cfg
  */
 function resolvePermissionResponse(params, cfg = {}) {
   const options = extractOptions(params);
@@ -117,7 +119,7 @@ function resolvePermissionResponse(params, cfg = {}) {
       result: buildPermissionResult('cancelled'),
       options,
       selected: null,
-      mode: 'deny',
+      mode: 'needs_user', // signal: host should park, not treat as hard deny
     };
   }
   const optionId = pickAutoApproveOptionId(options, {
@@ -139,10 +141,49 @@ function resolvePermissionResponse(params, cfg = {}) {
   };
 }
 
+/**
+ * Pull tool name/args from request_permission params (defensive wire shapes).
+ * @param {object} params
+ */
+function extractToolFromPermissionParams(params = {}) {
+  const tc =
+    params.toolCall ||
+    params.tool_call ||
+    params.request?.toolCall ||
+    params.request?.tool_call ||
+    {};
+  const name = String(
+    tc.title || tc.name || tc.kind || params.toolName || params.tool_name || 'tool'
+  );
+  let args =
+    tc.rawInput ||
+    tc.raw_input ||
+    tc.input ||
+    tc.arguments ||
+    tc.args ||
+    params.arguments ||
+    {};
+  if (typeof args === 'string') {
+    try {
+      args = JSON.parse(args);
+    } catch {
+      args = { raw: args };
+    }
+  }
+  if (!args || typeof args !== 'object') args = {};
+  return {
+    toolCallId: String(tc.toolCallId || tc.tool_call_id || tc.id || ''),
+    name,
+    title: String(tc.title || name),
+    args,
+  };
+}
+
 module.exports = {
   normalizeOption,
   extractOptions,
   pickAutoApproveOptionId,
   buildPermissionResult,
   resolvePermissionResponse,
+  extractToolFromPermissionParams,
 };

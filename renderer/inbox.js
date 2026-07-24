@@ -6,7 +6,7 @@
  * First resolve wins; resolving removes the item (task bar handlers also clear).
  */
 (function (global) {
-  /** @typedef {'plan'|'question'} InboxKind */
+  /** @typedef {'plan'|'question'|'permission'} InboxKind */
   /**
    * @typedef {object} InboxItem
    * @property {string} id
@@ -109,6 +109,7 @@
   function kindDefaultTitle(kind) {
     if (kind === 'plan') return t('inbox.kind.plan', 'Plan approval');
     if (kind === 'question') return t('inbox.kind.question', 'Agent question');
+    if (kind === 'permission') return t('inbox.kind.permission', 'Tool permission');
     return kind;
   }
 
@@ -247,9 +248,13 @@
             ? en
               ? 'PLAN'
               : '计划'
-            : en
-              ? 'ASK'
-              : '提问';
+            : it.kind === 'permission'
+              ? en
+                ? 'PERM'
+                : '授权'
+              : en
+                ? 'ASK'
+                : '提问';
         const where = [it.projectName, it.taskTitle].filter(Boolean).join(' · ') || it.taskId;
         const preview = String(it.body || '')
           .replace(/\s+/g, ' ')
@@ -271,9 +276,34 @@
               <input type="text" class="inbox-feedback-input" data-id="${esc(it.id)}" placeholder="${esc(en ? 'What should change…' : '希望如何调整…')}" />
             </label>
             <div class="inbox-actions">
-              <button type="button" class="btn small primary" data-act="approve" data-id="${esc(it.id)}">✓ ${esc(en ? 'Approve' : '批准')}</button>
+              <button type="button" class="btn small primary" data-act="approve-yolo" data-id="${esc(it.id)}">✓ ${esc(en ? 'YOLO' : 'YOLO')}</button>
+              <button type="button" class="btn small ghost" data-act="approve-ask" data-id="${esc(it.id)}">✓ ${esc(en ? 'Ask tools' : '逐次确认')}</button>
               <button type="button" class="btn small ghost" data-act="revise" data-id="${esc(it.id)}">✎ ${esc(en ? 'Revise' : '修改')}</button>
               <button type="button" class="btn small ghost" data-act="quit" data-id="${esc(it.id)}">✕ ${esc(en ? 'Quit' : '放弃')}</button>
+              <button type="button" class="btn small ghost" data-act="goto" data-id="${esc(it.id)}">↗ ${esc(en ? 'Task' : '任务')}</button>
+            </div>
+          </article>`;
+        }
+        if (it.kind === 'permission') {
+          const opts = Array.isArray(it.meta?.options) ? it.meta.options : [];
+          const optHtml = opts
+            .map(
+              (o) =>
+                `<button type="button" class="btn small ${/allow|approve/i.test(String(o.optionId) + o.name) ? 'primary' : 'ghost'}" data-act="perm-opt" data-id="${esc(it.id)}" data-opt="${esc(o.optionId || '')}">${esc(o.name || o.optionId || '?')}</button>`
+            )
+            .join('');
+          return `
+          <article class="inbox-card" data-id="${esc(it.id)}" data-kind="permission">
+            <div class="inbox-card-top">
+              <span class="inbox-chip kind-perm">${kindLabel}</span>
+              <span class="inbox-where" title="${esc(where)}">${esc(where)}</span>
+              <span class="inbox-age">${esc(age)}</span>
+            </div>
+            <div class="inbox-card-title">${esc(it.title)}</div>
+            ${preview ? `<div class="inbox-preview-text">${esc(preview)}</div>` : ''}
+            <div class="inbox-actions">
+              ${optHtml}
+              <button type="button" class="btn small ghost" data-act="perm-cancel" data-id="${esc(it.id)}">✕ ${esc(en ? 'Cancel' : '取消')}</button>
               <button type="button" class="btn small ghost" data-act="goto" data-id="${esc(it.id)}">↗ ${esc(en ? 'Task' : '任务')}</button>
             </div>
           </article>`;
@@ -305,7 +335,9 @@
       .join('');
 
     list.querySelectorAll('[data-act]').forEach((btn) => {
-      btn.addEventListener('click', () => onCardAction(btn.dataset.act, btn.dataset.id));
+      btn.addEventListener('click', () =>
+        onCardAction(btn.dataset.act, btn.dataset.id, { optionId: btn.dataset.opt })
+      );
     });
   }
 
@@ -318,7 +350,7 @@
     return en ? `${h}h` : `${h}时`;
   }
 
-  async function onCardAction(act, id) {
+  async function onCardAction(act, id, extra = {}) {
     const it = items.get(id);
     if (!it) return;
     const handlers = global.GrokInboxHandlers || {};
@@ -332,6 +364,59 @@
       return;
     }
 
+    if (it.kind === 'permission') {
+      if (act === 'perm-cancel') {
+        if (!tryBeginResolve(id)) {
+          global.toast?.(t('inbox.busy', '正在处理，请勿重复点击'), 'err');
+          return;
+        }
+        try {
+          const r = await handlers.replyPermission?.(it, { cancelled: true });
+          if (r && r.ok === false) {
+            endResolve(id);
+            global.toast?.(r.error || 'permission failed', 'err');
+            return;
+          }
+          resolve(id);
+          try {
+            handlers.onPermissionResolved?.(it);
+          } catch {
+            /* optional */
+          }
+          global.toast?.(t('inbox.perm.cancelled', '已取消授权'), 'ok');
+        } catch (e) {
+          endResolve(id);
+          global.toast?.(e.message || String(e), 'err');
+        }
+        return;
+      }
+      if (act === 'perm-opt' && extra.optionId) {
+        if (!tryBeginResolve(id)) {
+          global.toast?.(t('inbox.busy', '正在处理，请勿重复点击'), 'err');
+          return;
+        }
+        try {
+          const r = await handlers.replyPermission?.(it, { optionId: extra.optionId });
+          if (r && r.ok === false) {
+            endResolve(id);
+            global.toast?.(r.error || 'permission failed', 'err');
+            return;
+          }
+          resolve(id);
+          try {
+            handlers.onPermissionResolved?.(it);
+          } catch {
+            /* optional */
+          }
+          global.toast?.(`${t('inbox.perm.ok', '已允许')} · ${extra.optionId}`, 'ok');
+        } catch (e) {
+          endResolve(id);
+          global.toast?.(e.message || String(e), 'err');
+        }
+      }
+      return;
+    }
+
     if (it.kind === 'plan') {
       const root = document.getElementById('inboxList');
       let feedback = '';
@@ -339,8 +424,14 @@
         if (inp.dataset.id === id) feedback = inp.value?.trim() || '';
       });
       let outcome = 'cancelled';
-      if (act === 'approve') outcome = 'approved';
-      else if (act === 'quit') outcome = 'abandoned';
+      let execTier = '';
+      if (act === 'approve' || act === 'approve-yolo') {
+        outcome = 'approved';
+        execTier = 'yolo';
+      } else if (act === 'approve-ask') {
+        outcome = 'approved';
+        execTier = 'ask';
+      } else if (act === 'quit') outcome = 'abandoned';
       else if (act === 'revise') outcome = 'cancelled';
       else return;
       if (!tryBeginResolve(id)) {
@@ -348,7 +439,12 @@
         return;
       }
       try {
-        const r = await handlers.replyPlan?.(it, outcome, outcome === 'cancelled' ? feedback : '');
+        const r = await handlers.replyPlan?.(
+          it,
+          outcome,
+          outcome === 'cancelled' ? feedback : '',
+          execTier || undefined
+        );
         if (r && r.ok === false) {
           endResolve(id);
           global.toast?.(r.error || 'plan reply failed', 'err');
@@ -365,8 +461,8 @@
         global.toast?.(
           outcome === 'approved'
             ? en
-              ? 'Plan approved'
-              : '已批准计划'
+              ? `Plan approved${execTier === 'ask' ? ' · ask tools' : ' · YOLO'}`
+              : `已批准计划${execTier === 'ask' ? ' · 逐次确认' : ' · YOLO'}`
             : outcome === 'abandoned'
               ? en
                 ? 'Plan abandoned'

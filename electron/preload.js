@@ -69,10 +69,12 @@ contextBridge.exposeInMainWorld('grok', {
   stopAgent: (payload) => ipcRenderer.invoke('agent:stop', payload || {}),
   clearSession: (payload) => ipcRenderer.invoke('agent:clearSession', payload || {}),
   listRunningAgents: () => ipcRenderer.invoke('agent:running'),
-  /** Reply to x.ai/exit_plan_mode (approve | abandoned | cancelled + feedback) */
+  /** Reply to x.ai/exit_plan_mode (approve | abandoned | cancelled + feedback + execTier) */
   replyPlanApproval: (payload) => ipcRenderer.invoke('agent:plan_reply', payload || {}),
   /** Reply to x.ai/ask_user_question (accepted | cancelled | chat_about_this | skip_interview) */
   replyUserQuestion: (payload) => ipcRenderer.invoke('agent:user_question_reply', payload || {}),
+  /** Reply to parked session/request_permission (optionId from CLI list only) */
+  replyPermission: (payload) => ipcRenderer.invoke('agent:permission_reply', payload || {}),
   /** ACP session/set_mode — modeId: default | plan | ask */
   setSessionMode: (payload) => ipcRenderer.invoke('agent:set_mode', payload || {}),
   /** ACP session/set_model — live model switch when ACP warm */

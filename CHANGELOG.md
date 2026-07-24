@@ -11,6 +11,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 - See [ROADMAP.md](ROADMAP.md)
 
+## [1.30.0] — 2026-07-24
+
+### Plan exec tiers + interactive tool permission
+
+Thin-host docking only: still CLI-owned tools and optionIds.
+
+- **Plan approval**: two execute tiers after approve  
+  - **YOLO tools** — set live `client.autoApprove=true` for this flight  
+  - **Ask tools** — `autoApprove=false`; each tool parks for UI  
+- **`session/request_permission`**: when not YOLO, **park** for host UI  
+  (no more silent cancel when careful). Buttons = CLI option list only.  
+- Inbox: permission cards + plan YOLO/ask buttons  
+- IPC `agent:permission_reply` / `replyPermission`  
+- Unit tests: park path + YOLO auto path  
+
+Does **not** invent host modes or optionIds.
+
 ## [1.29.1] — 2026-07-24
 
 ### Harden inherited UX (do not import OpenWorker flow bugs)

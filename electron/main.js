@@ -1315,7 +1315,7 @@ ipcMain.handle('agent:run', async (_e, payload) => {
 
 /** Reply to parked x.ai/exit_plan_mode reverse-request */
 ipcMain.handle('agent:plan_reply', (_e, payload = {}) => {
-  const { projectId, taskId, requestId, outcome, feedback } = payload || {};
+  const { projectId, taskId, requestId, outcome, feedback, execTier } = payload || {};
   if (!projectId || !taskId || requestId == null) {
     return { ok: false, error: 'projectId, taskId, requestId required' };
   }
@@ -1326,6 +1326,24 @@ ipcMain.handle('agent:plan_reply', (_e, payload = {}) => {
   return p.agent.replyPlanApproval(taskId, requestId, {
     outcome: outcome || 'cancelled',
     feedback,
+    execTier,
+  });
+});
+
+/** Reply to parked session/request_permission (CLI optionIds only) */
+ipcMain.handle('agent:permission_reply', (_e, payload = {}) => {
+  const { projectId, taskId, requestId, optionId, selected, cancelled } = payload || {};
+  if (!projectId || !taskId || requestId == null) {
+    return { ok: false, error: 'projectId, taskId, requestId required' };
+  }
+  const p = projects.get(projectId);
+  if (!p?.agent?.replyPermission) {
+    return { ok: false, error: 'project not open' };
+  }
+  return p.agent.replyPermission(taskId, requestId, {
+    optionId: optionId || selected,
+    selected: selected || optionId,
+    cancelled: Boolean(cancelled),
   });
 });
 

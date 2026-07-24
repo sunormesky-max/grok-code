@@ -2472,7 +2472,9 @@ function bindUi() {
         const bars =
           item.kind === 'plan'
             ? task?.pane?.querySelectorAll?.('.plan-approval-bar')
-            : task?.pane?.querySelectorAll?.('.user-question-bar');
+            : item.kind === 'permission'
+              ? task?.pane?.querySelectorAll?.('.permission-bar')
+              : task?.pane?.querySelectorAll?.('.user-question-bar');
         let bar = null;
         bars?.forEach?.((el) => {
           if (String(el.dataset.requestId || '') === rid) bar = el;
@@ -2487,13 +2489,14 @@ function bindUi() {
         }
       });
     },
-    replyPlan: async (item, outcome, feedback) => {
+    replyPlan: async (item, outcome, feedback, execTier) => {
       return window.grok.replyPlanApproval({
         projectId: item.projectId || pid(),
         taskId: item.taskId,
         requestId: item.requestId,
         outcome,
         feedback: feedback || undefined,
+        execTier: outcome === 'approved' ? execTier : undefined,
       });
     },
     replyQuestion: async (item, result) => {
@@ -2504,17 +2507,31 @@ function bindUi() {
         result: result || { outcome: 'cancelled' },
       });
     },
+    replyPermission: async (item, payload) => {
+      return window.grok.replyPermission({
+        projectId: item.projectId || pid(),
+        taskId: item.taskId,
+        requestId: item.requestId,
+        ...(payload || { cancelled: true }),
+      });
+    },
     onPlanResolved: (item) => {
       const task = window.TaskStore?.get?.(item.taskId);
-      task?.pane
-        ?.querySelectorAll?.(`.plan-approval-bar[data-request-id="${item.requestId}"]`)
-        ?.forEach((el) => el.remove());
+      task?.pane?.querySelectorAll?.('.plan-approval-bar')?.forEach((el) => {
+        if (String(el.dataset.requestId || '') === String(item.requestId)) el.remove();
+      });
     },
     onQuestionResolved: (item) => {
       const task = window.TaskStore?.get?.(item.taskId);
-      task?.pane
-        ?.querySelectorAll?.(`.user-question-bar[data-request-id="${item.requestId}"]`)
-        ?.forEach((el) => el.remove());
+      task?.pane?.querySelectorAll?.('.user-question-bar')?.forEach((el) => {
+        if (String(el.dataset.requestId || '') === String(item.requestId)) el.remove();
+      });
+    },
+    onPermissionResolved: (item) => {
+      const task = window.TaskStore?.get?.(item.taskId);
+      task?.pane?.querySelectorAll?.('.permission-bar')?.forEach((el) => {
+        if (String(el.dataset.requestId || '') === String(item.requestId)) el.remove();
+      });
     },
   };
   window.GrokInbox?.paintBadge?.();
@@ -9709,18 +9726,50 @@ function bindAgentEvents() {
     }),
     window.grok.on('agent:permission', (d) => {
       const task = taskFromEvent(d);
+      if (!task) return;
+      if (d.pending && d.requestId != null) {
+        showPermissionBar(task, d);
+        if (isActiveTask(task)) {
+          pushLiveEvent({
+            kind: 'status',
+            title: localeIsEn() ? 'Tool permission' : '工具授权',
+            sub: d.toolName || d.toolTitle || 'CLI request_permission',
+            projectId: task.projectId,
+            immediate: true,
+          });
+          setLivePhase(localeIsEn() ? 'Permission' : '工具授权', task.title);
+        } else {
+          pushLiveEvent({
+            kind: 'status',
+            title: localeIsEn() ? `Perm · ${task.title}` : `授权 · ${task.title}`,
+            sub: localeIsEn() ? 'Waiting in Inbox' : '等待 Inbox 处理',
+            projectId: task.projectId,
+            immediate: true,
+          });
+        }
+        return;
+      }
+      if (d.requestId != null) {
+        window.GrokInbox?.removeMatching?.({
+          kind: 'permission',
+          taskId: task.id,
+          requestId: d.requestId,
+        });
+      }
       if (!isActiveTask(task)) return;
       const sub =
         d.mode === 'auto'
-          ? `自动批准 · ${d.selected || '?'}`
-          : d.mode === 'deny'
-            ? '已拒绝（非 YOLO）'
-            : `无 allow 选项 · cancelled`;
+          ? `${localeIsEn() ? 'auto' : '自动'} · ${d.selected || '?'}`
+          : d.mode === 'no-allow-option'
+            ? localeIsEn()
+              ? 'no allow option · cancelled'
+              : '无 allow 选项 · 已取消'
+            : d.selected || d.mode || 'done';
       pushLiveEvent({
         kind: 'status',
-        title: '权限',
+        title: localeIsEn() ? 'Permission' : '权限',
         sub,
-        projectId: task?.projectId,
+        projectId: task.projectId,
       });
     }),
     window.grok.on('agent:plan_approval', (d) => {
@@ -10535,12 +10584,13 @@ function showPlanApprovalBar(task, d) {
       <span>${en ? 'Feedback (optional, for request changes)' : '修改意见（可选，用于「要求修改」）'}</span>
       <input type="text" class="plan-feedback-input" placeholder="${en ? 'What should change…' : '希望如何调整…'}" />
     </label>
-    <div class="retry-actions">
-      <button type="button" class="btn small primary" data-act="approve">✓ ${en ? 'Approve' : '批准执行'}</button>
+    <div class="retry-actions plan-exec-tiers">
+      <button type="button" class="btn small primary" data-act="approve-yolo" title="${en ? 'Approve plan; auto-allow tool options for this flight' : '批准计划；本回合工具自动允许（CLI option）'}">✓ ${en ? 'Approve · YOLO tools' : '批准 · YOLO 工具'}</button>
+      <button type="button" class="btn small ghost" data-act="approve-ask" title="${en ? 'Approve plan; each tool parks for your pick from CLI options' : '批准计划；后续工具逐次弹出 CLI 选项'}">✓ ${en ? 'Approve · ask tools' : '批准 · 工具逐次确认'}</button>
       <button type="button" class="btn small ghost" data-act="revise">✎ ${en ? 'Request changes' : '要求修改'}</button>
       <button type="button" class="btn small ghost" data-act="quit">✕ ${en ? 'Quit plan' : '放弃计划'}</button>
     </div>`;
-  const send = async (outcome) => {
+  const send = async (outcome, execTier) => {
     const inboxId = window.GrokInbox?.itemId?.('plan', task.id, d.requestId);
     // Shared lock with Inbox drawer — no double RPC to ACP
     if (inboxId && window.GrokInbox?.isResolving?.(inboxId)) {
@@ -10562,6 +10612,7 @@ function showPlanApprovalBar(task, d) {
         requestId: d.requestId,
         outcome,
         feedback: outcome === 'cancelled' ? feedback || undefined : undefined,
+        execTier: outcome === 'approved' ? execTier : undefined,
       });
       if (!r?.ok) {
         if (inboxId) window.GrokInbox?.endResolve?.(inboxId);
@@ -10577,11 +10628,21 @@ function showPlanApprovalBar(task, d) {
         taskId: task.id,
         requestId: d.requestId,
       });
+      const tierNote =
+        outcome === 'approved' && execTier === 'ask'
+          ? en
+            ? ' · tools will ask'
+            : ' · 工具将逐次确认'
+          : outcome === 'approved' && execTier === 'yolo'
+            ? en
+              ? ' · YOLO tools'
+              : ' · YOLO 工具'
+            : '';
       toast(
         outcome === 'approved'
           ? en
-            ? 'Plan approved'
-            : '已批准计划'
+            ? `Plan approved${tierNote}`
+            : `已批准计划${tierNote}`
           : outcome === 'abandoned'
             ? en
               ? 'Plan abandoned'
@@ -10599,7 +10660,8 @@ function showPlanApprovalBar(task, d) {
       });
     }
   };
-  bar.querySelector('[data-act="approve"]').onclick = () => send('approved');
+  bar.querySelector('[data-act="approve-yolo"]').onclick = () => send('approved', 'yolo');
+  bar.querySelector('[data-act="approve-ask"]').onclick = () => send('approved', 'ask');
   bar.querySelector('[data-act="revise"]').onclick = () => send('cancelled');
   bar.querySelector('[data-act="quit"]').onclick = () => send('abandoned');
   task.pane.appendChild(bar);
@@ -10607,6 +10669,129 @@ function showPlanApprovalBar(task, d) {
   window.GrokA11y?.presentInteractive?.(
     bar,
     en ? 'Plan approval required' : '需要计划审批',
+    { assertive: true, focus: isActiveTask(task) }
+  );
+}
+
+/**
+ * ACP session/request_permission — park when YOLO off / plan "ask tools".
+ * Only shows optionIds returned by the CLI (never invent).
+ */
+function showPermissionBar(task, d) {
+  task = task || T();
+  if (!task?.pane || !d?.requestId) return;
+  const en = localeIsEn();
+  const options = Array.isArray(d.options) ? d.options : [];
+  const proj = window.ProjectStore?.get?.(task.projectId);
+  const human = window.GrokHumanize?.formatLine?.(
+    window.GrokHumanize.humanizeApproval?.(d.toolName || d.toolTitle || 'tool', d.toolArgs || {}, {
+      en,
+    })
+  );
+  const title = human || d.toolTitle || d.toolName || (en ? 'Tool permission' : '工具授权');
+  window.GrokInbox?.upsert?.({
+    kind: 'permission',
+    taskId: task.id,
+    projectId: task.projectId || pid(),
+    requestId: d.requestId,
+    taskTitle: task.title || '',
+    projectName: proj?.name || '',
+    title,
+    body: summarizeToolSub(d.toolName, d.toolArgs || {}),
+    meta: { options, toolName: d.toolName, toolArgs: d.toolArgs },
+  });
+  task.pane.querySelectorAll('.permission-bar').forEach((el) => el.remove());
+  const bar = document.createElement('div');
+  bar.className = 'permission-bar msg status';
+  bar.dataset.requestId = String(d.requestId);
+  const optBtns = options
+    .map((o, i) => {
+      const id = esc(o.optionId || '');
+      const label = esc(o.name || o.optionId || `opt ${i + 1}`);
+      const isAllow = /allow|approve|yes|ok/i.test(String(o.optionId) + ' ' + String(o.name));
+      const isDeny = /reject|deny|cancel|no\b/i.test(String(o.optionId) + ' ' + String(o.name));
+      const cls = isAllow ? 'btn small primary' : isDeny ? 'btn small ghost' : 'btn small ghost';
+      return `<button type="button" class="${cls}" data-opt="${id}" title="${id}">${label}</button>`;
+    })
+    .join('');
+  let argsPreview = '';
+  try {
+    argsPreview = JSON.stringify(summarizeArgs(d.toolName, d.toolArgs || {}), null, 0);
+  } catch {
+    argsPreview = '';
+  }
+  bar.innerHTML = `
+    <div class="permission-head">
+      <strong>${en ? 'Tool permission' : '工具授权'}</strong>
+      <span class="muted">${en ? 'CLI request_permission' : '对齐 CLI · request_permission'}</span>
+    </div>
+    <div class="permission-title">${esc(title)}</div>
+    ${argsPreview ? `<div class="permission-args muted">${esc(argsPreview)}</div>` : ''}
+    <div class="retry-actions permission-opts">
+      ${optBtns || `<span class="muted">${en ? 'No options from CLI' : 'CLI 未返回选项'}</span>`}
+      <button type="button" class="btn small ghost" data-act="cancel">✕ ${en ? 'Cancel' : '取消'}</button>
+    </div>`;
+  const send = async (payload) => {
+    const inboxId = window.GrokInbox?.itemId?.('permission', task.id, d.requestId);
+    if (inboxId && window.GrokInbox?.isResolving?.(inboxId)) {
+      toast(en ? 'Already resolving…' : '正在处理，请勿重复点击', 'err');
+      return;
+    }
+    if (inboxId && window.GrokInbox?.tryBeginResolve && !window.GrokInbox.tryBeginResolve(inboxId)) {
+      toast(en ? 'Already resolving…' : '正在处理，请勿重复点击', 'err');
+      return;
+    }
+    bar.querySelectorAll('button').forEach((b) => {
+      b.disabled = true;
+    });
+    try {
+      const r = await window.grok.replyPermission({
+        projectId: task.projectId || pid(),
+        taskId: task.id,
+        requestId: d.requestId,
+        ...payload,
+      });
+      if (!r?.ok) {
+        if (inboxId) window.GrokInbox?.endResolve?.(inboxId);
+        toast(r?.error || 'permission reply failed', 'err');
+        bar.querySelectorAll('button').forEach((b) => {
+          b.disabled = false;
+        });
+        return;
+      }
+      bar.remove();
+      window.GrokInbox?.removeMatching?.({
+        kind: 'permission',
+        taskId: task.id,
+        requestId: d.requestId,
+      });
+      toast(
+        payload.cancelled
+          ? en
+            ? 'Permission cancelled'
+            : '已取消授权'
+          : en
+            ? `Allowed · ${payload.optionId || payload.selected || ''}`
+            : `已允许 · ${payload.optionId || payload.selected || ''}`,
+        'ok'
+      );
+    } catch (err) {
+      if (inboxId) window.GrokInbox?.endResolve?.(inboxId);
+      toast(err.message || String(err), 'err');
+      bar.querySelectorAll('button').forEach((b) => {
+        b.disabled = false;
+      });
+    }
+  };
+  bar.querySelectorAll('[data-opt]').forEach((btn) => {
+    btn.onclick = () => send({ optionId: btn.dataset.opt });
+  });
+  bar.querySelector('[data-act="cancel"]').onclick = () => send({ cancelled: true });
+  task.pane.appendChild(bar);
+  scrollMessages(true, task);
+  window.GrokA11y?.presentInteractive?.(
+    bar,
+    en ? 'Tool permission required' : '需要工具授权',
     { assertive: true, focus: isActiveTask(task) }
   );
 }

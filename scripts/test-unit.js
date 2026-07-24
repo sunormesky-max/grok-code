@@ -526,11 +526,27 @@ function testAcpPermissionPicker() {
   assert.equal(auto.result.outcome.outcome, 'selected');
   assert.equal(auto.result.outcome.optionId, 'allow-once');
 
-  const deny = resolvePermissionResponse({ options: opts }, { autoApprove: false });
-  assert.equal(deny.mode, 'deny');
-  assert.equal(deny.result.outcome.outcome, 'cancelled');
+  const needs = resolvePermissionResponse({ options: opts }, { autoApprove: false });
+  assert.equal(needs.mode, 'needs_user', 'host should park, not hard-deny');
+  assert.equal(needs.result.outcome.outcome, 'cancelled'); // unused when parking
 
   assert.equal(extractOptions({ options: opts }).length, 3);
+
+  const {
+    extractToolFromPermissionParams,
+    buildPermissionResult,
+  } = require(path.join(root, 'electron', 'acp-permission.js'));
+  const tool = extractToolFromPermissionParams({
+    toolCall: {
+      toolCallId: 'tc1',
+      title: 'run_terminal_command',
+      rawInput: { command: 'npm test' },
+    },
+  });
+  assert.equal(tool.toolCallId, 'tc1');
+  assert.ok(tool.args.command === 'npm test');
+  const selected = buildPermissionResult('selected', 'allow-once');
+  assert.equal(selected.outcome.optionId, 'allow-once');
 
   // snake_case wire + allow_once kind
   const snake = extractOptions({
@@ -714,6 +730,75 @@ function testExitPlanModeApproval() {
   assert.equal(JSON.parse(writes[0].trim()).result.outcome, 'abandoned');
 
   console.log('ok  exit_plan_mode park + resolveInteractive');
+}
+
+function testPermissionParkInteractive() {
+  const { AcpClient } = require(path.join(root, 'electron', 'acp-client.js'));
+  const client = new AcpClient({
+    bin: 'grok',
+    autoApprove: false,
+  });
+  // stub respond
+  const replies = [];
+  client._respond = (id, result) => {
+    replies.push({ id, result });
+  };
+  client.alive = true;
+  client.child = { stdin: { writable: true } };
+
+  let parked = null;
+  client.onPermission = (info) => {
+    parked = info;
+  };
+
+  client._handleAgentRequest({
+    id: 77,
+    method: 'session/request_permission',
+    params: {
+      options: [
+        { optionId: 'allow-once', name: 'Allow once', kind: 'allowOnce' },
+        { optionId: 'reject', name: 'Reject', kind: 'rejectOnce' },
+      ],
+      toolCall: {
+        toolCallId: 't1',
+        title: 'write_file',
+        rawInput: { path: 'a.js' },
+      },
+    },
+  });
+  assert.ok(parked?.pending, 'parked pending');
+  assert.equal(parked.requestId, 77);
+  assert.equal(replies.length, 0, 'no auto reply while parked');
+  assert.ok(parked.options.some((o) => o.optionId === 'allow-once'));
+
+  const r = client.resolveInteractive(77, { optionId: 'allow-once' });
+  assert.equal(r.ok, true);
+  assert.equal(r.kind, 'permission');
+  assert.equal(r.selected, 'allow-once');
+  assert.equal(replies.length, 1);
+  assert.equal(replies[0].result.outcome.optionId, 'allow-once');
+
+  // YOLO path still auto
+  const client2 = new AcpClient({ bin: 'grok', autoApprove: true });
+  const autoReplies = [];
+  client2._respond = (id, result) => autoReplies.push({ id, result });
+  client2.alive = true;
+  client2.child = { stdin: { writable: true } };
+  let autoInfo = null;
+  client2.onPermission = (info) => {
+    autoInfo = info;
+  };
+  client2._handleAgentRequest({
+    id: 88,
+    method: 'session/request_permission',
+    params: {
+      options: [{ optionId: 'allow-once', name: 'Allow once', kind: 'allowOnce' }],
+    },
+  });
+  assert.equal(autoInfo?.pending, false);
+  assert.equal(autoInfo?.mode, 'auto');
+  assert.equal(autoReplies.length, 1);
+  console.log('ok  permission park + YOLO auto');
 }
 
 /**
@@ -1369,6 +1454,7 @@ try {
   testAcpInitializeIdentity();
   testExitPlanModeApproval();
   testAskUserQuestion();
+  testPermissionParkInteractive();
   testDoctorPromptProbeSkipped();
   testPickChunkTextMultimodal();
   testIpcChannelContract();

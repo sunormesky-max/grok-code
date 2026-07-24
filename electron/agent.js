@@ -1242,7 +1242,13 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
         };
 
         client.onPermission = (info) => {
+          streamDebug(
+            `task=${taskId} permission pending=${info?.pending ? 1 : 0} mode=${info?.mode} req=${info?.requestId} tool=${info?.toolName || ''}`,
+            { force: true }
+          );
           emitT('agent:permission', {
+            requestId: info.requestId,
+            pending: Boolean(info.pending),
             mode: info.mode,
             selected: info.selected,
             method: info.method || 'session/request_permission',
@@ -1252,7 +1258,14 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
               name: o.name,
               kind: o.kind,
             })),
+            toolName: info.toolName || '',
+            toolTitle: info.toolTitle || '',
+            toolArgs: info.toolArgs || {},
+            toolCallId: info.toolCallId || '',
           });
+          if (info?.pending) {
+            setPhase('running', '等待工具授权…');
+          }
         };
         // Upstream x.ai/exit_plan_mode — park until UI approve/revise/quit
         client.onPlanApproval = (info) => {
@@ -2476,6 +2489,8 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
 
   /**
    * Host answered x.ai/exit_plan_mode (approve | abandoned | cancelled + feedback).
+   * Optional execTier: 'yolo' | 'ask' flips live client.autoApprove for remaining tools
+   * (settings alwaysApprove is not rewritten — flight-only).
    */
   function replyPlanApproval(taskId, requestId, body = {}) {
     const child = children.get(String(taskId));
@@ -2486,6 +2501,12 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
     if (!c || typeof c.resolveInteractive !== 'function') {
       return { ok: false, error: 'no active ACP client for task' };
     }
+    const tier = String(body.execTier || body.exec_tier || '').toLowerCase();
+    if (tier === 'yolo' || tier === 'auto') {
+      c.autoApprove = true;
+    } else if (tier === 'ask' || tier === 'careful' || tier === 'interactive') {
+      c.autoApprove = false;
+    }
     const outcome = String(body.outcome || 'cancelled');
     const result = { outcome };
     if (body.feedback != null && String(body.feedback).trim()) {
@@ -2493,7 +2514,29 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
     }
     const r = c.resolveInteractive(requestId, result);
     streamDebug(
-      `task=${taskId} plan_approval reply req=${requestId} outcome=${outcome} ok=${r.ok ? 1 : 0}`,
+      `task=${taskId} plan_approval reply req=${requestId} outcome=${outcome} tier=${tier || '-'} autoApprove=${c.autoApprove ? 1 : 0} ok=${r.ok ? 1 : 0}`,
+      { force: true }
+    );
+    return { ...r, autoApprove: Boolean(c.autoApprove), execTier: tier || null };
+  }
+
+  /**
+   * Host answered parked session/request_permission (CLI optionId only).
+   * @param {string} taskId
+   * @param {string|number} requestId
+   * @param {{ optionId?: string, selected?: string, cancelled?: boolean }} body
+   */
+  function replyPermission(taskId, requestId, body = {}) {
+    const child = children.get(String(taskId));
+    const client = child?.__acpClient;
+    const pooled = !client ? acpPool.get(String(taskId))?.client : null;
+    const c = client || pooled;
+    if (!c || typeof c.resolveInteractive !== 'function') {
+      return { ok: false, error: 'no active ACP client for task' };
+    }
+    const r = c.resolveInteractive(requestId, body || { cancelled: true });
+    streamDebug(
+      `task=${taskId} permission reply req=${requestId} outcome=${r.outcome || '?'} sel=${r.selected || '-'} ok=${r.ok ? 1 : 0}`,
       { force: true }
     );
     return r;
@@ -2533,6 +2576,7 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
     reapTracked,
     replyPlanApproval,
     replyUserQuestion,
+    replyPermission,
     setSessionMode,
     setSessionModel,
     invalidateWarmSessions,

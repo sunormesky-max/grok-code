@@ -9,7 +9,12 @@
  *   session/update: agent_message_chunk | agent_thought_chunk | tool_call | tool_call_update
  */
 const { spawn } = require('child_process');
-const { resolvePermissionResponse } = require('./acp-permission');
+const {
+  resolvePermissionResponse,
+  extractOptions,
+  buildPermissionResult,
+  extractToolFromPermissionParams,
+} = require('./acp-permission');
 
 class AcpClient {
   /**
@@ -237,27 +242,62 @@ class AcpClient {
     const { method, params } = this._unwrapAgentMethod(msg);
     const reqId = msg.id;
 
-    // Auto-approve tool permissions when YOLO / always-approve
+    // Tool permissions: YOLO auto-pick CLI options, else park for host UI
+    // (never invent optionIds; never blank-cancel when user asked for careful mode)
     if (method === 'session/request_permission' || method.endsWith('/request_permission')) {
       // exit_plan_mode is NOT request_permission — handled below as x.ai/exit_plan_mode
-      const resolved = resolvePermissionResponse(params || {}, {
-        autoApprove: this.autoApprove,
-        preferAlways: false, // match grok-build: YOLO uses AllowOnce, not AllowAlways
+      if (this.autoApprove) {
+        const resolved = resolvePermissionResponse(params || {}, {
+          autoApprove: true,
+          preferAlways: false, // match grok-build: YOLO uses AllowOnce, not AllowAlways
+        });
+        try {
+          if (typeof this.onPermission === 'function') {
+            this.onPermission({
+              method,
+              params,
+              selected: resolved.selected,
+              mode: resolved.mode,
+              options: resolved.options,
+              pending: false,
+              requestId: reqId,
+            });
+          }
+        } catch {
+          /* ignore */
+        }
+        this._respond(reqId, resolved.result);
+        return;
+      }
+
+      const options = extractOptions(params || {});
+      const tool = extractToolFromPermissionParams(params || {});
+      this.pendingInteractive.set(String(reqId), {
+        kind: 'permission',
+        method,
+        requestId: reqId,
+        toolCallId: tool.toolCallId || '',
+        at: Date.now(),
       });
       try {
         if (typeof this.onPermission === 'function') {
           this.onPermission({
             method,
             params,
-            selected: resolved.selected,
-            mode: resolved.mode,
-            options: resolved.options,
+            requestId: reqId,
+            pending: true,
+            mode: 'interactive',
+            selected: null,
+            options,
+            toolName: tool.name,
+            toolTitle: tool.title,
+            toolArgs: tool.args,
+            toolCallId: tool.toolCallId,
           });
         }
       } catch {
         /* ignore */
       }
-      this._respond(reqId, resolved.result);
       return;
     }
 
@@ -431,9 +471,10 @@ class AcpClient {
   }
 
   /**
-   * Host answered a parked interactive reverse-req (plan approval or ask_user).
+   * Host answered a parked interactive reverse-req
+   * (plan approval / ask_user / permission).
    * @param {string|number} requestId
-   * @param {object} body Full JSON-RPC result (ExitPlanMode / AskUserQuestion ExtResponse)
+   * @param {object} body Full JSON-RPC result or host-friendly permission body
    */
   resolveInteractive(requestId, body) {
     const key = String(requestId);
@@ -442,6 +483,37 @@ class AcpClient {
     }
     const pending = this.pendingInteractive.get(key);
     this.pendingInteractive.delete(key);
+
+    // session/request_permission — ACP wire shape is nested outcome
+    if (pending?.kind === 'permission') {
+      let result;
+      if (
+        body &&
+        typeof body === 'object' &&
+        body.outcome &&
+        typeof body.outcome === 'object' &&
+        body.outcome.outcome
+      ) {
+        result = { outcome: body.outcome };
+      } else if (body?.optionId || body?.selected) {
+        result = buildPermissionResult(
+          'selected',
+          String(body.optionId || body.selected)
+        );
+      } else if (body?.cancelled || body?.outcome === 'cancelled') {
+        result = buildPermissionResult('cancelled');
+      } else {
+        result = buildPermissionResult('cancelled');
+      }
+      this._respond(requestId, result);
+      return {
+        ok: true,
+        kind: 'permission',
+        outcome: result.outcome?.outcome || 'cancelled',
+        selected: result.outcome?.optionId || null,
+      };
+    }
+
     const result =
       body && typeof body === 'object' && !Array.isArray(body)
         ? { ...body }

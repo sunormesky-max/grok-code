@@ -134,6 +134,10 @@
   background: rgba(251, 191, 36, 0.15);
   color: #fbbf24;
 }
+.inbox-chip.kind-perm {
+  background: rgba(249, 115, 22, 0.15);
+  color: #fb923c;
+}
 .inbox-where {
   flex: 1;
   min-width: 0;
