@@ -88,6 +88,7 @@ Living plan for the GrokCode open-source ecosystem. Order may change based on co
 - [x] Document InProgress CLI patch in doctor / settings / ARCHITECTURE (v1.21.0)
 - [x] Detect/mark patched InProgress CLI (env · settings · marker file) (v1.22.0)
 - [x] README CLI-native truth + invalidate ACP warm pool on settings change (v1.23.0)
+- [x] Deeper a11y: interactive announces, menu ARIA, A11Y checklist (v1.24.0)
 
 ## Next (host ↔ open-source grok-build)
 
@@ -111,7 +112,7 @@ Living plan for the GrokCode open-source ecosystem. Order may change based on co
 
 - [x] Storyboard: reconstruct before from mini-diff when possible
 - [x] Accessibility pass: focus trap, live regions, landmarks (v1.9.5)
-- [ ] Deeper screen-reader audit (NVDA/VoiceOver full walkthrough)
+- [x] Deeper screen-reader checklist + interactive SR (v1.24.0; full NVDA/VO still welcome via issues)
 - [x] Plugin marketplace filters parity with every TUI flag
 
 ## How to influence

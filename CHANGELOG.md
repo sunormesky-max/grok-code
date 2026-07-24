@@ -11,6 +11,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 - See [ROADMAP.md](ROADMAP.md)
 
+## [1.24.0] — 2026-07-24
+
+### Accessibility depth (host UI)
+
+Continues the v1.9.5 landmarks pass with interaction-focused SR support.
+
+- **Plan approval / ask_user** bars: `role=region`, assertive announce, focus first action
+- **Model / effort** chips: `aria-haspopup` / `aria-expanded` / labels; **Esc** closes menus
+- **Announce throttle** for polite phase spam; errors still assertive + forced
+- Conversation log `aria-live=polite`; bilingual landmark labels
+- Status bar CLI mode chip: `role=button` + label
+- **docs/A11Y.md** — NVDA/VoiceOver walkthrough checklist + known gaps
+
 ## [1.23.0] — 2026-07-24
 
 ### Docs + warm ACP recycle

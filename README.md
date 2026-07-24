@@ -98,6 +98,8 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for stream path, transport tabl
 
 ## Accessibility & motion
 
+See **[docs/A11Y.md](docs/A11Y.md)** for the NVDA/VoiceOver walkthrough checklist (plan approval, menus, skip link).
+
 GrokCode’s flight-deck UI includes glows and micro-animations. They **respect OS reduced-motion**:
 
 | Setting | Effect |

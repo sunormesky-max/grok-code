@@ -3793,6 +3793,12 @@ function bindModelChipUi() {
     chip.className = 'hint-chip model-chip';
     host.insertBefore(chip, host.firstChild);
   }
+  chip.setAttribute('aria-haspopup', 'menu');
+  chip.setAttribute('aria-expanded', 'false');
+  chip.setAttribute(
+    'aria-label',
+    localeIsEn() ? 'Model — open menu' : '模型 — 打开菜单'
+  );
   let effortChip = document.getElementById('effortChip');
   if (!effortChip) {
     effortChip = document.createElement('button');
@@ -3802,12 +3808,19 @@ function bindModelChipUi() {
     if (chip.nextSibling) host.insertBefore(effortChip, chip.nextSibling);
     else host.appendChild(effortChip);
   }
+  effortChip.setAttribute('aria-haspopup', 'menu');
+  effortChip.setAttribute('aria-expanded', 'false');
+  effortChip.setAttribute(
+    'aria-label',
+    localeIsEn() ? 'Reasoning effort — open menu' : '推理强度 — 打开菜单'
+  );
   let menu = document.getElementById('modelMenu');
   if (!menu) {
     menu = document.createElement('div');
     menu.id = 'modelMenu';
     menu.className = 'model-menu hidden';
     menu.setAttribute('role', 'menu');
+    menu.setAttribute('aria-label', localeIsEn() ? 'Models' : '模型列表');
     document.body.appendChild(menu);
   }
   let effortMenu = document.getElementById('effortMenu');
@@ -3816,6 +3829,10 @@ function bindModelChipUi() {
     effortMenu.id = 'effortMenu';
     effortMenu.className = 'model-menu hidden';
     effortMenu.setAttribute('role', 'menu');
+    effortMenu.setAttribute(
+      'aria-label',
+      localeIsEn() ? 'Reasoning effort' : '推理强度'
+    );
     document.body.appendChild(effortMenu);
   }
   const placeMenu = (el, anchor) => {
@@ -3823,11 +3840,25 @@ function bindModelChipUi() {
     el.style.left = `${Math.max(8, rect.left)}px`;
     el.style.bottom = `${window.innerHeight - rect.top + 6}px`;
   };
+  const setExpanded = (which, open) => {
+    if (which === 'model') chip.setAttribute('aria-expanded', open ? 'true' : 'false');
+    if (which === 'effort') {
+      effortChip.setAttribute('aria-expanded', open ? 'true' : 'false');
+    }
+  };
+  const closeMenus = () => {
+    menu.classList.add('hidden');
+    effortMenu.classList.add('hidden');
+    setExpanded('model', false);
+    setExpanded('effort', false);
+  };
   const openMenu = async () => {
     effortMenu.classList.add('hidden');
+    setExpanded('effort', false);
     menu.innerHTML = `<div class="model-menu-item muted" style="pointer-events:none;opacity:0.7">${localeIsEn() ? 'Loading models…' : '加载模型列表…'}</div>`;
     placeMenu(menu, chip);
     menu.classList.remove('hidden');
+    setExpanded('model', true);
     await refreshLiveModels({ force: false });
     const items = mergeModelMenuItems();
     const src = _liveModels.source
@@ -3863,6 +3894,7 @@ function bindModelChipUi() {
   };
   const openEffortMenu = () => {
     menu.classList.add('hidden');
+    setExpanded('model', false);
     const em = currentEffortMenu();
     if (!em.supported && em.modelId) {
       effortMenu.innerHTML = `<div class="model-menu-item muted" style="pointer-events:none">${
@@ -3872,6 +3904,7 @@ function bindModelChipUi() {
       }</div>`;
       placeMenu(effortMenu, effortChip);
       effortMenu.classList.remove('hidden');
+      setExpanded('effort', true);
       return;
     }
     const rows = [
@@ -3903,6 +3936,7 @@ function bindModelChipUi() {
     }
     placeMenu(effortMenu, effortChip);
     effortMenu.classList.remove('hidden');
+    setExpanded('effort', true);
     effortMenu.querySelectorAll('button.model-menu-item').forEach((btn) => {
       btn.onclick = async () => {
         await setReasoningEffort(btn.dataset.value || btn.dataset.id || '');
@@ -3912,18 +3946,25 @@ function bindModelChipUi() {
   chip.onclick = (e) => {
     e.stopPropagation();
     if (menu.classList.contains('hidden')) openMenu();
-    else menu.classList.add('hidden');
+    else closeMenus();
   };
   effortChip.onclick = (e) => {
     e.stopPropagation();
     if (effortMenu.classList.contains('hidden')) openEffortMenu();
-    else effortMenu.classList.add('hidden');
+    else closeMenus();
   };
   document.addEventListener('click', (e) => {
-    if (!menu.contains(e.target) && e.target !== chip) menu.classList.add('hidden');
-    if (!effortMenu.contains(e.target) && e.target !== effortChip) {
-      effortMenu.classList.add('hidden');
+    if (!menu.contains(e.target) && e.target !== chip && !effortMenu.contains(e.target) && e.target !== effortChip) {
+      closeMenus();
     }
+  });
+  document.addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape') return;
+    if (menu.classList.contains('hidden') && effortMenu.classList.contains('hidden')) {
+      return;
+    }
+    closeMenus();
+    e.preventDefault();
   });
   // hydrate from config later in init; local fallback
   const local = loadJson(MODEL_KEY, null);
@@ -10384,6 +10425,11 @@ function showPlanApprovalBar(task, d) {
   bar.querySelector('[data-act="quit"]').onclick = () => send('abandoned');
   task.pane.appendChild(bar);
   scrollMessages(true, task);
+  window.GrokA11y?.presentInteractive?.(
+    bar,
+    en ? 'Plan approval required' : '需要计划审批',
+    { assertive: true, focus: true }
+  );
 }
 
 /**
@@ -10579,6 +10625,14 @@ function showUserQuestionBar(task, d) {
   if (skipBtn) skipBtn.onclick = () => send('skip_interview');
   task.pane.appendChild(bar);
   scrollMessages(true, task);
+  const n = Array.isArray(d.questions) ? d.questions.length : 0;
+  window.GrokA11y?.presentInteractive?.(
+    bar,
+    en
+      ? `Agent asks ${n} question${n === 1 ? '' : 's'}`
+      : `Agent 提问（${n} 题）`,
+    { assertive: true, focus: true }
+  );
 }
 
 /** Escape for HTML attribute values */
@@ -11114,9 +11168,12 @@ function setAgentStatus(text, busy, isError) {
   chip.title = text;
   chip.setAttribute('aria-busy', busy ? 'true' : 'false');
   $('#sbAgent').textContent = text;
-  // Announce phase changes to screen readers (polite; errors assertive)
+  // Announce errors always; phase updates throttled polite in GrokA11y
   if (text) {
-    window.GrokA11y?.announce?.(text, { assertive: Boolean(isError) });
+    window.GrokA11y?.announce?.(text, {
+      assertive: Boolean(isError),
+      force: Boolean(isError),
+    });
   }
 }
 

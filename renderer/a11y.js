@@ -35,14 +35,26 @@
     }
   }
 
-  function announce(msg, { assertive = false } = {}) {
+  let lastPolite = '';
+  let lastPoliteAt = 0;
+
+  function announce(msg, { assertive = false, force = false } = {}) {
     ensureLiveRegions();
+    const text = String(msg || '').trim().slice(0, 280);
+    if (!text) return;
+    // Throttle polite spam (phase clocks) unless force
+    if (!assertive && !force) {
+      const now = Date.now();
+      if (text === lastPolite && now - lastPoliteAt < 1800) return;
+      lastPolite = text;
+      lastPoliteAt = now;
+    }
     const el = assertive ? $('#a11yLiveAssertive') : $('#a11yLiveStatus');
     if (!el) return;
     // Clear then set so repeated same text still fires
     el.textContent = '';
     requestAnimationFrame(() => {
-      el.textContent = String(msg || '').slice(0, 280);
+      el.textContent = text;
     });
   }
 
@@ -108,34 +120,43 @@
     lastFocus = null;
   }
 
+  function enLocale() {
+    return (
+      document.documentElement.lang === 'en' ||
+      global.GrokI18n?.getLocale?.() === 'en'
+    );
+  }
+
   function enhanceLandmarks() {
+    const en = enLocale();
     const main = $('#app .main');
     if (main && !main.getAttribute('role')) main.setAttribute('role', 'main');
     const files = $('#filesPanel');
     if (files) {
       files.setAttribute('role', 'navigation');
-      files.setAttribute('aria-label', 'Explorer');
+      files.setAttribute('aria-label', en ? 'Explorer' : '文件树');
     }
     const chat = $('#chatPanel');
     if (chat) {
       chat.setAttribute('role', 'complementary');
-      chat.setAttribute('aria-label', 'Agent');
+      chat.setAttribute('aria-label', en ? 'Agent chat' : 'Agent 对话');
     }
     const center = document.querySelector('.center');
     if (center) {
       center.setAttribute('role', 'region');
-      center.setAttribute('aria-label', 'Workspace');
+      center.setAttribute('aria-label', en ? 'Workspace' : '工作区');
     }
     const messages = $('#messagesHost');
     if (messages) {
       messages.setAttribute('role', 'log');
       messages.setAttribute('aria-relevant', 'additions');
-      messages.setAttribute('aria-label', 'Conversation');
+      messages.setAttribute('aria-live', 'polite');
+      messages.setAttribute('aria-label', en ? 'Conversation' : '对话流');
     }
     const editorTabs = $('#editorTabs');
     if (editorTabs) {
       editorTabs.setAttribute('role', 'tablist');
-      editorTabs.setAttribute('aria-label', 'Live Code Diff');
+      editorTabs.setAttribute('aria-label', en ? 'Live Code Diff' : 'Live · Code · Diff');
     }
     document.querySelectorAll('#editorTabs .tab[data-tab]').forEach((tab) => {
       tab.setAttribute('role', 'tab');
@@ -144,12 +165,51 @@
     const modeBar = $('#modeBar');
     if (modeBar) {
       modeBar.setAttribute('role', 'toolbar');
-      modeBar.setAttribute('aria-label', 'Work mode');
+      modeBar.setAttribute('aria-label', en ? 'CLI work mode' : 'CLI 工作模式');
     }
     const taskTabs = $('#taskTabs');
     if (taskTabs) {
       taskTabs.setAttribute('role', 'tablist');
-      taskTabs.setAttribute('aria-label', 'Tasks');
+      taskTabs.setAttribute('aria-label', en ? 'Tasks' : '任务');
+    }
+    const prompt = $('#prompt');
+    if (prompt && !prompt.getAttribute('aria-label')) {
+      prompt.setAttribute('aria-label', en ? 'Message to Grok' : '发给 Grok 的消息');
+    }
+    // Status bar chips often used as buttons
+    const sbMode = $('#sbMode');
+    if (sbMode) {
+      sbMode.setAttribute('role', 'button');
+      if (!sbMode.getAttribute('aria-label')) {
+        sbMode.setAttribute(
+          'aria-label',
+          en ? 'CLI session mode — click to cycle' : 'CLI 会话模式 — 点击切换'
+        );
+      }
+    }
+  }
+
+  /**
+   * Mark interactive overlay (plan approval / user question) and announce.
+   * @param {HTMLElement} el
+   * @param {string} label
+   * @param {{ assertive?: boolean, focus?: boolean }} [opts]
+   */
+  function presentInteractive(el, label, opts = {}) {
+    if (!el) return;
+    el.setAttribute('role', 'region');
+    el.setAttribute('aria-label', String(label || 'Interaction'));
+    el.setAttribute('tabindex', '-1');
+    announce(label, { assertive: opts.assertive !== false, force: true });
+    if (opts.focus !== false) {
+      const btn =
+        el.querySelector('button.primary, button[data-act="approve"], button[data-act="accept"], button') ||
+        getFocusable(el)[0];
+      try {
+        btn?.focus?.();
+      } catch {
+        /* ignore */
+      }
     }
   }
 
@@ -192,6 +252,7 @@
     enhanceLandmarks,
     syncTabSelection,
     getFocusable,
+    presentInteractive,
   };
 
   if (document.readyState === 'loading') {
