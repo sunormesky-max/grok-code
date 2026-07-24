@@ -5668,6 +5668,17 @@ body.booted #app {
 }
 .di-detail { color: var(--muted); line-height: 1.45; word-break: break-all; }
 .di-fix { margin-top: 4px; color: var(--ice); font-size: 11.5px; }
+.di-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+  align-items: center;
+}
+.di-actions.di-ok-note {
+  font-size: 11.5px;
+  color: var(--ok, #4ade80);
+}
 .update-status {
   font-family: var(--mono); font-size: 11.5px; color: var(--muted);
   min-height: 1.2em;

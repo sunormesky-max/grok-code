@@ -11,6 +11,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 - See [ROADMAP.md](ROADMAP.md)
 
+## [1.37.0] — 2026-07-24
+
+### Diff `*` select-pending + Doctor InProgress actions
+
+- **Diff**: `*` selects all non-restored files; multi-bar **全选待办**; command palette
+- **Doctor**: InProgress check shows **打开补丁目录 / 复制 Feedback / 标记已打补丁**
+  when warn; ok state explains patched CLI recognized
+- Settings copy i18n for patched CLI + patch buttons
+- One-click **mark patched** sets `grokPatched` and re-runs doctor
+
 ## [1.36.0] — 2026-07-24
 
 ### prefers-contrast suggest + Diff multi-select keys

@@ -601,12 +601,12 @@
           <label class="field check">
             <input type="checkbox" id="cfgGrokPatched" />
             <span>
-              <strong>CLI 含 InProgress 补丁</strong>
-              <small>
+              <strong data-i18n="cfg.patched">CLI 含 InProgress 补丁</strong>
+              <small data-i18n="cfg.patched.hint">
                 自建 grok 已 apply
                 <code>patches/grok-build/0001-tool-in-progress.patch</code>
                 （等同 <code>GROKCODE_PATCHED_CLI=1</code> 或二进制旁
-                <code>.grokcode-cli-patched</code>）
+                <code>.grokcode-cli-patched</code>）。Doctor 可一键标记。
               </small>
             </span>
           </label>
@@ -681,12 +681,12 @@
             <span>同时探测 <code>grok -p</code>（慢 · 需网络/登录；等同 <code>GROKCODE_DOCTOR_PROBE=1</code>）</span>
           </label>
           <div class="diag-actions" style="margin-top:6px;flex-wrap:wrap">
-            <button type="button" class="btn small ghost" id="btnOpenPatches" title="patches/grok-build">CLI InProgress 补丁说明</button>
-            <button type="button" class="btn small ghost" id="btnCopyFeedback" title="paste into grok /feedback">复制上游 Feedback</button>
+            <button type="button" class="btn small ghost" id="btnOpenPatches" title="patches/grok-build" data-i18n="cfg.patch.open">CLI InProgress 补丁说明</button>
+            <button type="button" class="btn small ghost" id="btnCopyFeedback" title="paste into grok /feedback" data-i18n="cfg.patch.copy">复制上游 Feedback</button>
           </div>
-          <p class="muted" style="font-size:11.5px;line-height:1.4;margin:6px 0 0">
+          <p class="muted" style="font-size:11.5px;line-height:1.4;margin:6px 0 0" data-i18n="cfg.patch.hint">
             长工具中途进度：宿主已支持 <code>in_progress</code>；官方 stock CLI 多为 Pending→Completed。
-            自建 CLI 时见 <code>patches/grok-build</code>，或向 <code>grok /feedback</code> 粘贴 Feedback。
+            自建 CLI 时见 <code>patches/grok-build</code>，或向 <code>grok /feedback</code> 粘贴 Feedback。体检项「长工具 InProgress」可一键标记已打补丁。
           </p>
           <div id="doctorResults" class="doctor-results"></div>
         </div>

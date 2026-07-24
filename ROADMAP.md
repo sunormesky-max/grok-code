@@ -102,11 +102,12 @@ Living plan for the GrokCode open-source ecosystem. Order may change based on co
 - [x] Permission/plan keyboard roving + A11Y walkthrough (v1.34.0)
 - [x] High-contrast themes + Diff keyboard SR (v1.35.0)
 - [x] prefers-contrast soft suggest + Diff multi-select keys (v1.36.0)
+- [x] Diff `*` select-pending + Doctor InProgress actions (v1.37.0)
 
 ## Next (host UX — carefully; refuse OW engine flow)
 
-- [ ] Optional: Diff select-all pending keyboard (`*`)
-- [ ] Optional: Doctor InProgress patch UX polish
+- [ ] Optional: deeper packaging / auto-update polish
+- [ ] Optional: NVDA full pass with HC theme
 
 See `docs/OPENWORKER-INHERIT.md` anti-patterns before any further port.
 

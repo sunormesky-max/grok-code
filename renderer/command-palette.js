@@ -268,9 +268,21 @@
         run: run(() => document.getElementById('btnRefreshTree')?.click()),
       },
       {
+        id: 'diff.selectPending',
+        title: t('cmd.diff.selectPending', 'Diff 全选待处理文件'),
+        keywords: 'diff select all pending 全选 待办 *',
+        run: run(() => {
+          if (typeof global.selectDiffPendingAll === 'function') {
+            global.selectDiffPendingAll({ includeRestored: false });
+          } else {
+            document.querySelector('[data-act="all"]')?.click();
+          }
+        }),
+      },
+      {
         id: 'doctor',
         title: t('cmd.doctor', '环境体检'),
-        keywords: 'doctor 体检 diagnose',
+        keywords: 'doctor 体检 diagnose inprogress patch 补丁',
         run: run(() => {
           document.getElementById('btnSettings')?.click();
           setTimeout(() => document.getElementById('btnRunDoctor')?.click(), 80);

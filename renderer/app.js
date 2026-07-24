@@ -2841,6 +2841,12 @@ function bindShortcuts() {
         toggleDiffFileSelect();
         return;
       }
+      // * = select all pending (not restored)
+      if (e.key === '*' || (e.shiftKey && e.key === '8')) {
+        e.preventDefault();
+        selectDiffPendingAll({ includeRestored: false });
+        return;
+      }
       if (e.key === 'a' || e.key === 'A') {
         e.preventDefault();
         const path = P() && P().selectedDiffPath;
@@ -7807,6 +7813,45 @@ function toggleDiffFileSelect(path) {
 }
 window.toggleDiffFileSelect = toggleDiffFileSelect;
 
+/**
+ * Select all Diff files that are not yet restored (pending).
+ * @param {{ includeRestored?: boolean }} [opts]
+ * @returns {number} selected count
+ */
+function selectDiffPendingAll(opts = {}) {
+  if (!state.diffSelected) state.diffSelected = new Set();
+  state.diffSelected.clear();
+  let n = 0;
+  for (const [p, c] of changesMap()) {
+    if (!opts.includeRestored && c?.restored) continue;
+    state.diffSelected.add(p);
+    n += 1;
+  }
+  try {
+    document.querySelectorAll?.('.diff-file input[type="checkbox"]')?.forEach((inp) => {
+      const p = inp.getAttribute('data-path');
+      if (p) inp.checked = state.diffSelected.has(p);
+    });
+    updateDiffMultiBar?.();
+  } catch {
+    renderDiffPane();
+  }
+  window.GrokA11y?.announce?.(
+    localeIsEn()
+      ? `Selected ${n} pending file(s)`
+      : `已全选 ${n} 个待处理文件`,
+    { assertive: false }
+  );
+  toast(
+    localeIsEn()
+      ? `Selected ${n} pending`
+      : `已全选 ${n} 个待处理`,
+    'ok'
+  );
+  return n;
+}
+window.selectDiffPendingAll = selectDiffPendingAll;
+
 /** Focus next/prev hunk head in current Diff content. @returns {boolean} handled */
 function navigateDiffHunk(delta) {
   const content = document.querySelector('#diffContent, .diff-content, #diffPane .diff-body');
@@ -7964,7 +8009,7 @@ function renderDiffPane() {
 
   if (!changesMap().size) {
     body.innerHTML = '<div class="muted pad">本会话还没有捕获到变更。<br>Agent 写文件后会出现在这里。</div>';
-    content.innerHTML = `<div class="diff-placeholder"><h3>Real Diff</h3><p>统一 diff · 行级 +/- · 实时捕获 Agent 写入<br>审阅后可 <strong>还原此文件</strong> 或 <strong>忽略</strong> · <kbd>j</kbd>/<kbd>k</kbd> 切文件 · <kbd>a</kbd> 已审阅</p></div>`;
+    content.innerHTML = `<div class="diff-placeholder"><h3>Real Diff</h3><p>统一 diff · 行级 +/- · 实时捕获 Agent 写入<br>审阅后可 <strong>还原此文件</strong> 或 <strong>忽略</strong><br><kbd>j</kbd>/<kbd>k</kbd> 切文件 · <kbd>Shift+j</kbd> 多选 · <kbd>x</kbd> 勾选 · <kbd>*</kbd> 全选待办 · <kbd>a</kbd> 已审阅 · <kbd>n</kbd>/<kbd>p</kbd> hunk</p></div>`;
     $('#diffTitle').textContent = '选择左侧文件';
     $('#diffStats').textContent = '';
     setDiffActionsEnabled(false);
@@ -8651,7 +8696,7 @@ function ensureDiffMultiBar() {
   bar.id = 'diffMultiBar';
   bar.className = 'diff-multi-bar hidden';
   bar.innerHTML = `
-    <button type="button" class="link-btn" data-act="all">全选</button>
+    <button type="button" class="link-btn" data-act="all" title="*">全选待办</button>
     <button type="button" class="link-btn" data-act="none">清空</button>
     <span class="diff-multi-count" id="diffMultiCount">0 选中</span>
     <button type="button" class="btn small ghost" data-act="dismiss">忽略选中</button>
@@ -8661,12 +8706,18 @@ function ensureDiffMultiBar() {
   if (head?.nextSibling) list.insertBefore(bar, head.nextSibling);
   else list.appendChild(bar);
   bar.querySelector('[data-act="all"]').onclick = () => {
-    for (const [p] of changesMap()) state.diffSelected.add(p);
-    renderDiffPane();
+    selectDiffPendingAll({ includeRestored: false });
   };
   bar.querySelector('[data-act="none"]').onclick = () => {
     state.diffSelected.clear();
-    renderDiffPane();
+    try {
+      document.querySelectorAll?.('.diff-file input[type="checkbox"]')?.forEach((inp) => {
+        inp.checked = false;
+      });
+      updateDiffMultiBar?.();
+    } catch {
+      renderDiffPane();
+    }
   };
   bar.querySelector('[data-act="dismiss"]').onclick = () => {
     const n = dismissDiffPaths(getDiffSelectedPaths());

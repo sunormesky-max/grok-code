@@ -92,15 +92,52 @@
       host.innerHTML = `
         <div class="doctor-summary ${report.ready ? 'ok' : 'bad'}">${esc(report.summary)}</div>
         ${(report.checks || [])
-          .map(
-            (c) => `
-          <div class="doctor-item ${c.level === 'ok' ? 'ok' : c.level === 'warn' ? 'warn' : 'bad'}">
+          .map((c) => {
+            const isInProgress =
+              c.id === 'tool_in_progress' ||
+              c.id === 'in_progress' ||
+              /InProgress|长工具/i.test(String(c.name || ''));
+            let actions = '';
+            if (isInProgress) {
+              if (c.level === 'ok') {
+                actions = `<div class="di-actions di-ok-note">${esc(
+                  window.GrokI18n?.getLocale?.() === 'en'
+                    ? 'Patched CLI recognized — long tools can emit mid-flight progress.'
+                    : '已识别 patched CLI · 长工具可发中途 InProgress。'
+                )}</div>`;
+              } else {
+                actions = `<div class="di-actions">
+                  <button type="button" class="btn small ghost" data-doc-act="open-patches">${esc(
+                    window.GrokI18n?.getLocale?.() === 'en' ? 'Open patch folder' : '打开补丁目录'
+                  )}</button>
+                  <button type="button" class="btn small ghost" data-doc-act="copy-feedback">${esc(
+                    window.GrokI18n?.getLocale?.() === 'en' ? 'Copy /feedback text' : '复制 Feedback'
+                  )}</button>
+                  <button type="button" class="btn small primary" data-doc-act="mark-patched">${esc(
+                    window.GrokI18n?.getLocale?.() === 'en'
+                      ? 'Mark CLI as patched'
+                      : '标记已打补丁'
+                  )}</button>
+                </div>`;
+              }
+            }
+            return `
+          <div class="doctor-item ${c.level === 'ok' ? 'ok' : c.level === 'warn' ? 'warn' : 'bad'}" data-check-id="${esc(c.id || '')}">
             <div class="di-head"><strong>${esc(c.name)}</strong> · ${esc(c.level)}${c.skipped ? ' · skip' : ''}</div>
             <div class="di-detail">${esc(c.detail || '').replace(/\n/g, '<br>')}</div>
             ${c.fix ? `<div class="di-fix">→ ${esc(c.fix)}</div>` : ''}
-          </div>`
-          )
+            ${actions}
+          </div>`;
+          })
           .join('')}`;
+      host.querySelectorAll('[data-doc-act]').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          const act = btn.getAttribute('data-doc-act');
+          if (act === 'open-patches') openPatchesFolder();
+          else if (act === 'copy-feedback') copyUpstreamFeedback();
+          else if (act === 'mark-patched') markPatchedCliUi();
+        });
+      });
       // 同步顶栏 CLI
       const cli = report.checks?.find((c) => c.id === 'cli');
       if (cli && window.setCliLabelFromProbe) {
@@ -114,6 +151,23 @@
       window.toast?.(report.summary, report.ready ? 'ok' : 'err');
     } catch (err) {
       host.innerHTML = `<div class="doctor-summary bad">${esc(err.message)}</div>`;
+    }
+  }
+
+  async function markPatchedCliUi() {
+    try {
+      const el = document.getElementById('cfgGrokPatched');
+      if (el) el.checked = true;
+      await window.grok.setConfig({ grokPatched: true });
+      window.toast?.(
+        window.GrokI18n?.getLocale?.() === 'en'
+          ? 'Marked: CLI has InProgress patch (Doctor will recheck)'
+          : '已标记：CLI 含 InProgress 补丁（将重新体检）',
+        'ok'
+      );
+      await runDoctorUi();
+    } catch (err) {
+      window.toast?.(err.message || String(err), 'err');
     }
   }
 
