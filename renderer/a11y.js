@@ -190,6 +190,57 @@
   }
 
   /**
+   * Arrow / Home / End roving focus inside a role=menu popup.
+   * Call after menu is populated and shown.
+   * @param {HTMLElement} menuEl
+   * @param {{ focusFirst?: boolean }} [opts]
+   */
+  function bindMenuKeyboard(menuEl, opts = {}) {
+    if (!menuEl || menuEl.dataset.a11yMenuBound === '1') {
+      // Rebind key handler each open — remove old if any
+      if (menuEl?._a11yMenuKey) {
+        menuEl.removeEventListener('keydown', menuEl._a11yMenuKey);
+      }
+    }
+    const items = () =>
+      [...menuEl.querySelectorAll('button.model-menu-item, [role="menuitem"]')].filter(
+        (el) => !el.disabled && el.offsetParent !== null
+      );
+    const onKey = (e) => {
+      const list = items();
+      if (!list.length) return;
+      const idx = list.indexOf(document.activeElement);
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        const next = list[(idx < 0 ? 0 : idx + 1) % list.length];
+        next?.focus();
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        const prev = list[(idx <= 0 ? list.length : idx) - 1];
+        prev?.focus();
+      } else if (e.key === 'Home') {
+        e.preventDefault();
+        list[0]?.focus();
+      } else if (e.key === 'End') {
+        e.preventDefault();
+        list[list.length - 1]?.focus();
+      }
+    };
+    menuEl._a11yMenuKey = onKey;
+    menuEl.addEventListener('keydown', onKey);
+    menuEl.dataset.a11yMenuBound = '1';
+    if (opts.focusFirst !== false) {
+      const list = items();
+      const active = list.find((b) => b.classList.contains('active')) || list[0];
+      try {
+        active?.focus?.();
+      } catch {
+        /* ignore */
+      }
+    }
+  }
+
+  /**
    * Mark interactive overlay (plan approval / user question) and announce.
    * @param {HTMLElement} el
    * @param {string} label
@@ -253,6 +304,7 @@
     syncTabSelection,
     getFocusable,
     presentInteractive,
+    bindMenuKeyboard,
   };
 
   if (document.readyState === 'loading') {

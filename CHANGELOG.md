@@ -11,6 +11,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 - See [ROADMAP.md](ROADMAP.md)
 
+## [1.25.0] — 2026-07-24
+
+### Keyboard menus + warm-recycle feedback
+
+- **Model / effort menus**: Arrow Up/Down, Home/End roving focus (`bindMenuKeyboard`)
+- **Settings save**: toast when ACP warm sessions were recycled (`warmCleared`)
+- **docs/A11Y.md**: document menu keyboard keys
+
 ## [1.24.0] — 2026-07-24
 
 ### Accessibility depth (host UI)

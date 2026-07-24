@@ -3891,6 +3891,7 @@ function bindModelChipUi() {
         await setModelPreset(btn.dataset.id || '');
       };
     });
+    window.GrokA11y?.bindMenuKeyboard?.(menu, { focusFirst: true });
   };
   const openEffortMenu = () => {
     menu.classList.add('hidden');
@@ -3942,6 +3943,7 @@ function bindModelChipUi() {
         await setReasoningEffort(btn.dataset.value || btn.dataset.id || '');
       };
     });
+    window.GrokA11y?.bindMenuKeyboard?.(effortMenu, { focusFirst: true });
   };
   chip.onclick = (e) => {
     e.stopPropagation();
@@ -11594,7 +11596,7 @@ async function saveSettings() {
   };
   const key = $('#cfgApiKey').value.trim();
   if (key) partial.apiKey = key;
-  await window.grok.setConfig(partial);
+  const setRes = await window.grok.setConfig(partial);
   state.model = partial.model || '';
   saveJson(MODEL_KEY, state.model);
   applyModelChip();
@@ -11610,7 +11612,17 @@ async function saveSettings() {
   window.refreshRulesChip?.();
   closeSettings();
   await refreshCliStatus();
-  toast(t('toast.saved', '设置已保存'), 'ok');
+  const warmN = Number(setRes?.warmCleared) || 0;
+  if (warmN > 0) {
+    toast(
+      localeIsEn()
+        ? `Settings saved · recycled ${warmN} warm ACP session(s)`
+        : `设置已保存 · 已回收 ${warmN} 个 ACP 热会话`,
+      'ok'
+    );
+  } else {
+    toast(t('toast.saved', '设置已保存'), 'ok');
+  }
 }
 
 const toast = U.toast || window.toast || ((msg) => console.log(msg));

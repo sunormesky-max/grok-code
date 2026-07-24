@@ -89,6 +89,7 @@ Living plan for the GrokCode open-source ecosystem. Order may change based on co
 - [x] Detect/mark patched InProgress CLI (env · settings · marker file) (v1.22.0)
 - [x] README CLI-native truth + invalidate ACP warm pool on settings change (v1.23.0)
 - [x] Deeper a11y: interactive announces, menu ARIA, A11Y checklist (v1.24.0)
+- [x] Menu arrow-key nav + warm-recycle save toast (v1.25.0)
 
 ## Next (host ↔ open-source grok-build)
 
