@@ -9,6 +9,9 @@
     { id: 'mars', nameKey: 'theme.mars', className: 'theme-mars' },
     { id: 'ice', nameKey: 'theme.ice', className: 'theme-ice' },
     { id: 'ember', nameKey: 'theme.ember', className: 'theme-ember' },
+    /** A11Y: solid black/white, high contrast borders, no glow glass */
+    { id: 'hc', nameKey: 'theme.hc', className: 'theme-hc' },
+    { id: 'hc-light', nameKey: 'theme.hcLight', className: 'theme-hc-light' },
   ];
 
   const KEY = 'grokcode-theme';

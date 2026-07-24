@@ -2802,12 +2802,12 @@ function bindShortcuts() {
     }
     // Diff review keys when Diff tab active and not typing
     if (!mod && !e.altKey && !isTypingTarget(document.activeElement) && state.activeTab === 'diff') {
-      if (e.key === 'j' || e.key === 'J') {
+      if (e.key === 'j' || e.key === 'J' || e.key === 'ArrowDown') {
         e.preventDefault();
         navigateDiffFile(1);
         return;
       }
-      if (e.key === 'k' || e.key === 'K') {
+      if (e.key === 'k' || e.key === 'K' || e.key === 'ArrowUp') {
         e.preventDefault();
         navigateDiffFile(-1);
         return;
@@ -2822,7 +2822,19 @@ function bindShortcuts() {
       if (e.key === 's' || e.key === 'S') {
         e.preventDefault();
         toggleDiffViewMode();
+        window.GrokA11y?.announce?.(
+          localeIsEn() ? 'Diff view mode toggled' : 'Diff 视图已切换',
+          { assertive: false }
+        );
         return;
+      }
+      // n/p = next/prev hunk (when hunk heads exist)
+      if (e.key === 'n' || e.key === 'N' || e.key === 'p' || e.key === 'P') {
+        const dir = e.key === 'n' || e.key === 'N' ? 1 : -1;
+        if (navigateDiffHunk(dir)) {
+          e.preventDefault();
+          return;
+        }
       }
       // [ ] previous / next agent turn on scrubber
       if (e.key === '[' || e.key === ']') {
@@ -7666,13 +7678,64 @@ function selectDiffFile(path, opts = {}) {
 
 function navigateDiffFile(delta) {
   const items = sortedDiffItems();
-  if (!items.length) return;
+  if (!items.length) {
+    window.GrokA11y?.announce?.(
+      localeIsEn() ? 'No diff files' : '没有 Diff 文件',
+      { assertive: false }
+    );
+    return;
+  }
   const cur = (P() && P().selectedDiffPath) || items[0][0];
   let idx = items.findIndex(([p]) => p === cur);
   if (idx < 0) idx = 0;
   idx = (idx + delta + items.length) % items.length;
-  selectDiffFile(items[idx][0]);
+  const path = items[idx][0];
+  selectDiffFile(path);
+  const base = path.split(/[/\\]/).pop() || path;
+  window.GrokA11y?.announce?.(
+    localeIsEn()
+      ? `Diff file ${idx + 1} of ${items.length}: ${base}`
+      : `Diff 文件 ${idx + 1}/${items.length}：${base}`,
+    { assertive: false }
+  );
 }
+
+/** Focus next/prev hunk head in current Diff content. @returns {boolean} handled */
+function navigateDiffHunk(delta) {
+  const content = document.querySelector('#diffContent, .diff-content, #diffPane .diff-body');
+  const heads = content
+    ? [...content.querySelectorAll('.diff-hunk-head')]
+    : [...document.querySelectorAll('.diff-hunk-head')];
+  if (!heads.length) return false;
+  const active = document.activeElement;
+  let idx = heads.indexOf(active);
+  if (idx < 0) {
+    // find nearest visible or first
+    idx = delta > 0 ? -1 : 0;
+  }
+  idx = (idx + delta + heads.length) % heads.length;
+  const el = heads[idx];
+  if (!el) return false;
+  try {
+    el.setAttribute('tabindex', '0');
+    el.focus?.();
+    el.scrollIntoView?.({ block: 'nearest', behavior: 'smooth' });
+  } catch {
+    /* ignore */
+  }
+  const label =
+    el.getAttribute('aria-label') ||
+    el.textContent?.replace(/\s+/g, ' ').trim().slice(0, 80) ||
+    `hunk ${idx + 1}`;
+  window.GrokA11y?.announce?.(
+    localeIsEn()
+      ? `Hunk ${idx + 1} of ${heads.length}: ${label}`
+      : `Hunk ${idx + 1}/${heads.length}：${label}`,
+    { assertive: false }
+  );
+  return true;
+}
+window.navigateDiffHunk = navigateDiffHunk;
 
 function markDiffReviewed(path, reviewed = true) {
   path = path || (P() && P().selectedDiffPath);

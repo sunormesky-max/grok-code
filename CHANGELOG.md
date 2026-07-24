@@ -11,6 +11,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 - See [ROADMAP.md](ROADMAP.md)
 
+## [1.35.0] — 2026-07-24
+
+### High-contrast themes + Diff keyboard SR
+
+- **Themes**: `hc` (black) and `hc-light` (white) — solid panels, no glow/glass blur,
+  decorative cosmos hidden, strong focus rings
+- Settings select + theme cycle include HC packs
+- **Diff**: ↑↓ aliases for j/k; **n/p** next/prev hunk; SR announce file/hunk path
+- Help cheatsheet + `docs/A11Y.md` updated
+
 ## [1.34.0] — 2026-07-24
 
 ### Permission / plan keyboard roving + A11Y walkthrough
