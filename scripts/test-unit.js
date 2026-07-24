@@ -455,7 +455,9 @@ function testAgentExports() {
   assert.equal(typeof agent.replyUserQuestion, 'function');
   assert.equal(typeof agent.setSessionMode, 'function');
   assert.equal(typeof agent.setSessionModel, 'function');
+  assert.equal(typeof agent.invalidateWarmSessions, 'function');
   assert.deepEqual(agent.listTrackedPids(), []);
+  assert.deepEqual(agent.invalidateWarmSessions(), { cleared: 0 });
   agent.reapTracked();
   const noClient = agent.replyPlanApproval('missing-task', 1, { outcome: 'approved' });
   assert.equal(noClient.ok, false);

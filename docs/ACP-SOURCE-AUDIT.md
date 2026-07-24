@@ -135,7 +135,7 @@ We advertise **no** client fs/terminal capabilities (correct for “agent runs t
 | Inter-stage silence after first token | High (UX) | Fixed in 1.10.11: activity clock for whole prompt |
 | `x.ai/session_notification` dropped | High | Fixed 1.10.12+; ToolCallDelta progress refresh 1.11.1 |
 | Thought collapsed while streaming | Medium | Fixed 1.10.11: keep open while live |
-| Warm pool skips re-init | Low | Settings changes need process recycle (buffering stuck on first init) |
+| Warm pool skips re-init | Low | **Fixed 1.23.0** — `invalidateWarmSessions` on model/path/transport/rules/… |
 | Tool storm (N tools same ms) | Medium | Fixed 1.11.0 `ToolStorm`; late-wave merge 1.11.1 |
 | Plan / mode / commands updates | Low | Fixed 1.11.0 Live mirrors |
 | Multimodal content blocks | Low | `pickChunkText` joins text blocks, skips image/audio (1.11.1) |
@@ -196,6 +196,7 @@ We advertise **no** client fs/terminal capabilities (correct for “agent runs t
 | P2 per-model effort options meta | Done (1.20.0 supportsReasoningEffort + reasoningEfforts) |
 | P2 document InProgress patch in doctor | Done (1.21.0) |
 | P2 detect patched InProgress CLI | Done (1.22.0 env/settings/marker) |
+| P2 warm pool recycle on settings | Done (1.23.0 invalidateWarmSessions) |
 | Upstream `/feedback` | `patches/grok-build/FEEDBACK.md` |
 
 ---

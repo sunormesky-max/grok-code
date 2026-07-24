@@ -1,12 +1,12 @@
 # GrokCode
 
-**Desktop coding agent powered by the local [Grok Build CLI](https://grok.x.ai)** — OpenCode / Codex–style UI, multi-project, multi-task, context inheritance.
+**Desktop flight deck for the local open-source [Grok Build CLI](https://github.com/xai-org/grok-build)** — multi-project, multi-task, Live/Code/Diff, context inheritance.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-skyblue.svg)](LICENSE)
 [![Electron](https://img.shields.io/badge/Electron-desktop-47848F?logo=electron)](https://www.electronjs.org/)
 [![xAI Grok](https://img.shields.io/badge/xAI-Grok%20CLI-000)](https://grok.x.ai)
 
-> Not a second copy of the agent runtime. GrokCode **drives your installed `grok` CLI** in headless mode (`streaming-json`), so you get the same tools, MCP, and skills as the terminal — with a flight-deck UI.
+> Not a second agent runtime. GrokCode **hosts your installed `grok` CLI** over ACP (`grok agent stdio`) with headless fallback (`streaming-json` / `grok -p`). Same tools, MCP, skills, and plan mode as the TUI — with a multi-project UI.
 
 ![stack](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey)
 
@@ -16,15 +16,16 @@
 
 | Area | What you get |
 |------|----------------|
-| **Agent** | Headless `grok` + multi-turn `--resume` sessions · **real-time stream** |
-| **Modes** | **Craft** · **Plan** · **Goal** · **Ask** (Ctrl+1–4) |
-| **Multi-project** | Mount several repos; agents run in parallel per project |
-| **Multi-task** | Per-project task tabs; parallel CLI processes |
-| **Live / Code / Diff** | Mission control (virtualized), file review, unified diffs + restore |
-| **Context inheritance** | Persist chats under `~/.grok-code/sessions`; L0–L3 (+ optional LLM) · Goal track |
-| **Settings** | CLI, model, YOLO, **MCP**, **Skills**, **Plugins**, **Catalog** |
-| **Appearance** | **i18n** en/zh · theme packs (+ JSON import) · profiles |
-| **UI** | Sci-fi HUD · **Ctrl+K** · **Ctrl+P** files · **Ctrl+Shift+F** content · Code\|Diff split · [Visual QA](docs/VISUAL-QA.md) |
+| **Transport** | ACP primary · auto headless on Build 403 · settings `agentTransport` |
+| **Modes** | **CLI-native** only — host docks `session/set_mode` (`default` / `plan` / `ask`); no Craft/Plan/Ask inject |
+| **Plan / Q&A** | Interactive `exit_plan_mode` + `ask_user_question` bars (open-source outcomes) |
+| **Model** | Live list from `grok models` + ACP modelState · `session/set_model` · effort chip (`/effort`) |
+| **Multi-project** | Several workspaces; agents in parallel per project |
+| **Multi-task** | Per-project tabs; warm ACP pool between turns |
+| **Live / Code / Diff** | Mission control, file tree, unified diffs + restore |
+| **Context** | `~/.grok-code/sessions` · L0–L3 compress |
+| **Settings** | CLI path, YOLO, MCP, Skills, Plugins, Catalog, Doctor |
+| **Appearance** | i18n en/zh · themes · density · FX / reduce-motion |
 
 ---
 
@@ -45,7 +46,6 @@ npm install
 npm start
 ```
 
-
 1. **＋ 项目** — open one or more workspaces  
 2. Confirm **CLI** is online in the title bar  
 3. Describe a task → **Grok it** (`Ctrl+Enter`)  
@@ -60,26 +60,39 @@ export XAI_API_KEY=xai-...   # or set in Settings
 
 ## Architecture
 
-See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the full stream path, modes table, and performance notes.
+See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for stream path, transport table, and open-source docking.
 
 ```text
 ┌─────────────────────────────────────────┐
-│  Electron renderer (UI)                 │
-│  projects · tasks · modes · Live/Code   │
-│  StreamFair · LiveBatcher · goal track  │
+│  Electron renderer                      │
+│  projects · tasks · Live/Code/Diff      │
+│  CLI mode / model / effort chips        │
 └─────────────────┬───────────────────────┘
                   │ IPC (preload allowlist)
 ┌─────────────────▼───────────────────────┐
 │  Electron main                          │
-│  multi-project agents · modes · persist │
-│  MCP/Skills (via grok + ~/.grok)        │
+│  agent.js ACP + headless · persist      │
+│  doctor · models · plan/ask reverse-req │
 └─────────────────┬───────────────────────┘
-                  │ spawn headless streaming-json
+                  │ child_process
 ┌─────────────────▼───────────────────────┐
-│  grok CLI  (-p / streaming-json / YOLO) │
-│  tools · MCP · skills · same as TUI     │
+│  grok CLI (same binary as TUI)          │
+│  primary:  grok agent … stdio  (ACP)    │
+│  fallback: grok -p … streaming-json     │
+│  YOLO: --always-approve · plan: CLI     │
 └─────────────────────────────────────────┘
 ```
+
+**Host ↔ open-source (high level)**
+
+| UI | ACP / CLI |
+|----|-----------|
+| Plan approval | `x.ai/exit_plan_mode` |
+| Questionnaire | `x.ai/ask_user_question` |
+| Mode chip | `session/set_mode` |
+| Model chip | `session/set_model` · `grok models` |
+| Effort chip | `set_model` meta `reasoning_effort` |
+| Long tools | handles `in_progress`; optional CLI patch under `patches/grok-build/` |
 
 ---
 
@@ -95,13 +108,7 @@ GrokCode’s flight-deck UI includes glows and micro-animations. They **respect 
 
 When reduced motion is on, boot rings, send pulse, Live timeline entrance, scrub flashes, and most decorative loops are disabled. Functional layout and themes still work.
 
-**Visual FX intensity** (Settings → Appearance): **Normal** (default) or **High** (stronger nebula / Agent edge). Use Normal on low-end GPUs. Toggle via **Ctrl+K** → “切换视觉强度 FX”.
-
-**Layout (v1.8)**: default strip is **Work** + **Review** only. Pilot / Full / Auto live under **···**. Auto-Pilot is **off** by default. Center tools (Split, follow, path) appear on Code/Diff, not on Live.
-
-**Force reduce motion** (Settings → Appearance checkbox, or **Ctrl+K** → “切换强制减少动效”): applies `body.force-reduced-motion` even if the OS setting is off — useful for demos or low-end machines.
-
-**Cinematic idle ambient** (off by default; Settings → Appearance, or **Ctrl+K** → “电影级待机”): after ~12s without input, soft vignette / dust motes / scan beam enrich the flight deck. Disabled under reduce-motion; skip on low-end GPUs.
+**Visual FX intensity** (Settings → Appearance): **Normal** (default) or **High**. **Force reduce motion** checkbox applies even if the OS setting is off. **Cinematic idle** ambient is off by default.
 
 ---
 
@@ -111,26 +118,23 @@ When reduced motion is on, boot rings, send pulse, Live timeline entrance, scrub
 grok-code/
   electron/          # main process, agent, persist, MCP/skills
   renderer/          # UI, multi-project/task, settings
-  scripts/           # maintenance helpers
+  patches/grok-build # experimental CLI InProgress patch + /feedback text
+  docs/              # ARCHITECTURE, ACP audit, …
+  scripts/           # check, tests, catalog
   examples/          # community MCP / skill snippets
-  LICENSE            # MIT
-  CONTRIBUTING.md
-  CODE_OF_CONDUCT.md
 ```
 
 ---
 
 ## Open-source ecosystem
 
-We want GrokCode to be a **community flight deck** for Grok coding:
-
 | Contribute | Where |
 |------------|--------|
 | Core features / bugs | PRs on this repo |
 | MCP presets | [`examples/mcp/`](examples/mcp/) |
-| Skill packs | [`examples/skills/`](examples/skills/) + share on Discussions |
+| Skill packs | [`examples/skills/`](examples/skills/) + Discussions |
+| Experimental CLI patches | [`patches/grok-build/`](patches/grok-build/) |
 | Themes / i18n | `renderer/` |
-| Packaging / CI | Issues labeled `infra` |
 
 See **[CONTRIBUTING.md](CONTRIBUTING.md)** and **[CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md)**.
 
@@ -149,7 +153,7 @@ GrokCode manages the **same** config the CLI uses:
 - MCP → `~/.grok/config.toml` via `grok mcp …`  
 - Skills → `~/.grok/skills/**/SKILL.md`  
 
-Open **Settings → MCP / Skills** in the app.
+Open **Settings → MCP / Skills** in the app. **Diagnostics** includes Doctor, optional `grok -p` probe, and InProgress patch help.
 
 ---
 
@@ -180,29 +184,20 @@ git push origin v1.0.0
 
 ## Catalog site
 
-Community MCP / Skills catalog is published via GitHub Pages (Actions):
+Community MCP / Skills catalog is published via GitHub Pages:
 
 https://sunormesky-max.github.io/grok-code/
-
-(Repo **Settings → Pages → Source: GitHub Actions** once.)
 
 ## Ecosystem
 
 | Doc | Topic |
 |-----|--------|
-| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Process model |
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Process model · transports · docking |
+| [docs/ACP-SOURCE-AUDIT.md](docs/ACP-SOURCE-AUDIT.md) | ACP surface map |
 | [docs/ECOSYSTEM.md](docs/ECOSYSTEM.md) | Community channels |
 | [ROADMAP.md](ROADMAP.md) | What’s next |
 | [CHANGELOG.md](CHANGELOG.md) | Version history |
-| [examples/](examples/) | MCP & Skills templates |
-
-Join **Discussions** for Q&A and Show & Tell.
 
 ## License
 
-[MIT](LICENSE) — free to use, fork, and ship.
-
----
-
-**Built for people who grok code.**  
-Issues, Discussions & PRs welcome.
+[MIT](LICENSE)

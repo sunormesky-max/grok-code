@@ -11,6 +11,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 - See [ROADMAP.md](ROADMAP.md)
 
+## [1.23.0] — 2026-07-24
+
+### Docs + warm ACP recycle
+
+- **README**: rewrite to CLI-native host (ACP + headless fallback, mode/model/effort
+  docking) — remove obsolete Craft/Plan/Ask claims
+- **Warm pool**: changing model, grok path, transport, YOLO, rules, effort, or API key
+  invalidates parked ACP sessions so the next turn re-initialize/authenticate
+  (fixes “settings ignored until restart” for warm sessions)
+- `agent.invalidateWarmSessions()` · `config:set` returns `{ ok, warmCleared }`
+
 ## [1.22.0] — 2026-07-24
 
 ### Host — detect patched InProgress CLI

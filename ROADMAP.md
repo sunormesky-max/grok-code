@@ -87,10 +87,11 @@ Living plan for the GrokCode open-source ecosystem. Order may change based on co
 - [x] Per-model effort options from model meta (v1.20.0)
 - [x] Document InProgress CLI patch in doctor / settings / ARCHITECTURE (v1.21.0)
 - [x] Detect/mark patched InProgress CLI (env · settings · marker file) (v1.22.0)
+- [x] README CLI-native truth + invalidate ACP warm pool on settings change (v1.23.0)
 
 ## Next (host ↔ open-source grok-build)
 
-- [ ] Upstream still needs normal-tool InProgress emit for long tools (stock CLI; patch optional)
+- [ ] Upstream still needs normal-tool InProgress emit for long tools (stock CLI; patch optional — see patches/)
 
 ## Now (UI / experience)
 

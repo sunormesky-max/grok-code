@@ -193,6 +193,20 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
     for (const id of [...acpPool.keys()]) disposeAcpPool(id, { kill });
   }
 
+  /**
+   * Drop warm ACP sessions so next run re-initialize/authenticate with new
+   * settings (model, path, transport, YOLO, rules, …). Running turns keep their child.
+   * @returns {{ cleared: number }}
+   */
+  function invalidateWarmSessions() {
+    const n = acpPool.size;
+    if (n) {
+      streamDebug(`acp warm pool invalidate count=${n}`, { force: true });
+    }
+    disposeAcpPool(null, { kill: true });
+    return { cleared: n };
+  }
+
   function killPidTree(pid) {
     if (!pid || pid <= 0) return;
     try {
@@ -2521,6 +2535,7 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
     replyUserQuestion,
     setSessionMode,
     setSessionModel,
+    invalidateWarmSessions,
   };
 }
 

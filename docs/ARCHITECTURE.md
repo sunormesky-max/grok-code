@@ -100,6 +100,12 @@ ACP session/update  or  headless NDJSON
 
 Upstream silence between stages is normal; host shows activity clock + phase.
 
+## Settings & warm ACP
+
+Changing **model / grok path / agentTransport / YOLO / rules / reasoning effort /
+API key** clears the per-task ACP warm pool (`invalidateWarmSessions`). Running
+turns are not killed; the *next* prompt re-runs `initialize` + `authenticate`.
+
 ## Doctor
 
 Settings → Diagnostics:

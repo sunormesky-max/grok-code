@@ -579,76 +579,113 @@ ipcMain.handle('config:get', () => {
   };
 });
 
+/** Settings that require ACP warm-session recycle (buffering/auth/path/model). */
+const ACP_WARM_INVALIDATE_KEYS = new Set([
+  'apiKey',
+  'model',
+  'reasoningEffort',
+  'grokPath',
+  'alwaysApprove',
+  'maxTurns',
+  'rules',
+  'agentTransport',
+  'grokPatched',
+  'patchedCli',
+]);
+
+function invalidateAllWarmAcpSessions() {
+  let cleared = 0;
+  for (const p of projects.values()) {
+    if (typeof p.agent?.invalidateWarmSessions === 'function') {
+      try {
+        const r = p.agent.invalidateWarmSessions();
+        cleared += Number(r?.cleared) || 0;
+      } catch {
+        /* ignore */
+      }
+    }
+  }
+  return cleared;
+}
+
 ipcMain.handle('config:set', (_e, partial) => {
-  if (partial.apiKey !== undefined && !String(partial.apiKey).startsWith('••••')) {
-    store.set('apiKey', String(partial.apiKey).trim());
+  const p = partial && typeof partial === 'object' ? partial : {};
+  const needWarmInvalidate = Object.keys(p).some((k) =>
+    ACP_WARM_INVALIDATE_KEYS.has(k)
+  );
+
+  if (p.apiKey !== undefined && !String(p.apiKey).startsWith('••••')) {
+    store.set('apiKey', String(p.apiKey).trim());
   }
-  if (partial.model !== undefined) store.set('model', String(partial.model).trim());
-  if (partial.reasoningEffort !== undefined) {
+  if (p.model !== undefined) store.set('model', String(p.model).trim());
+  if (p.reasoningEffort !== undefined) {
     const { normalizeReasoningEffort } = require('./acp-client');
-    store.set(
-      'reasoningEffort',
-      normalizeReasoningEffort(partial.reasoningEffort)
-    );
+    store.set('reasoningEffort', normalizeReasoningEffort(p.reasoningEffort));
   }
-  if (partial.grokPatched !== undefined) {
-    store.set('grokPatched', Boolean(partial.grokPatched));
+  if (p.grokPatched !== undefined) {
+    store.set('grokPatched', Boolean(p.grokPatched));
   }
-  if (partial.patchedCli !== undefined && partial.grokPatched === undefined) {
-    store.set('grokPatched', Boolean(partial.patchedCli));
+  if (p.patchedCli !== undefined && p.grokPatched === undefined) {
+    store.set('grokPatched', Boolean(p.patchedCli));
   }
-  if (partial.grokPath !== undefined) store.set('grokPath', String(partial.grokPath).trim());
-  if (partial.alwaysApprove !== undefined) store.set('alwaysApprove', Boolean(partial.alwaysApprove));
-  if (partial.maxTurns !== undefined) store.set('maxTurns', Number(partial.maxTurns) || 30);
-  if (partial.rules !== undefined) store.set('rules', String(partial.rules));
-  if (partial.onboardingDone !== undefined) store.set('onboardingDone', Boolean(partial.onboardingDone));
-  if (partial.contextMode !== undefined) {
-    const m = String(partial.contextMode) === 'llm' ? 'llm' : 'heuristic';
+  if (p.grokPath !== undefined) store.set('grokPath', String(p.grokPath).trim());
+  if (p.alwaysApprove !== undefined) store.set('alwaysApprove', Boolean(p.alwaysApprove));
+  if (p.maxTurns !== undefined) store.set('maxTurns', Number(p.maxTurns) || 30);
+  if (p.rules !== undefined) store.set('rules', String(p.rules));
+  if (p.onboardingDone !== undefined) store.set('onboardingDone', Boolean(p.onboardingDone));
+  if (p.contextMode !== undefined) {
+    const m = String(p.contextMode) === 'llm' ? 'llm' : 'heuristic';
     store.set('contextMode', m);
   }
-  if (partial.preferredEditor !== undefined) {
-    const pe = String(partial.preferredEditor);
+  if (p.preferredEditor !== undefined) {
+    const pe = String(p.preferredEditor);
     store.set(
       'preferredEditor',
       ['auto', 'code', 'cursor', 'system'].includes(pe) ? pe : 'auto'
     );
   }
-  if (partial.autoUpdate !== undefined) store.set('autoUpdate', Boolean(partial.autoUpdate));
-  if (partial.agentTransport !== undefined) {
-    const t = String(partial.agentTransport || 'auto').toLowerCase();
+  if (p.autoUpdate !== undefined) store.set('autoUpdate', Boolean(p.autoUpdate));
+  if (p.agentTransport !== undefined) {
+    const t = String(p.agentTransport || 'auto').toLowerCase();
     store.set(
       'agentTransport',
       ['auto', 'acp', 'headless'].includes(t) ? t : 'auto'
     );
   }
-  if (partial.locale !== undefined) {
-    store.set('locale', String(partial.locale) === 'en' ? 'en' : 'zh');
+  if (p.locale !== undefined) {
+    store.set('locale', String(p.locale) === 'en' ? 'en' : 'zh');
   }
-  if (partial.theme !== undefined) store.set('theme', String(partial.theme || 'grok'));
-  if (partial.telemetryEnabled !== undefined) {
-    store.set('telemetryEnabled', Boolean(partial.telemetryEnabled));
+  if (p.theme !== undefined) store.set('theme', String(p.theme || 'grok'));
+  if (p.telemetryEnabled !== undefined) {
+    store.set('telemetryEnabled', Boolean(p.telemetryEnabled));
   }
-  if (partial.telemetryEndpoint !== undefined) {
-    store.set('telemetryEndpoint', String(partial.telemetryEndpoint || '').trim());
+  if (p.telemetryEndpoint !== undefined) {
+    store.set('telemetryEndpoint', String(p.telemetryEndpoint || '').trim());
   }
-  if (partial.workMode !== undefined) {
-    store.set('workMode', modes.normalizeWorkMode(partial.workMode));
+  if (p.workMode !== undefined) {
+    store.set('workMode', modes.normalizeWorkMode(p.workMode));
   }
-  if (partial.stylePack !== undefined) {
-    const s = String(partial.stylePack);
+  if (p.stylePack !== undefined) {
+    const s = String(p.stylePack);
     store.set('stylePack', modes.STYLES[s] ? s : 'default');
   }
-  if (partial.personalProtect !== undefined) {
-    const pp = String(partial.personalProtect);
+  if (p.personalProtect !== undefined) {
+    const pp = String(p.personalProtect);
     store.set('personalProtect', ['off', 'standard', 'strict'].includes(pp) ? pp : 'standard');
   }
-  if (partial.trashOnDelete !== undefined) {
-    store.set('trashOnDelete', Boolean(partial.trashOnDelete));
+  if (p.trashOnDelete !== undefined) {
+    store.set('trashOnDelete', Boolean(p.trashOnDelete));
   }
-  if (partial.injectSkillsIndex !== undefined) {
-    store.set('injectSkillsIndex', Boolean(partial.injectSkillsIndex));
+  if (p.injectSkillsIndex !== undefined) {
+    store.set('injectSkillsIndex', Boolean(p.injectSkillsIndex));
   }
-  return true;
+
+  // Recycle warm ACP so next turn picks up new path/model/transport/rules
+  let warmCleared = 0;
+  if (needWarmInvalidate) {
+    warmCleared = invalidateAllWarmAcpSessions();
+  }
+  return { ok: true, warmCleared };
 });
 
 ipcMain.handle('modes:list', () => ({
