@@ -4061,6 +4061,37 @@ button.pill:hover {
 .permission-remember input {
   accent-color: #f59e0b;
 }
+/* Compact density — routine file writes (still CLI options only) */
+.permission-bar.density-compact {
+  padding: 8px 12px;
+  gap: 6px;
+}
+.permission-compact-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.permission-compact-title {
+  font-size: 13px;
+  font-weight: 600;
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.permission-opts.compact-opts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+.permission-remember.compact-remember {
+  font-size: 11px;
+  margin: 0;
+}
 
 /* ACP x.ai/ask_user_question — multi-choice questionnaire */
 .user-question-bar {

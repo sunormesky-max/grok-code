@@ -211,6 +211,37 @@
     return `${line.pre || ''}${line.obj || ''}${line.post || ''}`;
   }
 
+  /**
+   * Permission card density: compact file writes vs full shell/external.
+   * Host presentation only — does not change CLI options.
+   * @param {string} name
+   * @param {object} [args]
+   * @returns {'compact'|'full'}
+   */
+  function permissionDensity(name, args) {
+    const n = normName(name);
+    if (
+      /^(run_shell|run_command|run_terminal|run_terminal_command|bash|shell|powershell|cmd)$/.test(
+        n
+      ) ||
+      /shell|terminal|bash|powershell/.test(n)
+    ) {
+      return 'full';
+    }
+    if (/web_search|web_fetch|browse|open_url|send_message|send_file/.test(n)) {
+      return 'full';
+    }
+    // Routine workspace writes → compact row
+    if (
+      /write|replace|edit|patch|search_replace|create_file|apply_diff|str_replace/.test(n)
+    ) {
+      return 'compact';
+    }
+    // Long command-like args → full
+    if (args && typeof args === 'object' && args.command) return 'full';
+    return 'full';
+  }
+
   const api = {
     trunc,
     baseName,
@@ -219,6 +250,7 @@
     humanizeTool,
     humanizeApproval,
     formatLine,
+    permissionDensity,
   };
 
   global.GrokHumanize = api;

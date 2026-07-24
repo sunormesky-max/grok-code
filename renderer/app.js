@@ -2535,6 +2535,20 @@ function bindUi() {
       });
     },
   };
+  // Durable Inbox: rehydrate display-only stale parks (cannot reply without live ACP)
+  try {
+    const n = window.GrokInbox?.restoreStale?.() || 0;
+    if (n > 0) {
+      toast(
+        localeIsEn()
+          ? `Inbox: ${n} item(s) from last session (dismiss only — CLI gone)`
+          : `Inbox：上次会话 ${n} 条待办（仅可关闭 · CLI 已断）`,
+        'ok'
+      );
+    }
+  } catch {
+    /* optional */
+  }
   window.GrokInbox?.paintBadge?.();
   $('#btnCloseSettings').onclick = closeSettings;
   $('#btnSaveSettings').onclick = saveSettings;
@@ -10693,6 +10707,9 @@ function showPermissionBar(task, d) {
     })
   );
   const title = human || d.toolTitle || d.toolName || (en ? 'Tool permission' : '工具授权');
+  const density =
+    window.GrokHumanize?.permissionDensity?.(d.toolName || d.toolTitle, d.toolArgs || {}) ||
+    'full';
   window.GrokInbox?.upsert?.({
     kind: 'permission',
     taskId: task.id,
@@ -10702,12 +10719,14 @@ function showPermissionBar(task, d) {
     projectName: proj?.name || '',
     title,
     body: summarizeToolSub(d.toolName, d.toolArgs || {}),
-    meta: { options, toolName: d.toolName, toolArgs: d.toolArgs },
+    meta: { options, toolName: d.toolName, toolArgs: d.toolArgs, density },
+    stale: false,
   });
   task.pane.querySelectorAll('.permission-bar').forEach((el) => el.remove());
   const bar = document.createElement('div');
-  bar.className = 'permission-bar msg status';
+  bar.className = `permission-bar msg status density-${density}`;
   bar.dataset.requestId = String(d.requestId);
+  bar.dataset.density = density;
   const optBtns = options
     .map((o, i) => {
       const id = esc(o.optionId || '');
@@ -10724,7 +10743,21 @@ function showPermissionBar(task, d) {
   } catch {
     argsPreview = '';
   }
-  bar.innerHTML = `
+  if (density === 'compact') {
+    bar.innerHTML = `
+      <div class="permission-compact-row">
+        <span class="permission-compact-title" title="${esc(d.toolName || '')}">${esc(title)}</span>
+        <div class="permission-opts compact-opts">
+          ${optBtns || `<span class="muted">${en ? 'No options' : '无选项'}</span>`}
+          <button type="button" class="btn small ghost" data-act="cancel">✕</button>
+        </div>
+      </div>
+      <label class="permission-remember compact-remember">
+        <input type="checkbox" class="perm-remember-cb" checked />
+        <span>${en ? 'Remember flight' : '本回合记住'}</span>
+      </label>`;
+  } else {
+    bar.innerHTML = `
     <div class="permission-head">
       <strong>${en ? 'Tool permission' : '工具授权'}</strong>
       <span class="muted">${en ? 'CLI request_permission' : '对齐 CLI · request_permission'}</span>
@@ -10739,6 +10772,7 @@ function showPermissionBar(task, d) {
       ${optBtns || `<span class="muted">${en ? 'No options from CLI' : 'CLI 未返回选项'}</span>`}
       <button type="button" class="btn small ghost" data-act="cancel">✕ ${en ? 'Cancel' : '取消'}</button>
     </div>`;
+  }
   const send = async (payload) => {
     const inboxId = window.GrokInbox?.itemId?.('permission', task.id, d.requestId);
     if (inboxId && window.GrokInbox?.isResolving?.(inboxId)) {

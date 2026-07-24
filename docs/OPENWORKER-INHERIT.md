@@ -17,6 +17,7 @@ OpenWorker-specific internal-flow footguns.
 | Global Inbox (plan + question) | `renderer/inbox.js` | 1.29 → **1.29.1** | **Shared resolve lock**; mirror of ACP park, not a second SM |
 | Plan exec tier + tool permission park | plan bar + `request_permission` | **1.30.0** | CLI optionIds only; flight-local autoApprove flip |
 | Standing grants (flight) | `AcpClient.standingGrants` | **1.31.0** | tool→optionId only if still offered; no invent |
+| Permission density + stale Inbox | humanize + localStorage | **1.32.0** | stale = dismiss only; no resolve without ACP |
 
 ## Hard boundaries (never break)
 
@@ -51,8 +52,8 @@ against the thin-host contract instead of copying OpenWorker.
 
 ## Next candidates (optional, still host-only)
 
-1. Compact vs full approval density (presentation)  
-2. Durable UI rehydrate of parks (display only — cannot resolve without live ACP)
+1. Further a11y / polish on compact permission rows  
+2. Optional “clear all stale” control  
 
 Not scheduled: unattended router, multi-root permission engine, automation
 scheduler, provider matrix, durable grants across restarts (would need user

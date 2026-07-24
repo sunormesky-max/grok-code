@@ -11,6 +11,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 - See [ROADMAP.md](ROADMAP.md)
 
+## [1.32.0] — 2026-07-24
+
+### Permission density + durable Inbox (display-only)
+
+- **Compact permission cards** for routine file writes; **full** cards for shell /
+  web / send (still CLI optionIds only)
+- **Durable Inbox rehydrate**: pending parks snapshot to `localStorage`; after
+  restart they restore as **STALE** (dismiss only — cannot reply without live ACP)
+- Live park overwrites same id and clears stale
+- Unit tests for density + stale restore
+
 ## [1.31.0] — 2026-07-24
 
 ### Session standing grants (CLI optionId only)

@@ -147,6 +147,20 @@
   margin-bottom: 6px;
   user-select: none;
 }
+.inbox-card.inbox-stale {
+  border-color: rgba(161, 161, 170, 0.35);
+  opacity: 0.92;
+}
+.inbox-stale-banner {
+  margin: 0 0 8px;
+  font-size: 11.5px;
+  line-height: 1.4;
+  color: #fbbf24;
+}
+.inbox-chip.kind-stale {
+  background: rgba(161, 161, 170, 0.2);
+  color: #a1a1aa;
+}
 .inbox-where {
   flex: 1;
   min-width: 0;

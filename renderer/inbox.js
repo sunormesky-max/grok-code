@@ -2,8 +2,11 @@
  * Global Inbox — cross-task attention queue for parked CLI reverse-requests.
  * Inspired by OpenWorker inbox (approval / question / plan) without a second agent.
  *
- * Host only: items mirror plan_approval + user_question already parked in ACP.
+ * Host only: items mirror plan/ask/permission already parked in ACP.
  * First resolve wins; resolving removes the item (task bar handlers also clear).
+ *
+ * Durable rehydrate: localStorage snapshot is **display-only after restart**
+ * (stale=true) — no reply without live ACP (refuse second SM).
  */
 (function (global) {
   /** @typedef {'plan'|'question'|'permission'} InboxKind */
@@ -21,7 +24,11 @@
    * @property {object} [meta]
    * @property {number} createdAt
    * @property {'pending'|'resolved'} state
+   * @property {boolean} [stale] true = restored after restart, dismiss only
    */
+
+  const STORAGE_KEY = 'grokcode.inbox.v1';
+  const MAX_PERSIST = 40;
 
   /** @type {Map<string, InboxItem>} */
   const items = new Map();
@@ -58,9 +65,85 @@
     try {
       paintBadge();
       if (typeof document !== 'undefined' && isOpen()) renderList();
+      persist();
     } catch {
       /* Node tests / no DOM */
     }
+  }
+
+  function persist() {
+    if (typeof localStorage === 'undefined') return;
+    try {
+      const list = listPending()
+        .slice(0, MAX_PERSIST)
+        .map((it) => ({
+          id: it.id,
+          kind: it.kind,
+          taskId: it.taskId,
+          projectId: it.projectId || '',
+          requestId: it.requestId,
+          taskTitle: it.taskTitle || '',
+          projectName: it.projectName || '',
+          title: it.title || '',
+          body: String(it.body || '').slice(0, 2000),
+          meta: {
+            options: Array.isArray(it.meta?.options) ? it.meta.options : undefined,
+            toolName: it.meta?.toolName,
+            density: it.meta?.density,
+          },
+          createdAt: it.createdAt,
+          // Always mark persisted snapshot as potentially stale after reload
+          stale: true,
+        }));
+      localStorage.setItem(
+        STORAGE_KEY,
+        JSON.stringify({ v: 1, items: list, savedAt: Date.now() })
+      );
+    } catch {
+      /* quota / private mode */
+    }
+  }
+
+  /**
+   * Load snapshot after restart — **stale only** (dismiss, no RPC).
+   * Live parks overwrite via upsert({ stale: false }).
+   * @returns {number} restored count
+   */
+  function restoreStale() {
+    if (typeof localStorage === 'undefined') return 0;
+    let n = 0;
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (!raw) return 0;
+      const data = JSON.parse(raw);
+      const list = Array.isArray(data?.items) ? data.items : [];
+      for (const it of list) {
+        if (!it?.kind || !it?.taskId || it.requestId == null) continue;
+        const id = it.id || itemId(it.kind, it.taskId, it.requestId);
+        const live = items.get(id);
+        if (live && !live.stale) continue;
+        items.set(id, {
+          id,
+          kind: it.kind,
+          taskId: String(it.taskId),
+          projectId: it.projectId != null ? String(it.projectId) : '',
+          requestId: it.requestId,
+          taskTitle: it.taskTitle || '',
+          projectName: it.projectName || '',
+          title: it.title || kindDefaultTitle(it.kind),
+          body: String(it.body || ''),
+          meta: it.meta && typeof it.meta === 'object' ? it.meta : {},
+          createdAt: Number(it.createdAt) || Date.now(),
+          state: 'pending',
+          stale: true,
+        });
+        n += 1;
+      }
+      if (n) emit();
+    } catch {
+      return 0;
+    }
+    return n;
   }
 
   function onChange(fn) {
@@ -75,6 +158,7 @@
     if (!raw?.kind || !raw?.taskId || raw.requestId == null) return null;
     const id = raw.id || itemId(raw.kind, raw.taskId, raw.requestId);
     const prev = items.get(id);
+    // Live parks omit stale or pass false; restoreStale passes true only
     const next = {
       id,
       kind: raw.kind,
@@ -88,11 +172,12 @@
       meta: raw.meta && typeof raw.meta === 'object' ? raw.meta : prev?.meta || {},
       createdAt: prev?.createdAt || Date.now(),
       state: 'pending',
+      stale: raw.stale === true,
     };
-    const isNew = !prev || prev.state !== 'pending';
+    const isNew = !prev || prev.state !== 'pending' || (prev.stale && !next.stale);
     items.set(id, next);
     emit();
-    if (isNew) {
+    if (isNew && !next.stale) {
       try {
         const msg = String(t('inbox.announce', 'Inbox: {n} waiting')).replace(
           '{n}',
@@ -261,6 +346,30 @@
           .trim()
           .slice(0, 220);
         const age = formatAge(it.createdAt, en);
+        const staleBanner = it.stale
+          ? `<p class="inbox-stale-banner">${esc(
+              en
+                ? 'Session lost after restart — cannot reply to CLI. Dismiss only.'
+                : '重启后会话已断 · 无法再回复 CLI，仅可关闭此条。'
+            )}</p>`
+          : '';
+        if (it.stale) {
+          return `
+          <article class="inbox-card inbox-stale" data-id="${esc(it.id)}" data-kind="${esc(it.kind)}">
+            <div class="inbox-card-top">
+              <span class="inbox-chip kind-stale">${en ? 'STALE' : '过期'}</span>
+              <span class="inbox-chip kind-${it.kind === 'plan' ? 'plan' : it.kind === 'permission' ? 'perm' : 'ask'}">${kindLabel}</span>
+              <span class="inbox-where" title="${esc(where)}">${esc(where)}</span>
+              <span class="inbox-age">${esc(age)}</span>
+            </div>
+            <div class="inbox-card-title">${esc(it.title)}</div>
+            ${staleBanner}
+            ${preview ? `<div class="inbox-preview-text">${esc(preview)}</div>` : ''}
+            <div class="inbox-actions">
+              <button type="button" class="btn small ghost" data-act="dismiss-stale" data-id="${esc(it.id)}">✕ ${esc(en ? 'Dismiss' : '关闭')}</button>
+            </div>
+          </article>`;
+        }
         if (it.kind === 'plan') {
           return `
           <article class="inbox-card" data-id="${esc(it.id)}" data-kind="plan">
@@ -358,6 +467,13 @@
     const it = items.get(id);
     if (!it) return;
     const handlers = global.GrokInboxHandlers || {};
+
+    // Stale after restart: display-only, never RPC
+    if (it.stale || act === 'dismiss-stale') {
+      resolve(id);
+      global.toast?.(t('inbox.stale.dismissed', '已关闭过期项'), 'ok');
+      return;
+    }
 
     if (act === 'goto') {
       try {
@@ -589,6 +705,9 @@
     isOpen,
     paintBadge,
     ensure,
+    persist,
+    restoreStale,
+    STORAGE_KEY,
   };
 
   global.GrokInbox = api;

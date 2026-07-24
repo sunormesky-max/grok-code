@@ -1397,7 +1397,74 @@ function testHumanize() {
     h.humanizeApproval('run_shell', { command: 'rm -rf /' }, { en: true })
   );
   assert.ok(/Run a command/i.test(ask), ask);
+  assert.equal(h.permissionDensity('search_replace', { path: 'a.ts' }), 'compact');
+  assert.equal(h.permissionDensity('run_terminal_command', { command: 'ls' }), 'full');
+  assert.equal(h.permissionDensity('web_search', { query: 'x' }), 'full');
   console.log('ok  humanize tool lines');
+}
+
+function testInboxDurableStale() {
+  const pathInbox = path.join(root, 'renderer', 'inbox.js');
+  const store = {};
+  global.localStorage = {
+    getItem: (k) => (store[k] != null ? store[k] : null),
+    setItem: (k, v) => {
+      store[k] = String(v);
+    },
+    removeItem: (k) => {
+      delete store[k];
+    },
+  };
+  delete require.cache[require.resolve(pathInbox)];
+  const inbox = require(pathInbox);
+  inbox.clearAll();
+
+  // Seed storage as if previous session
+  store[inbox.STORAGE_KEY] = JSON.stringify({
+    v: 1,
+    items: [
+      {
+        kind: 'plan',
+        taskId: 't-old',
+        requestId: 99,
+        title: 'Old plan',
+        body: 'step',
+        createdAt: 1,
+      },
+    ],
+    savedAt: Date.now(),
+  });
+  const n = inbox.restoreStale();
+  assert.equal(n, 1);
+  const stale = inbox.listPending()[0];
+  assert.equal(stale.stale, true);
+  assert.equal(stale.taskId, 't-old');
+
+  // Live park same id upgrades off stale
+  inbox.upsert({
+    kind: 'plan',
+    taskId: 't-old',
+    requestId: 99,
+    title: 'Live plan',
+    body: 'new',
+  });
+  assert.equal(inbox.listPending()[0].stale, false);
+  assert.equal(inbox.listPending()[0].title, 'Live plan');
+
+  // Dismiss path for remaining stale
+  inbox.upsert({
+    kind: 'question',
+    taskId: 't2',
+    requestId: 1,
+    title: 'Q',
+    stale: true,
+  });
+  assert.ok(inbox.listPending().some((i) => i.stale));
+  inbox.resolve(inbox.itemId('question', 't2', 1));
+  assert.ok(!inbox.listPending().some((i) => i.id.includes('t2')));
+
+  delete global.localStorage;
+  console.log('ok  inbox durable stale rehydrate');
 }
 
 function testStreamFairness() {
@@ -1545,6 +1612,7 @@ try {
   testStreamGate();
   testHumanize();
   testInboxQueue();
+  testInboxDurableStale();
   Promise.resolve()
     .then(() => testAgentExports())
     .then(() => testSessionModeNormalize())
