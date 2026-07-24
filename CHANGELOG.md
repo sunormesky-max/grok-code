@@ -11,6 +11,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 - See [ROADMAP.md](ROADMAP.md)
 
+## [1.29.1] — 2026-07-24
+
+### Harden inherited UX (do not import OpenWorker flow bugs)
+
+User feedback: OpenWorker internal flow is still problematic — keep GrokCode
+as a thin CLI host.
+
+- **stream-gate**: remove blank `hold`; short text is quiet one-liner; earlier
+  promote thresholds (fail-open, no black-box empty bubble)
+- **Inbox**: shared `tryBeginResolve` lock between drawer and in-pane bars
+  (blocks double `replyPlanApproval` / `replyUserQuestion` RPC)
+- `docs/OPENWORKER-INHERIT.md`: explicit anti-patterns we refuse
+
 ## [1.29.0] — 2026-07-24
 
 ### Global Inbox (OpenWorker-inspired)

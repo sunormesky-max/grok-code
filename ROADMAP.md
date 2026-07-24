@@ -94,12 +94,15 @@ Living plan for the GrokCode open-source ecosystem. Order may change based on co
 - [x] CLI-native surface copy + mission bar for cli turns (v1.27.0)
 - [x] Stream gate + tool humanize from OpenWorker patterns (v1.28.0)
 - [x] Global Inbox for plan / ask across tasks (v1.29.0)
+- [x] Harden OW inheritance: no blank hold + inbox resolve lock (v1.29.1)
 
-## Next (host UX — OpenWorker-inspired)
+## Next (host UX — carefully; refuse OW engine flow)
 
-- [ ] Plan-card execute permission tier (ask-per-step vs YOLO via settings)
+- [ ] Plan-card execute permission tier (ask-per-step vs YOLO via **settings only**)
 - [ ] Session standing grants (within CLI option IDs only)
-- [ ] Durable park resume across app restart
+- [ ] Durable park resume across app restart (UI rehydrate only; no second SM)
+
+See `docs/OPENWORKER-INHERIT.md` anti-patterns before any further port.
 
 ## Next (host ↔ open-source grok-build)
 

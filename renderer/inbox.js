@@ -27,6 +27,8 @@
   const items = new Map();
   /** @type {Set<function>} */
   const listeners = new Set();
+  /** In-flight resolve ids — blocks Inbox + in-pane double RPC (first wins). */
+  const inflight = new Set();
 
   function t(k, fb) {
     return global.GrokI18n?.t?.(k, fb) || fb || k;
@@ -114,8 +116,29 @@
     const it = items.get(id);
     if (!it) return false;
     items.delete(id);
+    inflight.delete(id);
     emit();
     return true;
+  }
+
+  /**
+   * Claim exclusive resolve for this item (Inbox or in-pane bar).
+   * Returns false if already resolving or item missing.
+   * @param {string} id
+   */
+  function tryBeginResolve(id) {
+    if (!id || !items.has(id) || inflight.has(id)) return false;
+    inflight.add(id);
+    return true;
+  }
+
+  /** Release claim without deleting (e.g. RPC failed — user may retry). */
+  function endResolve(id) {
+    if (id) inflight.delete(id);
+  }
+
+  function isResolving(id) {
+    return Boolean(id && inflight.has(id));
   }
 
   /**
@@ -128,6 +151,7 @@
       if (match.taskId != null && String(it.taskId) !== String(match.taskId)) continue;
       if (match.requestId != null && String(it.requestId) !== String(match.requestId)) continue;
       items.delete(id);
+      inflight.delete(id);
       n += 1;
     }
     if (n) emit();
@@ -319,9 +343,14 @@
       else if (act === 'quit') outcome = 'abandoned';
       else if (act === 'revise') outcome = 'cancelled';
       else return;
+      if (!tryBeginResolve(id)) {
+        global.toast?.(t('inbox.busy', '正在处理，请勿重复点击'), 'err');
+        return;
+      }
       try {
         const r = await handlers.replyPlan?.(it, outcome, outcome === 'cancelled' ? feedback : '');
         if (r && r.ok === false) {
+          endResolve(id);
           global.toast?.(r.error || 'plan reply failed', 'err');
           return;
         }
@@ -348,15 +377,21 @@
           'ok'
         );
       } catch (e) {
+        endResolve(id);
         global.toast?.(e.message || String(e), 'err');
       }
       return;
     }
 
     if (it.kind === 'question' && act === 'dismiss-q') {
+      if (!tryBeginResolve(id)) {
+        global.toast?.(t('inbox.busy', '正在处理，请勿重复点击'), 'err');
+        return;
+      }
       try {
         const r = await handlers.replyQuestion?.(it, { outcome: 'cancelled' });
         if (r && r.ok === false) {
+          endResolve(id);
           global.toast?.(r.error || 'cancel failed', 'err');
           return;
         }
@@ -368,6 +403,7 @@
         }
         global.toast?.(t('inbox.q.cancelled', '已取消提问'), 'ok');
       } catch (e) {
+        endResolve(id);
         global.toast?.(e.message || String(e), 'err');
       }
     }
@@ -431,6 +467,9 @@
     itemId,
     upsert,
     resolve,
+    tryBeginResolve,
+    endResolve,
+    isResolving,
     removeMatching,
     listPending,
     count,

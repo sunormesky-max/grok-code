@@ -1167,6 +1167,12 @@ function testInboxQueue() {
   });
   assert.equal(inbox.count(), 2);
   assert.ok(inbox.listPending().find((i) => i.body.includes('updated')));
+  // In-flight lock — first claim wins (anti double-RPC)
+  assert.equal(inbox.tryBeginResolve('question:t2:9'), true);
+  assert.equal(inbox.tryBeginResolve('question:t2:9'), false);
+  assert.equal(inbox.isResolving('question:t2:9'), true);
+  inbox.endResolve('question:t2:9');
+  assert.equal(inbox.isResolving('question:t2:9'), false);
   // First resolve wins
   assert.equal(inbox.resolve('plan:t1:7'), true);
   assert.equal(inbox.count(), 1);
@@ -1179,7 +1185,8 @@ function testInboxQueue() {
 function testStreamGate() {
   const g = require(path.join(root, 'renderer', 'stream-gate.js'));
   assert.equal(g.streamMode('', { running: true }), 'none');
-  assert.equal(g.streamMode('hi', { running: true, toolCount: 0 }), 'hold');
+  // Fail-open: short text is quiet (never blank hold)
+  assert.equal(g.streamMode('hi', { running: true, toolCount: 0 }), 'quiet');
   assert.equal(
     g.streamMode('short mid', { running: true, toolCount: 2 }),
     'quiet'
@@ -1193,14 +1200,15 @@ function testStreamGate() {
   assert.equal(g.streamMode(cjk, { running: true, toolCount: 0 }), 'answer');
   // Done turn always answer
   assert.equal(g.streamMode('short', { running: false }), 'answer');
-  assert.equal(g.displayForMode('abc', 'hold'), '');
+  // hold alias still shows text (not blank)
+  assert.ok(g.displayForMode('abc', 'hold', { en: true }).includes('abc'));
   assert.ok(g.displayForMode('hello world', 'quiet', { en: true }).includes('Working'));
   assert.equal(g.displayForMode('full text', 'answer'), 'full text');
   assert.equal(
     g.modeForTask({ streamBuf: 'x', running: true, toolCount: 0 }),
-    'hold'
+    'quiet'
   );
-  console.log('ok  stream-gate hold/quiet/answer');
+  console.log('ok  stream-gate quiet/answer fail-open');
 }
 
 function testHumanize() {

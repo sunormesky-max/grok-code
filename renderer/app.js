@@ -9079,11 +9079,7 @@ function paintLiveAssistantRole(task) {
   const phase = task.phase || '';
   const det = String(task.phaseDetail || '').slice(0, 48);
   const gate = window.GrokStreamGate?.modeForTask?.(task);
-  if (gate === 'hold') {
-    role.textContent = localeIsEn() ? 'Grok · working…' : 'Grok · 工作中…';
-    return;
-  }
-  if (gate === 'quiet') {
+  if (gate === 'quiet' || gate === 'hold') {
     role.textContent = localeIsEn() ? 'Grok · mid-turn' : 'Grok · 回合中';
     return;
   }
@@ -9112,11 +9108,7 @@ function paintLiveStreamMirrors(task) {
 
   const paintOne = (kind, text, streamMode) => {
     if (!text && kind === 'thought') return;
-    // hold: no floating stream mirror (role spinner is enough)
-    if (kind === 'stream' && streamMode === 'hold') {
-      document.getElementById('liveStreamMirror')?.remove();
-      return;
-    }
+    // none: no mirror; quiet/answer always show (no blank hold — refuse OW black-box)
     if (kind === 'stream' && streamMode === 'none') {
       document.getElementById('liveStreamMirror')?.remove();
       return;
@@ -10549,6 +10541,16 @@ function showPlanApprovalBar(task, d) {
       <button type="button" class="btn small ghost" data-act="quit">✕ ${en ? 'Quit plan' : '放弃计划'}</button>
     </div>`;
   const send = async (outcome) => {
+    const inboxId = window.GrokInbox?.itemId?.('plan', task.id, d.requestId);
+    // Shared lock with Inbox drawer — no double RPC to ACP
+    if (inboxId && window.GrokInbox?.isResolving?.(inboxId)) {
+      toast(en ? 'Already resolving…' : '正在处理，请勿重复点击', 'err');
+      return;
+    }
+    if (inboxId && window.GrokInbox?.tryBeginResolve && !window.GrokInbox.tryBeginResolve(inboxId)) {
+      toast(en ? 'Already resolving…' : '正在处理，请勿重复点击', 'err');
+      return;
+    }
     const feedback = bar.querySelector('.plan-feedback-input')?.value || '';
     bar.querySelectorAll('button').forEach((b) => {
       b.disabled = true;
@@ -10562,6 +10564,7 @@ function showPlanApprovalBar(task, d) {
         feedback: outcome === 'cancelled' ? feedback || undefined : undefined,
       });
       if (!r?.ok) {
+        if (inboxId) window.GrokInbox?.endResolve?.(inboxId);
         toast(r?.error || 'plan reply failed', 'err');
         bar.querySelectorAll('button').forEach((b) => {
           b.disabled = false;
@@ -10589,6 +10592,7 @@ function showPlanApprovalBar(task, d) {
         'ok'
       );
     } catch (err) {
+      if (inboxId) window.GrokInbox?.endResolve?.(inboxId);
       toast(err.message || String(err), 'err');
       bar.querySelectorAll('button').forEach((b) => {
         b.disabled = false;
@@ -10744,6 +10748,15 @@ function showUserQuestionBar(task, d) {
   }
 
   const send = async (outcome) => {
+    const inboxId = window.GrokInbox?.itemId?.('question', task.id, d.requestId);
+    if (inboxId && window.GrokInbox?.isResolving?.(inboxId)) {
+      toast(en ? 'Already resolving…' : '正在处理，请勿重复点击', 'err');
+      return;
+    }
+    if (inboxId && window.GrokInbox?.tryBeginResolve && !window.GrokInbox.tryBeginResolve(inboxId)) {
+      toast(en ? 'Already resolving…' : '正在处理，请勿重复点击', 'err');
+      return;
+    }
     bar.querySelectorAll('button').forEach((b) => {
       b.disabled = true;
     });
@@ -10752,6 +10765,7 @@ function showUserQuestionBar(task, d) {
       if (outcome === 'accepted') {
         const { answers, annotations } = collectAnswers(false);
         if (!Object.keys(answers).length) {
+          if (inboxId) window.GrokInbox?.endResolve?.(inboxId);
           toast(en ? 'Pick at least one option' : '请至少选择一个选项', 'err');
           bar.querySelectorAll('button').forEach((b) => {
             b.disabled = false;
@@ -10773,6 +10787,7 @@ function showUserQuestionBar(task, d) {
         result,
       });
       if (!r?.ok) {
+        if (inboxId) window.GrokInbox?.endResolve?.(inboxId);
         toast(r?.error || 'question reply failed', 'err');
         bar.querySelectorAll('button').forEach((b) => {
           b.disabled = false;
@@ -10803,6 +10818,7 @@ function showUserQuestionBar(task, d) {
                 : '已取消提问';
       toast(msg, 'ok');
     } catch (err) {
+      if (inboxId) window.GrokInbox?.endResolve?.(inboxId);
       toast(err.message || String(err), 'err');
       bar.querySelectorAll('button').forEach((b) => {
         b.disabled = false;
