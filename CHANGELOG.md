@@ -11,6 +11,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 - See [ROADMAP.md](ROADMAP.md)
 
+## [1.26.0] — 2026-07-24
+
+### Help cheatsheet CLI-native
+
+Keyboard overlay (`?` / `Ctrl+/`) still listed obsolete Craft/Plan/Ask/Goal
+(Ctrl+1–4). Updated for the thin host:
+
+- Rows: slash `/plan` `/agent` `/ask` `/effort`, CLI mode chip, model/effort chips
+- Removed host mode inject shortcuts (Ctrl+1–4 / one-shot Craft)
+- Focus trap while cheatsheet open; i18n en/zh strings refreshed
+- Status-bar hint no longer advertises Ctrl+1–4
+
 ## [1.25.0] — 2026-07-24
 
 ### Keyboard menus + warm-recycle feedback
