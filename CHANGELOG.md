@@ -11,6 +11,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 - See [ROADMAP.md](ROADMAP.md)
 
+## [1.36.0] — 2026-07-24
+
+### prefers-contrast suggest + Diff multi-select keys
+
+- **OS high contrast**: soft toast when `prefers-contrast: more` / `forced-colors`
+  (never auto-switch theme; once-ever dismiss)
+- Command palette: jump to **hc** / **hc-light**
+- **Diff**: Shift+j/k (or Shift+↑↓) navigate + multi-select; **x** toggle current;
+  **Esc** clears multi-select; SR announces selection count
+- Help cheatsheet + A11Y docs updated
+
 ## [1.35.0] — 2026-07-24
 
 ### High-contrast themes + Diff keyboard SR

@@ -294,6 +294,28 @@ async function init() {
   } catch (e) {
     console.warn('i18n/theme', e);
   }
+  // OS prefers-contrast → soft suggest high-contrast theme (never auto-force)
+  window.addEventListener('grok:theme-suggest-hc', () => {
+    const en = localeIsEn();
+    toast(
+      en
+        ? 'System prefers high contrast · Theme → High contrast (dark), or command palette'
+        : '系统偏好高对比 · 设置→主题「高对比·黑底」，或命令面板切换',
+      'ok'
+    );
+    window.GrokA11y?.announce?.(
+      en
+        ? 'High contrast theme available in settings'
+        : '设置中可用高对比主题',
+      { assertive: false }
+    );
+    // Mark as shown so we do not spam every launch (user can still pick HC anytime)
+    try {
+      window.GrokThemes?.dismissContrastSuggest?.();
+    } catch {
+      /* ignore */
+    }
+  });
 
   // renderer error → optional telemetry
   window.addEventListener('error', (ev) => {
@@ -2802,14 +2824,21 @@ function bindShortcuts() {
     }
     // Diff review keys when Diff tab active and not typing
     if (!mod && !e.altKey && !isTypingTarget(document.activeElement) && state.activeTab === 'diff') {
+      // Shift+j/k or Shift+↑↓ — navigate and multi-select range
       if (e.key === 'j' || e.key === 'J' || e.key === 'ArrowDown') {
         e.preventDefault();
-        navigateDiffFile(1);
+        navigateDiffFile(1, { extendSelect: e.shiftKey });
         return;
       }
       if (e.key === 'k' || e.key === 'K' || e.key === 'ArrowUp') {
         e.preventDefault();
-        navigateDiffFile(-1);
+        navigateDiffFile(-1, { extendSelect: e.shiftKey });
+        return;
+      }
+      // x = toggle multi-select on current file
+      if (e.key === 'x' || e.key === 'X') {
+        e.preventDefault();
+        toggleDiffFileSelect();
         return;
       }
       if (e.key === 'a' || e.key === 'A') {
@@ -2857,6 +2886,29 @@ function bindShortcuts() {
       }
     }
     if (e.key === 'Escape') {
+      // Diff multi-select: Esc clears selection first
+      if (
+        state.activeTab === 'diff' &&
+        state.diffSelected?.size > 0 &&
+        !isTypingTarget(document.activeElement)
+      ) {
+        e.preventDefault();
+        state.diffSelected.clear();
+        try {
+          document.querySelectorAll?.('.diff-file input[type="checkbox"]')?.forEach((inp) => {
+            inp.checked = false;
+          });
+          updateDiffMultiBar?.();
+        } catch {
+          renderDiffPane();
+        }
+        window.GrokA11y?.announce?.(
+          localeIsEn() ? 'Diff selection cleared' : '已清除 Diff 多选',
+          { assertive: false }
+        );
+        toast(localeIsEn() ? 'Selection cleared' : '已清除多选', 'ok');
+        return;
+      }
       hideSlashMenu();
       hideAtMenu();
       if (document.getElementById('chatSearchBar') && !document.getElementById('chatSearchBar').classList.contains('hidden')) {
@@ -7676,7 +7728,11 @@ function selectDiffFile(path, opts = {}) {
   if (opts.render !== false) renderDiffPane();
 }
 
-function navigateDiffFile(delta) {
+/**
+ * @param {number} delta
+ * @param {{ extendSelect?: boolean }} [opts] Shift+nav multi-select
+ */
+function navigateDiffFile(delta, opts = {}) {
   const items = sortedDiffItems();
   if (!items.length) {
     window.GrokA11y?.announce?.(
@@ -7688,17 +7744,68 @@ function navigateDiffFile(delta) {
   const cur = (P() && P().selectedDiffPath) || items[0][0];
   let idx = items.findIndex(([p]) => p === cur);
   if (idx < 0) idx = 0;
+  const prevPath = items[idx][0];
   idx = (idx + delta + items.length) % items.length;
   const path = items[idx][0];
+  if (opts.extendSelect) {
+    if (!state.diffSelected) state.diffSelected = new Set();
+    state.diffSelected.add(prevPath);
+    state.diffSelected.add(path);
+  }
   selectDiffFile(path);
+  if (opts.extendSelect) {
+    // keep multi-bar / checkboxes in sync without full re-layout when possible
+    try {
+      updateDiffMultiBar?.();
+      document.querySelectorAll?.('.diff-file input[type="checkbox"]')?.forEach((inp) => {
+        const p = inp.getAttribute('data-path');
+        if (p) inp.checked = state.diffSelected.has(p);
+      });
+      document.querySelectorAll?.('.diff-file')?.forEach((row) => {
+        const p = row.getAttribute('data-path');
+        row.classList.toggle('active', p === path);
+      });
+    } catch {
+      renderDiffPane();
+    }
+  }
   const base = path.split(/[/\\]/).pop() || path;
+  const nSel = state.diffSelected?.size || 0;
   window.GrokA11y?.announce?.(
     localeIsEn()
-      ? `Diff file ${idx + 1} of ${items.length}: ${base}`
-      : `Diff 文件 ${idx + 1}/${items.length}：${base}`,
+      ? `Diff file ${idx + 1} of ${items.length}: ${base}${opts.extendSelect ? ` · ${nSel} selected` : ''}`
+      : `Diff 文件 ${idx + 1}/${items.length}：${base}${opts.extendSelect ? ` · 已选 ${nSel}` : ''}`,
     { assertive: false }
   );
 }
+
+/** Toggle multi-select checkbox for a Diff path */
+function toggleDiffFileSelect(path) {
+  path = path || (P() && P().selectedDiffPath);
+  if (!path || !changesMap().has(path)) return false;
+  if (!state.diffSelected) state.diffSelected = new Set();
+  if (state.diffSelected.has(path)) state.diffSelected.delete(path);
+  else state.diffSelected.add(path);
+  try {
+    const inp = document.querySelector?.(
+      `.diff-file input[type="checkbox"][data-path="${CSS.escape ? CSS.escape(path) : path.replace(/"/g, '\\"')}"]`
+    );
+    if (inp) inp.checked = state.diffSelected.has(path);
+    updateDiffMultiBar?.();
+  } catch {
+    renderDiffPane();
+  }
+  const base = path.split(/[/\\]/).pop() || path;
+  const on = state.diffSelected.has(path);
+  window.GrokA11y?.announce?.(
+    localeIsEn()
+      ? `${on ? 'Selected' : 'Unselected'}: ${base} · ${state.diffSelected.size} total`
+      : `${on ? '已选' : '取消'}：${base} · 共 ${state.diffSelected.size}`,
+    { assertive: false }
+  );
+  return true;
+}
+window.toggleDiffFileSelect = toggleDiffFileSelect;
 
 /** Focus next/prev hunk head in current Diff content. @returns {boolean} handled */
 function navigateDiffHunk(delta) {

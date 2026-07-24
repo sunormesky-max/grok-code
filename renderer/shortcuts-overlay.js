@@ -35,6 +35,8 @@
     { keys: ['Ctrl', 'P'], desc: t('help.files', '搜索文件') },
     { keys: ['Ctrl', 'Shift', 'F'], desc: t('help.content', '搜索内容') },
     { keys: ['j', 'k'], desc: t('help.diff.nav', 'Diff 下一/上一文件（↑↓ 亦可）') },
+    { keys: ['Shift', 'j/k'], desc: t('help.diff.multi', 'Diff 导航并多选') },
+    { keys: ['x'], desc: t('help.diff.toggleSel', 'Diff 切换当前文件多选') },
     { keys: ['n', 'p'], desc: t('help.diff.hunk', 'Diff 下一/上一 hunk') },
     { keys: ['[', ']'], desc: t('help.diff.scrub', 'Diff 上一 / 下一 turn') },
     { keys: ['Space'], desc: t('help.diff.play', 'Diff 播放 / 暂停 turn 时间轴') },

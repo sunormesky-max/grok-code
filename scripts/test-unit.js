@@ -1347,6 +1347,52 @@ function testInboxQueue() {
   console.log('ok  inbox queue plan/question');
 }
 
+function testThemesContrastSuggest() {
+  const pathT = path.join(root, 'renderer', 'themes.js');
+  const store = {};
+  global.localStorage = {
+    getItem: (k) => (store[k] != null ? store[k] : null),
+    setItem: (k, v) => {
+      store[k] = String(v);
+    },
+    removeItem: (k) => {
+      delete store[k];
+    },
+  };
+  // No matchMedia → prefers false
+  global.window = global.window || global;
+  global.matchMedia = () => ({ matches: false, addEventListener: () => {} });
+  delete require.cache[require.resolve(pathT)];
+  let themes = require(pathT);
+  assert.equal(themes.prefersHighContrast(), false);
+  assert.equal(themes.maybeSuggestHighContrast().ok, false);
+
+  global.matchMedia = (q) => ({
+    matches: String(q).includes('prefers-contrast') || String(q).includes('forced-colors'),
+    addEventListener: () => {},
+  });
+  delete require.cache[require.resolve(pathT)];
+  themes = require(pathT);
+  // Default theme not hc
+  store['grokcode-theme'] = 'grok';
+  let s = themes.maybeSuggestHighContrast();
+  assert.equal(s.ok, true);
+  assert.equal(s.preferred, 'hc');
+  themes.dismissContrastSuggest();
+  s = themes.maybeSuggestHighContrast();
+  assert.equal(s.ok, false);
+  assert.equal(s.reason, 'dismissed');
+  // Already on hc
+  store['grokcode-theme'] = 'hc';
+  store['grokcode-theme-contrast-suggest'] = '';
+  delete store['grokcode-theme-contrast-suggest'];
+  s = themes.maybeSuggestHighContrast();
+  assert.equal(s.ok, false);
+  assert.equal(s.reason, 'already-hc');
+  delete global.localStorage;
+  console.log('ok  themes prefers-contrast suggest');
+}
+
 function testA11yRovingKeyboard() {
   // Load without a real DOM so init is a no-op
   const hadDoc = Object.prototype.hasOwnProperty.call(global, 'document');
@@ -1692,6 +1738,7 @@ try {
   testInboxQueue();
   testInboxDurableStale();
   testA11yRovingKeyboard();
+  testThemesContrastSuggest();
   Promise.resolve()
     .then(() => testAgentExports())
     .then(() => testSessionModeNormalize())

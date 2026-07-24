@@ -101,11 +101,12 @@ Living plan for the GrokCode open-source ecosystem. Order may change based on co
 - [x] Clear-stale Inbox + permission a11y (v1.33.0)
 - [x] Permission/plan keyboard roving + A11Y walkthrough (v1.34.0)
 - [x] High-contrast themes + Diff keyboard SR (v1.35.0)
+- [x] prefers-contrast soft suggest + Diff multi-select keys (v1.36.0)
 
 ## Next (host UX — carefully; refuse OW engine flow)
 
-- [ ] Optional: system `prefers-contrast` auto-suggest HC theme
-- [ ] Optional: Diff multi-select keyboard (shift+j etc.)
+- [ ] Optional: Diff select-all pending keyboard (`*`)
+- [ ] Optional: Doctor InProgress patch UX polish
 
 See `docs/OPENWORKER-INHERIT.md` anti-patterns before any further port.
 

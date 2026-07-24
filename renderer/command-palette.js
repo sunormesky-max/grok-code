@@ -298,6 +298,26 @@
         }),
       },
       {
+        id: 'theme.hc',
+        title: t('cmd.theme.hc', '高对比主题 · 黑底'),
+        keywords: 'theme high contrast a11y 高对比 无障碍 hc',
+        run: run(() => {
+          global.GrokThemes?.setTheme?.('hc');
+          global.GrokThemes?.dismissContrastSuggest?.();
+          global.toast?.(t('toast.theme'), 'ok');
+        }),
+      },
+      {
+        id: 'theme.hcLight',
+        title: t('cmd.theme.hcLight', '高对比主题 · 白底'),
+        keywords: 'theme high contrast light a11y 高对比 白底',
+        run: run(() => {
+          global.GrokThemes?.setTheme?.('hc-light');
+          global.GrokThemes?.dismissContrastSuggest?.();
+          global.toast?.(t('toast.theme'), 'ok');
+        }),
+      },
+      {
         id: 'lang.toggle',
         title: t('cmd.lang.toggle', '切换中/英文'),
         keywords: 'language i18n 语言',
