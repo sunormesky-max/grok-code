@@ -11,6 +11,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 - See [ROADMAP.md](ROADMAP.md)
 
+## [1.27.0] — 2026-07-24
+
+### CLI-native surface copy
+
+User-facing chrome still said “Craft flight deck” after modes became CLI-owned.
+Align welcome, status, mission bar, and plan-execute copy with the thin host.
+
+- Welcome kicker/body: CLI host + `/plan` `/ask` (no Craft default claim)
+- Composer placeholder / i18n: CLI-owned modes hint
+- Idle status: Ready / 待命 (not Craft 待命)
+- Mission bar labels: `MISSION` / `PLAN→EXEC` (was CRAFT)
+- Plan-execute confirm hints: execute without “switch Craft”
+- Mission summary restored for normal **cli** turns (was only `craft` branch — dead under CLI_NATIVE)
+- Ctrl+Shift+Enter = plain send (no host forceCraft inject)
+- Turn markers / share / defaults use `cli` not `craft`
+
 ## [1.26.0] — 2026-07-24
 
 ### Help cheatsheet CLI-native

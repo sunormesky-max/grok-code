@@ -2270,12 +2270,12 @@ async function showWelcome(box) {
   box.innerHTML = `
     <div class="welcome">
       <div class="welcome-hero">
-        <div class="welcome-kicker">xAI · CRAFT FLIGHT DECK · v1.5</div>
+        <div class="welcome-kicker">xAI · CLI HOST · GrokCode</div>
         <h3>${en ? 'Not just an IDE assistant.' : '不是又一个 IDE 插件。'}<br><em>${en ? 'Parallel agents that grok.' : '能并行理解的 Agent。'}</em></h3>
         <p>${
           en
-            ? 'Default mode is <strong>Craft</strong> — act now. Each task has its own CLI session. <kbd>Ctrl</kbd>+<kbd>T</kbd> for parallel.'
-            : '默认 <strong>Craft 飞行模式</strong>：直接动手。每个任务独立 CLI session，可<strong>同时跑多个</strong>。用 <kbd>Ctrl</kbd>+<kbd>T</kbd> 开新任务。'
+            ? 'Thin host for <strong>local Grok CLI</strong> — modes via <kbd>/plan</kbd> · <kbd>/ask</kbd> · status-bar chip. Each task has its own session. <kbd>Ctrl</kbd>+<kbd>T</kbd> for parallel.'
+            : '本机 <strong>Grok CLI</strong> 的薄宿主 — 模式用 <kbd>/plan</kbd> · <kbd>/ask</kbd> · 状态栏芯片。每个任务独立 session。用 <kbd>Ctrl</kbd>+<kbd>T</kbd> 开并行。'
         }</p>
       </div>
       <ol>
@@ -2296,7 +2296,7 @@ async function showWelcome(box) {
                 <button type="button" class="quick-btn craft-q${t.favorite ? ' fav' : ''}" data-tpl="${esc(t.id)}" title="${en ? 'Fill composer' : '填入输入框'}">${
                   t.favorite ? '★ ' : ''
                 }${esc(en ? t.labelEn || t.id : t.labelZh || t.id)}</button>
-                <button type="button" class="quick-send" data-tpl-send="${esc(t.id)}" title="${en ? 'Apply & send (Craft)' : '应用并发送 (Craft)'}">↵</button>
+                <button type="button" class="quick-send" data-tpl-send="${esc(t.id)}" title="${en ? 'Apply & send' : '应用并发送'}">↵</button>
               </span>`
           )
           .join('')}
@@ -2549,8 +2549,8 @@ function bindUi() {
     // Shift+Enter → newline in textarea
     if (e.shiftKey && !(e.ctrlKey || e.metaKey)) return;
     e.preventDefault();
-    // Ctrl/Cmd+Shift+Enter → one-shot Craft; plain Enter or Ctrl+Enter → send
-    if ((e.ctrlKey || e.metaKey) && e.shiftKey) sendPrompt({ forceCraft: true });
+    // Ctrl/Cmd+Shift+Enter → same as send (CLI owns modes; no host Craft inject)
+    if ((e.ctrlKey || e.metaKey) && e.shiftKey) sendPrompt();
     else sendPrompt();
   });
   $('#prompt').addEventListener('input', () => {
@@ -3204,8 +3204,8 @@ const MODE_SEND = {
 
 const MODE_PLACEHOLDER = {
   cli: {
-    zh: '对接本机 Grok CLI… 模式用 CLI 的 /plan 等，这里不伪造 Craft/Plan',
-    en: 'Local Grok CLI… use CLI /plan etc.; no host-side Craft/Plan modes',
+    zh: '对当前任务说… Enter 发送 · /plan /ask · 模式由 Grok CLI 拥有',
+    en: 'Talk to this task… Enter send · /plan /ask · modes owned by Grok CLI',
   },
 };
 
@@ -3230,16 +3230,16 @@ function applySendLabel() {
     send.textContent = 'grokking';
     return;
   }
-  const m = state.workMode || 'craft';
-  const s = MODE_SEND[m] || MODE_SEND.craft;
+  const m = normalizeWorkMode(state.workMode);
+  const s = MODE_SEND[m] || MODE_SEND.cli;
   send.textContent = localeIsEn() ? s.en : s.zh;
 }
 
 function applyModePlaceholder() {
   const ta = document.getElementById('prompt');
   if (!ta) return;
-  const m = state.workMode || 'craft';
-  const p = MODE_PLACEHOLDER[m] || MODE_PLACEHOLDER.craft;
+  const m = normalizeWorkMode(state.workMode);
+  const p = MODE_PLACEHOLDER[m] || MODE_PLACEHOLDER.cli;
   ta.placeholder = localeIsEn() ? p.en : p.zh;
 }
 
@@ -3500,7 +3500,7 @@ function clearTaskGoal(task) {
 let _workModeUiBound = false;
 function bindWorkModeUi() {
   if (_workModeUiBound) {
-    setWorkMode(state.workMode || 'craft', { persistRemote: false });
+    setWorkMode(state.workMode || 'cli', { persistRemote: false });
     return;
   }
   _workModeUiBound = true;
@@ -3533,7 +3533,7 @@ function bindWorkModeUi() {
       cycleWorkMode().catch(() => {});
     }
   });
-  setWorkMode(state.workMode || 'craft', { persistRemote: false });
+  setWorkMode(state.workMode || 'cli', { persistRemote: false });
 }
 window.setWorkMode = setWorkMode;
 window.cycleWorkMode = cycleWorkMode;
@@ -9781,7 +9781,7 @@ function bindAgentEvents() {
       notifyFlightComplete(task, {
         files: fileCount,
         tools: task.toolCount || 0,
-        mode: task.turnMode || 'craft',
+        mode: task.turnMode || 'cli',
       });
     }),
     window.grok.on('fs:changed', (d) => onFsChanged(d)),
@@ -9973,7 +9973,7 @@ async function runTaskPrompt(task, text, opts = {}) {
   }
   setRunningUi(true);
   {
-    const st = MODE_RUN_STATUS[modeUsed] || MODE_RUN_STATUS.craft;
+    const st = MODE_RUN_STATUS[modeUsed] || MODE_RUN_STATUS.cli;
     setAgentStatus(localeIsEn() ? st.en : st.zh, true);
   }
   startElapsed(task);
@@ -9983,11 +9983,11 @@ async function runTaskPrompt(task, text, opts = {}) {
   if (state.followAgent || state.activeTab === 'live') switchTab('live');
   pushLiveEvent({
     kind: 'status',
-    title: `${task.title} ${opts.isRetry ? '重试' : modeUsed === 'craft' ? 'Craft' : '开始'}`,
+    title: `${task.title} ${opts.isRetry ? (localeIsEn() ? 'retry' : '重试') : localeIsEn() ? 'start' : '开始'}`,
     sub: text.slice(0, 100),
   });
   setLivePhase(
-    modeUsed === 'craft' ? (localeIsEn() ? 'Craft flight…' : 'Craft 飞行中…') : 'grokking…',
+    localeIsEn() ? 'grokking…' : 'grokking…',
     `${task.title}: ${text.slice(0, 60)}`
   );
   updateLiveStats();
@@ -10097,8 +10097,8 @@ async function runTaskPrompt(task, text, opts = {}) {
         planText: finalText,
       });
     }
-    // Craft mission summary (includes Plan→Craft execute flights)
-    if (modeUsed === 'craft' || opts.fromPlanExecute) {
+    // Mission summary after CLI turns (and plan-execute flights)
+    if (modeUsed === 'cli' || opts.fromPlanExecute) {
       const filesAfter = P()?.changes?.size || 0;
       const filesDelta = Math.max(0, filesAfter - filesBefore);
       appendCraftMissionBar(task, {
@@ -10163,15 +10163,7 @@ async function runTaskPrompt(task, text, opts = {}) {
         if (wasStopped) {
           setAgentStatus(localeIsEn() ? 'Stopped' : '已停止', false);
         } else {
-          const idle =
-            (state.workMode || 'craft') === 'craft'
-              ? localeIsEn()
-                ? 'Craft ready'
-                : 'Craft 待命'
-              : localeIsEn()
-                ? 'Ready'
-                : '待命';
-          setAgentStatus(idle, false);
+          setAgentStatus(localeIsEn() ? 'Ready' : '待命', false);
         }
         if ($('#livePhase')?.textContent !== t('live.phase.error', '出错')) {
           const r = window.TaskStore.countRunning();
@@ -10201,7 +10193,7 @@ async function runTaskPrompt(task, text, opts = {}) {
   }
 }
 
-/** Craft 回合后：任务简报（工具 / 写入 / Diff 文件） */
+/** CLI 回合后：任务简报（工具 / 写入 / Diff 文件） */
 function appendCraftMissionBar(task, stats = {}) {
   if (!task?.pane) return;
   const tools = Number(stats.tools) || 0;
@@ -10213,7 +10205,7 @@ function appendCraftMissionBar(task, stats = {}) {
   bar.className = 'craft-mission-bar' + (stats.fromPlan ? ' from-plan' : '');
   const en = localeIsEn();
   bar.innerHTML = `
-    <span class="craft-mission-label">${stats.fromPlan ? 'PLAN→CRAFT' : 'CRAFT'}</span>
+    <span class="craft-mission-label">${stats.fromPlan ? 'PLAN→EXEC' : 'MISSION'}</span>
     <span class="craft-mission-stats">
       <span class="cms">${tools} ${en ? 'tools' : '工具'}</span>
       <span class="cms">${writes} ${en ? 'writes' : '写入'}</span>
@@ -10261,7 +10253,7 @@ function buildPlanExecutePrompt(planText) {
       return 'Execute the plan from your previous message. Implement step by step, skip finished items, keep changes focused, then verify.';
     }
     return (
-      'Execute this plan now (Craft). Implement remaining steps; do not re-plan unless blocked.\n\n' +
+      'Execute this plan now. Implement remaining steps; do not re-plan unless blocked.\n\n' +
       '—— PLAN ——\n' +
       body +
       '\n—— END PLAN ——\n\n' +
@@ -10272,7 +10264,7 @@ function buildPlanExecutePrompt(planText) {
     return '执行方案：按你上一条给出的步骤动手实现，跳过已完成项，保持聚焦，改完做必要检查。';
   }
   return (
-    '执行下列方案（Craft 飞行模式）。按步骤落地；已完成的跳过；缺信息再问；改完做必要检查。\n\n' +
+    '执行下列方案。按步骤落地；已完成的跳过；缺信息再问；改完做必要检查。\n\n' +
     '—— 方案 ——\n' +
     body +
     '\n—— 方案结束 ——\n\n' +
@@ -10280,7 +10272,7 @@ function buildPlanExecutePrompt(planText) {
   );
 }
 
-/** Plan / 自动识别方案：确认后一键 Craft 执行（注入方案原文） */
+/** Plan / 自动识别方案：确认后一键执行（注入方案原文；不切换宿主伪模式） */
 function appendPlanExecuteBar(task, opts = {}) {
   if (!task?.pane) return;
   task.pane.querySelectorAll('.plan-exec-bar').forEach((el) => el.remove());
@@ -10291,11 +10283,11 @@ function appendPlanExecuteBar(task, opts = {}) {
   bar.className = 'plan-exec-bar' + (opts.autoDetected ? ' plan-exec-auto' : '');
   const hint = opts.autoDetected
     ? en
-      ? 'Plan-like reply detected · confirm to Craft-execute'
-      : '检测到方案结构 · 确认后切换 Craft 并执行'
+      ? 'Plan-like reply detected · confirm to execute'
+      : '检测到方案结构 · 确认后执行'
     : en
-      ? 'Plan ready · confirm to Craft-execute'
-      : '方案已就绪 · 确认后切换 Craft 并执行';
+      ? 'Plan ready · confirm to execute'
+      : '方案已就绪 · 确认后执行';
   const preview = oneLinePlanPreview(planText);
   bar.innerHTML = `
     <div class="plan-exec-main">
@@ -10845,7 +10837,7 @@ function buildSessionShare(task) {
   const msgs = Array.isArray(task?.messages) ? task.messages : [];
   const exportedAt = new Date().toISOString();
   const title = task?.title || 'session';
-  const mode = state.workMode || 'craft';
+  const mode = state.workMode || 'cli';
   const header = [
     `# GrokCode Session · ${title}`,
     '',
@@ -10977,7 +10969,7 @@ window.openSkillPreview = openSkillPreview;
 function appendTurnMarker(task, opts = {}) {
   if (!task?.pane) return;
   const en = localeIsEn();
-  const mode = (opts.mode || task.turnMode || 'craft').toUpperCase();
+  const mode = (opts.mode || task.turnMode || 'cli').toUpperCase();
   const when = new Date().toLocaleTimeString();
   const snippet = String(opts.prompt || '').replace(/\s+/g, ' ').slice(0, 72);
   const tags = [];
@@ -10988,7 +10980,7 @@ function appendTurnMarker(task, opts = {}) {
   if (task.turnId) div.dataset.turn = task.turnId;
   div.innerHTML = `
     <span class="tm-line" aria-hidden="true"></span>
-    <span class="tm-chip mode-${esc((opts.mode || 'craft').toLowerCase())}">${esc(mode)}</span>
+    <span class="tm-chip mode-${esc((opts.mode || task.turnMode || 'cli').toLowerCase())}">${esc(mode)}</span>
     <span class="tm-time">${esc(when)}</span>
     ${tags.map((x) => `<span class="tm-tag">${esc(x)}</span>`).join('')}
     <span class="tm-prompt" title="${esc(String(opts.prompt || ''))}">${esc(snippet || (en ? '(no text)' : '（无文本）'))}</span>`;

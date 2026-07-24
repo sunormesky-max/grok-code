@@ -91,6 +91,7 @@ Living plan for the GrokCode open-source ecosystem. Order may change based on co
 - [x] Deeper a11y: interactive announces, menu ARIA, A11Y checklist (v1.24.0)
 - [x] Menu arrow-key nav + warm-recycle save toast (v1.25.0)
 - [x] Keyboard cheatsheet CLI-native (no Craft/Plan inject) (v1.26.0)
+- [x] CLI-native surface copy + mission bar for cli turns (v1.27.0)
 
 ## Next (host ↔ open-source grok-build)
 
