@@ -13,14 +13,15 @@ product/UX patterns that improve the host surface.
 |---------|--------|---------|
 | Stream gate `hold` / `quiet` / `answer` | `renderer/stream-gate.js` + chat/Live paint | 1.28.0 |
 | Tool humanize one-liners | `renderer/humanize.js` + tool rows / Live | 1.28.0 |
+| Global Inbox (plan + question) | `renderer/inbox.js` + topbar badge | 1.29.0 |
 
 ## Next candidates (not yet)
 
-1. **Global Inbox** — cross-task queue for plan / ask / permission parks  
-2. **Plan card feedback** — revise path + execute permission tier  
-3. **Session standing grants** — remember allow-once/always within CLI options  
-4. **Approval card density** — compact file writes vs full shell cards  
-5. **Durable park resume** — survive app restart  
+1. **Plan card execute tier** — approve with ask-per-step vs full YOLO (settings only)  
+2. **Session standing grants** — remember allow-once/always within CLI options  
+3. **Approval card density** — compact file writes vs full shell cards  
+4. **Durable park resume** — survive app restart  
+5. Interactive `session/request_permission` (today YOLO auto-answers; Inbox only if we park)  
 
 ## Hard boundaries
 

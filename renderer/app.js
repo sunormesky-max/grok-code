@@ -1240,6 +1240,7 @@ async function closeTask(id) {
     t.running = false;
   }
   await window.grok.clearSession({ projectId: pid(), taskId: t.id });
+  window.GrokInbox?.removeMatching?.({ taskId: t.id });
   window.TaskStore.remove(id);
   const cur = T();
   if (cur) {
@@ -2448,6 +2449,75 @@ function bindUi() {
   $('#btnNewWindowProject')?.addEventListener('click', () => openProjectFlow({ newWindow: true }));
   $('#btnRefreshTree').onclick = loadTree;
   $('#btnSettings').onclick = openSettings;
+  $('#btnInbox')?.addEventListener('click', () => {
+    window.GrokInbox?.toggle?.();
+  });
+  // Global Inbox handlers (plan / ask reply + jump to task)
+  window.GrokInboxHandlers = {
+    gotoTask: async (item) => {
+      if (!item?.taskId) return;
+      if (item.projectId && String(item.projectId) !== String(pid())) {
+        try {
+          await switchProject(item.projectId);
+        } catch {
+          /* ignore */
+        }
+      }
+      switchTask(item.taskId);
+      window.GrokInbox?.close?.();
+      // Focus in-pane bar after switch paints
+      requestAnimationFrame(() => {
+        const task = window.TaskStore?.get?.(item.taskId) || T();
+        const rid = String(item.requestId ?? '');
+        const bars =
+          item.kind === 'plan'
+            ? task?.pane?.querySelectorAll?.('.plan-approval-bar')
+            : task?.pane?.querySelectorAll?.('.user-question-bar');
+        let bar = null;
+        bars?.forEach?.((el) => {
+          if (String(el.dataset.requestId || '') === rid) bar = el;
+        });
+        if (bar) {
+          bar.scrollIntoView?.({ block: 'nearest', behavior: 'smooth' });
+          window.GrokA11y?.presentInteractive?.(
+            bar,
+            localeIsEn() ? 'Continue here' : '请在此处理',
+            { assertive: false, focus: true }
+          );
+        }
+      });
+    },
+    replyPlan: async (item, outcome, feedback) => {
+      return window.grok.replyPlanApproval({
+        projectId: item.projectId || pid(),
+        taskId: item.taskId,
+        requestId: item.requestId,
+        outcome,
+        feedback: feedback || undefined,
+      });
+    },
+    replyQuestion: async (item, result) => {
+      return window.grok.replyUserQuestion({
+        projectId: item.projectId || pid(),
+        taskId: item.taskId,
+        requestId: item.requestId,
+        result: result || { outcome: 'cancelled' },
+      });
+    },
+    onPlanResolved: (item) => {
+      const task = window.TaskStore?.get?.(item.taskId);
+      task?.pane
+        ?.querySelectorAll?.(`.plan-approval-bar[data-request-id="${item.requestId}"]`)
+        ?.forEach((el) => el.remove());
+    },
+    onQuestionResolved: (item) => {
+      const task = window.TaskStore?.get?.(item.taskId);
+      task?.pane
+        ?.querySelectorAll?.(`.user-question-bar[data-request-id="${item.requestId}"]`)
+        ?.forEach((el) => el.remove());
+    },
+  };
+  window.GrokInbox?.paintBadge?.();
   $('#btnCloseSettings').onclick = closeSettings;
   $('#btnSaveSettings').onclick = saveSettings;
   $('#btnProbeCli').onclick = () => refreshCliStatus();
@@ -9677,14 +9747,34 @@ function bindAgentEvents() {
             immediate: true,
           });
           setLivePhase('计划审批', task.title);
+        } else {
+          // Non-active task: still surface in Live + badge via Inbox
+          pushLiveEvent({
+            kind: 'status',
+            title: localeIsEn() ? `Plan · ${task.title}` : `计划 · ${task.title}`,
+            sub: localeIsEn() ? 'Waiting in Inbox' : '等待 Inbox 处理',
+            projectId: task.projectId,
+            immediate: true,
+          });
         }
-      } else if (d.mode === 'auto' && isActiveTask(task)) {
-        pushLiveEvent({
-          kind: 'status',
-          title: '计划已自动批准',
-          sub: d.selected || 'approved',
-          projectId: task.projectId,
-        });
+      } else {
+        if (d.requestId != null) {
+          window.GrokInbox?.removeMatching?.({
+            kind: 'plan',
+            taskId: task.id,
+            requestId: d.requestId,
+          });
+        } else {
+          window.GrokInbox?.removeMatching?.({ kind: 'plan', taskId: task.id });
+        }
+        if (d.mode === 'auto' && isActiveTask(task)) {
+          pushLiveEvent({
+            kind: 'status',
+            title: '计划已自动批准',
+            sub: d.selected || 'approved',
+            projectId: task.projectId,
+          });
+        }
       }
     }),
     window.grok.on('agent:user_question', (d) => {
@@ -9704,14 +9794,33 @@ function bindAgentEvents() {
             immediate: true,
           });
           setLivePhase(localeIsEn() ? 'User question' : '用户提问', task.title);
+        } else {
+          pushLiveEvent({
+            kind: 'status',
+            title: localeIsEn() ? `Ask · ${task.title}` : `提问 · ${task.title}`,
+            sub: localeIsEn() ? 'Waiting in Inbox' : '等待 Inbox 处理',
+            projectId: task.projectId,
+            immediate: true,
+          });
         }
-      } else if (isActiveTask(task)) {
-        pushLiveEvent({
-          kind: 'status',
-          title: localeIsEn() ? 'Question auto-cancelled' : '问题已自动取消',
-          sub: d.selected || 'cancelled',
-          projectId: task.projectId,
-        });
+      } else {
+        if (d.requestId != null) {
+          window.GrokInbox?.removeMatching?.({
+            kind: 'question',
+            taskId: task.id,
+            requestId: d.requestId,
+          });
+        } else {
+          window.GrokInbox?.removeMatching?.({ kind: 'question', taskId: task.id });
+        }
+        if (isActiveTask(task)) {
+          pushLiveEvent({
+            kind: 'status',
+            title: localeIsEn() ? 'Question auto-cancelled' : '问题已自动取消',
+            sub: d.selected || 'cancelled',
+            projectId: task.projectId,
+          });
+        }
       }
     }),
     window.grok.on('agent:ext', (d) => {
@@ -10394,11 +10503,25 @@ function oneLinePlanPreview(text) {
 /**
  * ACP x.ai/exit_plan_mode — interactive approve / revise / abandon
  * (matches open-source grok-build pager plan_approval_view outcomes).
+ * Also mirrors into global Inbox for cross-task attention.
  */
 function showPlanApprovalBar(task, d) {
   task = task || T();
   if (!task?.pane || !d?.requestId) return;
   const en = localeIsEn();
+  const proj = window.ProjectStore?.get?.(task.projectId);
+  // Global inbox (OpenWorker-style attention queue)
+  window.GrokInbox?.upsert?.({
+    kind: 'plan',
+    taskId: task.id,
+    projectId: task.projectId || pid(),
+    requestId: d.requestId,
+    taskTitle: task.title || '',
+    projectName: proj?.name || '',
+    title: en ? 'Plan approval' : '计划审批',
+    body: String(d.planContent || ''),
+    meta: { sessionId: d.sessionId || '' },
+  });
   // Replace existing bar for this task
   task.pane.querySelectorAll('.plan-approval-bar').forEach((el) => el.remove());
   const bar = document.createElement('div');
@@ -10446,6 +10569,11 @@ function showPlanApprovalBar(task, d) {
         return;
       }
       bar.remove();
+      window.GrokInbox?.removeMatching?.({
+        kind: 'plan',
+        taskId: task.id,
+        requestId: d.requestId,
+      });
       toast(
         outcome === 'approved'
           ? en
@@ -10475,7 +10603,7 @@ function showPlanApprovalBar(task, d) {
   window.GrokA11y?.presentInteractive?.(
     bar,
     en ? 'Plan approval required' : '需要计划审批',
-    { assertive: true, focus: true }
+    { assertive: true, focus: isActiveTask(task) }
   );
 }
 
@@ -10488,10 +10616,6 @@ function showUserQuestionBar(task, d) {
   task = task || T();
   if (!task?.pane || !d?.requestId) return;
   const en = localeIsEn();
-  task.pane.querySelectorAll('.user-question-bar').forEach((el) => el.remove());
-  const bar = document.createElement('div');
-  bar.className = 'user-question-bar msg status';
-  bar.dataset.requestId = String(d.requestId);
   const questions = Array.isArray(d.questions) ? d.questions : [];
   const isPlan = String(d.mode || '').toLowerCase() === 'plan';
   const modeLabel = isPlan
@@ -10501,6 +10625,23 @@ function showUserQuestionBar(task, d) {
     : en
       ? 'default'
       : '常规';
+  const proj = window.ProjectStore?.get?.(task.projectId);
+  const firstQ = questions[0]?.question || '';
+  window.GrokInbox?.upsert?.({
+    kind: 'question',
+    taskId: task.id,
+    projectId: task.projectId || pid(),
+    requestId: d.requestId,
+    taskTitle: task.title || '',
+    projectName: proj?.name || '',
+    title: en ? `Agent asks · ${modeLabel}` : `Agent 提问 · ${modeLabel}`,
+    body: firstQ,
+    meta: { mode: d.mode, questions, sessionId: d.sessionId || '' },
+  });
+  task.pane.querySelectorAll('.user-question-bar').forEach((el) => el.remove());
+  const bar = document.createElement('div');
+  bar.className = 'user-question-bar msg status';
+  bar.dataset.requestId = String(d.requestId);
 
   const blocks = questions
     .map((q, qi) => {
@@ -10639,6 +10780,11 @@ function showUserQuestionBar(task, d) {
         return;
       }
       bar.remove();
+      window.GrokInbox?.removeMatching?.({
+        kind: 'question',
+        taskId: task.id,
+        requestId: d.requestId,
+      });
       const msg =
         outcome === 'accepted'
           ? en
@@ -10678,7 +10824,7 @@ function showUserQuestionBar(task, d) {
     en
       ? `Agent asks ${n} question${n === 1 ? '' : 's'}`
       : `Agent 提问（${n} 题）`,
-    { assertive: true, focus: true }
+    { assertive: true, focus: isActiveTask(task) }
   );
 }
 

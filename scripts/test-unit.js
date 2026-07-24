@@ -1133,6 +1133,49 @@ function testAgentStreamAcpFixture() {
   console.log('ok  ACP session/update fixture contract');
 }
 
+function testInboxQueue() {
+  // Fresh module load
+  const pathInbox = path.join(root, 'renderer', 'inbox.js');
+  delete require.cache[require.resolve(pathInbox)];
+  const inbox = require(pathInbox);
+  inbox.clearAll();
+  assert.equal(inbox.count(), 0);
+  const a = inbox.upsert({
+    kind: 'plan',
+    taskId: 't1',
+    projectId: 'p1',
+    requestId: 7,
+    title: 'Plan A',
+    body: 'step 1',
+  });
+  assert.ok(a && a.id === 'plan:t1:7');
+  assert.equal(inbox.count(), 1);
+  inbox.upsert({
+    kind: 'question',
+    taskId: 't2',
+    requestId: 9,
+    title: 'Q',
+    meta: { questions: [{ question: 'x?' }] },
+  });
+  assert.equal(inbox.count(), 2);
+  // Idempotent upsert same plan
+  inbox.upsert({
+    kind: 'plan',
+    taskId: 't1',
+    requestId: 7,
+    body: 'step 1 updated',
+  });
+  assert.equal(inbox.count(), 2);
+  assert.ok(inbox.listPending().find((i) => i.body.includes('updated')));
+  // First resolve wins
+  assert.equal(inbox.resolve('plan:t1:7'), true);
+  assert.equal(inbox.count(), 1);
+  assert.equal(inbox.resolve('plan:t1:7'), false);
+  assert.equal(inbox.removeMatching({ taskId: 't2' }), 1);
+  assert.equal(inbox.count(), 0);
+  console.log('ok  inbox queue plan/question');
+}
+
 function testStreamGate() {
   const g = require(path.join(root, 'renderer', 'stream-gate.js'));
   assert.equal(g.streamMode('', { running: true }), 'none');
@@ -1326,6 +1369,7 @@ try {
   testStreamFairness();
   testStreamGate();
   testHumanize();
+  testInboxQueue();
   Promise.resolve()
     .then(() => testAgentExports())
     .then(() => testSessionModeNormalize())

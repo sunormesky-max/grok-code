@@ -9,6 +9,7 @@
   // CLI-native host: no Craft/Plan/Ask/Goal inject — modes via session/set_mode & slash
   const ROWS = () => [
     { keys: ['Ctrl', 'K'], desc: t('help.cmd', '命令面板') },
+    { keys: ['Ctrl', 'Shift', 'I'], desc: t('help.inbox', 'Inbox · 跨任务计划/提问') },
     { keys: ['Ctrl', 'O'], desc: t('help.open', '添加项目') },
     { keys: ['Ctrl', 'T'], desc: t('help.task', '新建任务') },
     { keys: ['Enter'], desc: t('help.send', '发送当前任务') },

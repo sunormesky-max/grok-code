@@ -27,6 +27,7 @@
   <link rel="stylesheet" href="work-mode.css" />
   <link rel="stylesheet" href="outline.css" />
   <link rel="stylesheet" href="a11y.css" />
+  <link rel="stylesheet" href="inbox.css" />
 </head>
 <body class="theme-grok booting layout-v15 layout-mode-agent center-tab-live">
   <a class="skip-link" href="#prompt" data-i18n="a11y.skip">跳到输入框</a>
@@ -170,6 +171,10 @@
           <span class="btn-ico">＋</span> <span data-i18n="btn.addProject">项目</span>
         </button>
         <button type="button" class="btn ghost icon-only" id="btnOpenWindow" title="在新窗口打开项目（并排开发）" aria-label="新窗口">⧉</button>
+        <button type="button" class="btn ghost icon-only" id="btnInbox" title="Inbox · 跨任务待处理 (Ctrl+Shift+I)" aria-label="Inbox">
+          <span class="btn-inbox-ico" aria-hidden="true">◎</span>
+          <span id="inboxBadge" class="hidden">0</span>
+        </button>
         <button type="button" class="btn ghost icon-only" id="btnSettings" data-i18n-title="btn.settings" data-i18n-aria="btn.settings" title="设置 (Ctrl+,)">⚙</button>
         <!-- Linux / 无 titleBarOverlay 时显示；Windows 由系统绘制，JS 会隐藏 -->
         <div class="win-controls" id="winControls" role="group" aria-label="窗口控制">
@@ -1052,6 +1057,7 @@
   <script src="diff-util.js"></script>
   <script src="stream-gate.js"></script>
   <script src="humanize.js"></script>
+  <script src="inbox.js"></script>
   <script src="stream-scheduler.js"></script>
   <script src="projects.js"></script>
   <script src="tasks.js"></script>

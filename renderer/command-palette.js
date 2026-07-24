@@ -426,6 +426,14 @@
         run: run(() => global.setWorkMode?.('cli', { toast: true })),
       },
       {
+        id: 'inbox.open',
+        title: t('cmd.inbox', '打开 Inbox（跨任务待处理）'),
+        hint: 'Ctrl+Shift+I',
+        keywords: 'inbox plan ask question approval 收件箱 计划 提问 待办',
+        group: 'actions',
+        run: run(() => global.GrokInbox?.open?.()),
+      },
+      {
         id: 'session.share',
         title: t('cmd.session.share', '导出会话分享卡'),
         keywords: 'export session share markdown 导出 会话 分享',

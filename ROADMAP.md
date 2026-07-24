@@ -93,12 +93,13 @@ Living plan for the GrokCode open-source ecosystem. Order may change based on co
 - [x] Keyboard cheatsheet CLI-native (no Craft/Plan inject) (v1.26.0)
 - [x] CLI-native surface copy + mission bar for cli turns (v1.27.0)
 - [x] Stream gate + tool humanize from OpenWorker patterns (v1.28.0)
+- [x] Global Inbox for plan / ask across tasks (v1.29.0)
 
 ## Next (host UX — OpenWorker-inspired)
 
-- [ ] Global Inbox for plan / ask / permission across tasks
-- [ ] Plan-card revise feedback + execute permission tier
+- [ ] Plan-card execute permission tier (ask-per-step vs YOLO via settings)
 - [ ] Session standing grants (within CLI option IDs only)
+- [ ] Durable park resume across app restart
 
 ## Next (host ↔ open-source grok-build)
 

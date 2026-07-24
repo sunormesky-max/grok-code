@@ -11,6 +11,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 - See [ROADMAP.md](ROADMAP.md)
 
+## [1.29.0] — 2026-07-24
+
+### Global Inbox (OpenWorker-inspired)
+
+Cross-task attention queue for parked CLI reverse-requests — while you work
+on task A, plan approvals / questions from task B stay visible.
+
+- Topbar **◎ Inbox** badge + `Ctrl+Shift+I` / command palette
+- Kinds: **plan** (`exit_plan_mode`) · **question** (`ask_user_question`)
+- Plan: approve / revise / quit from the drawer (same IPC as in-pane bar)
+- Question: jump to task for full questionnaire, or cancel from Inbox
+- First resolve wins; in-pane bars and Inbox stay in sync
+- Unit tests for queue upsert / resolve / removeMatching
+
+See `docs/OPENWORKER-INHERIT.md`.
+
 ## [1.28.0] — 2026-07-24
 
 ### Stream gate + tool humanize (OpenWorker-inspired)
