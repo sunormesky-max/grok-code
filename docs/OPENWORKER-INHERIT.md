@@ -19,6 +19,7 @@ OpenWorker-specific internal-flow footguns.
 | Standing grants (flight) | `AcpClient.standingGrants` | **1.31.0** | tool→optionId only if still offered; no invent |
 | Permission density + stale Inbox | humanize + localStorage | **1.32.0** | stale = dismiss only; no resolve without ACP |
 | Clear-stale + permission a11y | Inbox toolbar + region/labels | **1.33.0** | polish only |
+| Roving keyboard + A11Y walkthrough | `bindRovingKeyboard` + docs/A11Y.md | **1.34.0** | plan/ask/permission groups |
 
 ## Hard boundaries (never break)
 

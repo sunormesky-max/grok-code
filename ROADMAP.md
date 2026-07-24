@@ -99,11 +99,12 @@ Living plan for the GrokCode open-source ecosystem. Order may change based on co
 - [x] Session standing grants within CLI option IDs (v1.31.0)
 - [x] Permission density + durable Inbox stale rehydrate (v1.32.0)
 - [x] Clear-stale Inbox + permission a11y (v1.33.0)
+- [x] Permission/plan keyboard roving + A11Y walkthrough (v1.34.0)
 
 ## Next (host UX — carefully; refuse OW engine flow)
 
-- [ ] Optional: NVDA/VO walkthrough notes for permission + Inbox
-- [ ] Optional: keyboard roving on permission option group
+- [ ] Optional: high-contrast theme pack
+- [ ] Optional: deeper Diff keyboard + SR
 
 See `docs/OPENWORKER-INHERIT.md` anti-patterns before any further port.
 

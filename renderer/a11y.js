@@ -6,10 +6,13 @@
   let trapCleanup = null;
 
   function $(sel, root) {
-    return (root || document).querySelector(sel);
+    const base = root || (typeof document !== 'undefined' ? document : null);
+    if (!base || typeof base.querySelector !== 'function') return null;
+    return base.querySelector(sel);
   }
 
   function ensureLiveRegions() {
+    if (typeof document === 'undefined' || !document.body) return;
     if (!$('#a11yLiveStatus')) {
       const el = document.createElement('div');
       el.id = 'a11yLiveStatus';
@@ -190,31 +193,41 @@
   }
 
   /**
-   * Arrow / Home / End roving focus inside a role=menu popup.
-   * Call after menu is populated and shown.
-   * @param {HTMLElement} menuEl
-   * @param {{ focusFirst?: boolean }} [opts]
+   * Arrow / Home / End roving focus inside a popup or option group.
+   * Left/Right also work (compact horizontal permission toolbars).
+   * @param {HTMLElement} container
+   * @param {{
+   *   itemSelector?: string,
+   *   focusFirst?: boolean,
+   *   horizontal?: boolean,
+   * }} [opts]
    */
-  function bindMenuKeyboard(menuEl, opts = {}) {
-    if (!menuEl || menuEl.dataset.a11yMenuBound === '1') {
-      // Rebind key handler each open — remove old if any
-      if (menuEl?._a11yMenuKey) {
-        menuEl.removeEventListener('keydown', menuEl._a11yMenuKey);
-      }
+  function bindRovingKeyboard(container, opts = {}) {
+    if (!container) return;
+    if (container._a11yRovingKey) {
+      container.removeEventListener('keydown', container._a11yRovingKey);
     }
+    const sel =
+      opts.itemSelector ||
+      'button.model-menu-item, [role="menuitem"], button:not([disabled])';
     const items = () =>
-      [...menuEl.querySelectorAll('button.model-menu-item, [role="menuitem"]')].filter(
-        (el) => !el.disabled && el.offsetParent !== null
-      );
+      [...container.querySelectorAll(sel)].filter((el) => {
+        if (el.disabled || el.getAttribute('aria-hidden') === 'true') return false;
+        // Prefer visible nodes; allow connected nodes without layout (tests / offscreen)
+        if (el.offsetParent !== null) return true;
+        return Boolean(el.isConnected);
+      });
     const onKey = (e) => {
       const list = items();
       if (!list.length) return;
       const idx = list.indexOf(document.activeElement);
-      if (e.key === 'ArrowDown') {
+      const nextKeys = e.key === 'ArrowDown' || e.key === 'ArrowRight';
+      const prevKeys = e.key === 'ArrowUp' || e.key === 'ArrowLeft';
+      if (nextKeys) {
         e.preventDefault();
         const next = list[(idx < 0 ? 0 : idx + 1) % list.length];
         next?.focus();
-      } else if (e.key === 'ArrowUp') {
+      } else if (prevKeys) {
         e.preventDefault();
         const prev = list[(idx <= 0 ? list.length : idx) - 1];
         prev?.focus();
@@ -226,18 +239,40 @@
         list[list.length - 1]?.focus();
       }
     };
-    menuEl._a11yMenuKey = onKey;
-    menuEl.addEventListener('keydown', onKey);
-    menuEl.dataset.a11yMenuBound = '1';
+    container._a11yRovingKey = onKey;
+    container.addEventListener('keydown', onKey);
+    container.dataset.a11yRovingBound = '1';
     if (opts.focusFirst !== false) {
       const list = items();
-      const active = list.find((b) => b.classList.contains('active')) || list[0];
+      const active =
+        list.find((b) => b.classList.contains('active') || b.classList.contains('primary')) ||
+        list[0];
       try {
         active?.focus?.();
       } catch {
         /* ignore */
       }
     }
+  }
+
+  /**
+   * Arrow / Home / End roving focus inside a role=menu popup.
+   * Call after menu is populated and shown.
+   * @param {HTMLElement} menuEl
+   * @param {{ focusFirst?: boolean }} [opts]
+   */
+  function bindMenuKeyboard(menuEl, opts = {}) {
+    if (!menuEl) return;
+    if (menuEl._a11yMenuKey) {
+      menuEl.removeEventListener('keydown', menuEl._a11yMenuKey);
+    }
+    // Prefer shared roving helper; keep dataset for callers that check a11yMenuBound
+    bindRovingKeyboard(menuEl, {
+      itemSelector: 'button.model-menu-item, [role="menuitem"], button:not([disabled])',
+      focusFirst: opts.focusFirst,
+    });
+    menuEl._a11yMenuKey = menuEl._a11yRovingKey;
+    menuEl.dataset.a11yMenuBound = '1';
   }
 
   /**
@@ -252,10 +287,23 @@
     el.setAttribute('aria-label', String(label || 'Interaction'));
     el.setAttribute('tabindex', '-1');
     announce(label, { assertive: opts.assertive !== false, force: true });
+    // Roving keys on option / action toolbars (permission, plan, ask)
+    const group =
+      el.querySelector('.permission-opts, .retry-actions, .plan-exec-tiers') || el;
+    try {
+      bindRovingKeyboard(group, {
+        itemSelector: 'button:not([disabled])',
+        focusFirst: false,
+        horizontal: Boolean(el.classList?.contains('density-compact')),
+      });
+    } catch {
+      /* optional */
+    }
     if (opts.focus !== false) {
       const btn =
-        el.querySelector('button.primary, button[data-act="approve"], button[data-act="accept"], button') ||
-        getFocusable(el)[0];
+        el.querySelector(
+          'button.primary, button[data-act="approve"], button[data-act="approve-yolo"], button[data-act="accept"], button[data-opt], button'
+        ) || getFocusable(el)[0];
       try {
         btn?.focus?.();
       } catch {
@@ -289,6 +337,9 @@
   }
 
   function init() {
+    if (typeof document === 'undefined' || typeof document.querySelector !== 'function') {
+      return;
+    }
     ensureLiveRegions();
     enhanceLandmarks();
     bindSkipLink();
@@ -305,11 +356,19 @@
     getFocusable,
     presentInteractive,
     bindMenuKeyboard,
+    bindRovingKeyboard,
   };
 
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', init);
-  } else {
-    init();
+  // Dual-export for unit tests (Node)
+  if (typeof module !== 'undefined' && module.exports) {
+    module.exports = global.GrokA11y;
+  }
+
+  if (typeof document !== 'undefined') {
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', init);
+    } else {
+      init();
+    }
   }
 })(typeof window !== 'undefined' ? window : globalThis);

@@ -11,6 +11,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 - See [ROADMAP.md](ROADMAP.md)
 
+## [1.34.0] — 2026-07-24
+
+### Permission / plan keyboard roving + A11Y walkthrough
+
+- **`bindRovingKeyboard`**: Arrow ↑↓←→ · Home · End on permission options,
+  plan action tiers, ask bars (via `presentInteractive`)
+- Model/effort menus still use `bindMenuKeyboard` (same helper underneath)
+- **docs/A11Y.md**: NVDA/VO checklist for plan, permission, Inbox, stale, clear-stale
+- Unit test for roving focus order
+
 ## [1.33.0] — 2026-07-24
 
 ### Inbox polish + permission a11y

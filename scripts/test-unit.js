@@ -1347,6 +1347,73 @@ function testInboxQueue() {
   console.log('ok  inbox queue plan/question');
 }
 
+function testA11yRovingKeyboard() {
+  // Load without a real DOM so init is a no-op
+  const hadDoc = Object.prototype.hasOwnProperty.call(global, 'document');
+  const prevDoc = global.document;
+  try {
+    delete global.document;
+  } catch {
+    global.document = undefined;
+  }
+  function makeBtn(label) {
+    const b = {
+      disabled: false,
+      isConnected: true,
+      offsetParent: {},
+      classList: { contains: () => false },
+      getAttribute: () => null,
+      focus: function () {
+        b._focused = true;
+        global.document.activeElement = b;
+      },
+      _focused: false,
+      textContent: label,
+    };
+    return b;
+  }
+  const buttons = [makeBtn('a'), makeBtn('b'), makeBtn('c')];
+  const container = {
+    _a11yRovingKey: null,
+    dataset: {},
+    querySelectorAll: () => buttons,
+    addEventListener: function (type, fn) {
+      this._a11yRovingKey = fn;
+    },
+    removeEventListener: function () {
+      this._a11yRovingKey = null;
+    },
+  };
+  const pathA11y = path.join(root, 'renderer', 'a11y.js');
+  delete require.cache[require.resolve(pathA11y)];
+  const a11y = require(pathA11y);
+  assert.equal(typeof a11y.bindRovingKeyboard, 'function');
+  global.document = { activeElement: buttons[0] };
+  a11y.bindRovingKeyboard(container, {
+    itemSelector: 'button',
+    focusFirst: false,
+  });
+  assert.equal(typeof container._a11yRovingKey, 'function');
+  global.document.activeElement = buttons[0];
+  container._a11yRovingKey({
+    key: 'ArrowRight',
+    preventDefault: () => {},
+  });
+  assert.equal(global.document.activeElement, buttons[1], 'ArrowRight moves focus');
+  container._a11yRovingKey({
+    key: 'ArrowLeft',
+    preventDefault: () => {},
+  });
+  assert.equal(global.document.activeElement, buttons[0], 'ArrowLeft moves back');
+  container._a11yRovingKey({ key: 'End', preventDefault: () => {} });
+  assert.equal(global.document.activeElement, buttons[2], 'End → last');
+  container._a11yRovingKey({ key: 'Home', preventDefault: () => {} });
+  assert.equal(global.document.activeElement, buttons[0], 'Home → first');
+  if (hadDoc) global.document = prevDoc;
+  else delete global.document;
+  console.log('ok  a11y bindRovingKeyboard');
+}
+
 function testStreamGate() {
   const g = require(path.join(root, 'renderer', 'stream-gate.js'));
   assert.equal(g.streamMode('', { running: true }), 'none');
@@ -1624,6 +1691,7 @@ try {
   testHumanize();
   testInboxQueue();
   testInboxDurableStale();
+  testA11yRovingKeyboard();
   Promise.resolve()
     .then(() => testAgentExports())
     .then(() => testSessionModeNormalize())
