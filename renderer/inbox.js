@@ -254,9 +254,32 @@
     return listPending().length;
   }
 
+  function countStale() {
+    return listPending().filter((i) => i.stale).length;
+  }
+
+  function countLive() {
+    return listPending().filter((i) => !i.stale).length;
+  }
+
+  /** Remove only restart-orphaned (stale) items — no CLI RPC. */
+  function clearStale() {
+    let n = 0;
+    for (const [id, it] of [...items.entries()]) {
+      if (it.stale) {
+        items.delete(id);
+        inflight.delete(id);
+        n += 1;
+      }
+    }
+    if (n) emit();
+    return n;
+  }
+
   function clearAll() {
     if (!items.size) return;
     items.clear();
+    inflight.clear();
     emit();
   }
 
@@ -280,7 +303,12 @@
             <h2 id="inboxTitle">${esc(t('inbox.title', 'Inbox'))}</h2>
           </div>
           <div class="inbox-head-actions">
-            <button type="button" class="icon-btn" id="inboxClose" aria-label="close">✕</button>
+            <button type="button" class="btn small ghost hidden" id="inboxClearStale" aria-label="${esc(
+              t('inbox.clearStale', 'Clear stale')
+            )}">${esc(t('inbox.clearStale', '清除过期'))}</button>
+            <button type="button" class="icon-btn" id="inboxClose" aria-label="${esc(
+              t('inbox.close', 'Close')
+            )}">✕</button>
           </div>
         </div>
         <p class="inbox-foot muted" id="inboxHint">${esc(
@@ -289,29 +317,68 @@
             'Parked plan approvals & questions across tasks. Answer here or jump to the task.'
           )
         )}</p>
-        <div class="inbox-list" id="inboxList"></div>
+        <div class="inbox-list" id="inboxList" role="list" aria-label="${esc(
+          t('inbox.title', 'Inbox')
+        )}"></div>
       </div>`;
     document.body.appendChild(root);
     root.querySelector('.inbox-backdrop')?.addEventListener('click', close);
     root.querySelector('#inboxClose')?.addEventListener('click', close);
+    root.querySelector('#inboxClearStale')?.addEventListener('click', () => {
+      const n = clearStale();
+      if (n > 0) {
+        global.toast?.(
+          String(t('inbox.clearStale.done', '已清除 {n} 条过期项')).replace('{n}', String(n)),
+          'ok'
+        );
+        try {
+          global.GrokA11y?.announce?.(
+            String(t('inbox.clearStale.done', 'Cleared {n} stale')).replace('{n}', String(n)),
+            { assertive: false }
+          );
+        } catch {
+          /* optional */
+        }
+      }
+    });
     return root;
   }
 
   function paintBadge() {
     if (typeof document === 'undefined') return;
     const n = count();
+    const live = countLive();
+    const stale = countStale();
     const btn = document.getElementById('btnInbox');
     const badge = document.getElementById('inboxBadge');
     if (btn) {
       btn.classList.toggle('has-items', n > 0);
-      btn.setAttribute('aria-label', t('inbox.btn', 'Inbox') + (n ? ` (${n})` : ''));
+      btn.classList.toggle('has-live', live > 0);
+      btn.classList.toggle('has-stale-only', n > 0 && live === 0);
+      const labelParts = [t('inbox.btn', 'Inbox')];
+      if (live) labelParts.push(`${live} live`);
+      if (stale) labelParts.push(`${stale} stale`);
+      btn.setAttribute('aria-label', labelParts.join(', '));
       btn.title = n
-        ? String(t('inbox.btn.n', 'Inbox · {n} waiting')).replace('{n}', String(n))
+        ? String(t('inbox.btn.n', 'Inbox · {n} waiting'))
+            .replace('{n}', String(n))
+            .concat(stale ? ` (${stale} stale)` : '')
         : t('inbox.btn', 'Inbox');
     }
     if (badge) {
       badge.textContent = n > 99 ? '99+' : String(n);
       badge.classList.toggle('hidden', n === 0);
+      badge.classList.toggle('stale-only', n > 0 && live === 0);
+    }
+    // Clear-stale control visibility when panel exists
+    const clearBtn = document.getElementById('inboxClearStale');
+    if (clearBtn) {
+      clearBtn.classList.toggle('hidden', stale === 0);
+      clearBtn.textContent = t('inbox.clearStale', '清除过期');
+      clearBtn.setAttribute(
+        'aria-label',
+        String(t('inbox.clearStale.n', 'Clear {n} stale')).replace('{n}', String(stale))
+      );
     }
   }
 
@@ -347,7 +414,7 @@
           .slice(0, 220);
         const age = formatAge(it.createdAt, en);
         const staleBanner = it.stale
-          ? `<p class="inbox-stale-banner">${esc(
+          ? `<p class="inbox-stale-banner" role="status">${esc(
               en
                 ? 'Session lost after restart — cannot reply to CLI. Dismiss only.'
                 : '重启后会话已断 · 无法再回复 CLI，仅可关闭此条。'
@@ -355,7 +422,7 @@
           : '';
         if (it.stale) {
           return `
-          <article class="inbox-card inbox-stale" data-id="${esc(it.id)}" data-kind="${esc(it.kind)}">
+          <article class="inbox-card inbox-stale" role="listitem" data-id="${esc(it.id)}" data-kind="${esc(it.kind)}" aria-label="${esc((en ? 'Stale' : '过期') + ': ' + (it.title || kindLabel))}">
             <div class="inbox-card-top">
               <span class="inbox-chip kind-stale">${en ? 'STALE' : '过期'}</span>
               <span class="inbox-chip kind-${it.kind === 'plan' ? 'plan' : it.kind === 'permission' ? 'perm' : 'ask'}">${kindLabel}</span>
@@ -366,13 +433,13 @@
             ${staleBanner}
             ${preview ? `<div class="inbox-preview-text">${esc(preview)}</div>` : ''}
             <div class="inbox-actions">
-              <button type="button" class="btn small ghost" data-act="dismiss-stale" data-id="${esc(it.id)}">✕ ${esc(en ? 'Dismiss' : '关闭')}</button>
+              <button type="button" class="btn small ghost" data-act="dismiss-stale" data-id="${esc(it.id)}" aria-label="${esc(en ? 'Dismiss stale item' : '关闭过期项')}">✕ ${esc(en ? 'Dismiss' : '关闭')}</button>
             </div>
           </article>`;
         }
         if (it.kind === 'plan') {
           return `
-          <article class="inbox-card" data-id="${esc(it.id)}" data-kind="plan">
+          <article class="inbox-card" role="listitem" data-id="${esc(it.id)}" data-kind="plan" aria-label="${esc(it.title || kindLabel)}">
             <div class="inbox-card-top">
               <span class="inbox-chip kind-plan">${kindLabel}</span>
               <span class="inbox-where" title="${esc(where)}">${esc(where)}</span>
@@ -402,7 +469,7 @@
             )
             .join('');
           return `
-          <article class="inbox-card" data-id="${esc(it.id)}" data-kind="permission">
+          <article class="inbox-card" role="listitem" data-id="${esc(it.id)}" data-kind="permission" aria-label="${esc(it.title || kindLabel)}">
             <div class="inbox-card-top">
               <span class="inbox-chip kind-perm">${kindLabel}</span>
               <span class="inbox-where" title="${esc(where)}">${esc(where)}</span>
@@ -430,7 +497,7 @@
             ? 'Open task to answer'
             : '请到任务内回答';
         return `
-        <article class="inbox-card" data-id="${esc(it.id)}" data-kind="question">
+        <article class="inbox-card" role="listitem" data-id="${esc(it.id)}" data-kind="question" aria-label="${esc(it.title || kindLabel)}">
           <div class="inbox-card-top">
             <span class="inbox-chip kind-ask">${kindLabel}</span>
             <span class="inbox-where" title="${esc(where)}">${esc(where)}</span>
@@ -452,6 +519,7 @@
         onCardAction(btn.dataset.act, btn.dataset.id, { optionId: btn.dataset.opt })
       );
     });
+    paintBadge();
   }
 
   function formatAge(ts, en) {
@@ -707,6 +775,9 @@
     ensure,
     persist,
     restoreStale,
+    clearStale,
+    countStale,
+    countLive,
     STORAGE_KEY,
   };
 

@@ -434,6 +434,21 @@
         run: run(() => global.GrokInbox?.open?.()),
       },
       {
+        id: 'inbox.clearStale',
+        title: t('cmd.inbox.clearStale', '清除 Inbox 过期项'),
+        keywords: 'inbox clear stale dismiss 过期 清除',
+        group: 'actions',
+        run: run(() => {
+          const n = global.GrokInbox?.clearStale?.() || 0;
+          global.toast?.(
+            n
+              ? String(t('inbox.clearStale.done', '已清除 {n} 条过期项')).replace('{n}', String(n))
+              : t('inbox.clearStale.empty', '没有过期项'),
+            n ? 'ok' : 'ok'
+          );
+        }),
+      },
+      {
         id: 'session.share',
         title: t('cmd.session.share', '导出会话分享卡'),
         keywords: 'export session share markdown 导出 会话 分享',

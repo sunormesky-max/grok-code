@@ -6,6 +6,22 @@
 #btnInbox.has-items {
   color: var(--accent, #7dd3fc);
 }
+#btnInbox.has-stale-only {
+  color: var(--muted, #a1a1aa);
+}
+#inboxBadge.stale-only {
+  background: linear-gradient(135deg, #71717a, #52525b);
+  box-shadow: none;
+}
+.inbox-head-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+#inboxClearStale {
+  font-size: 11px;
+  white-space: nowrap;
+}
 #inboxBadge {
   position: absolute;
   top: 2px;

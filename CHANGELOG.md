@@ -11,6 +11,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 - See [ROADMAP.md](ROADMAP.md)
 
+## [1.33.0] — 2026-07-24
+
+### Inbox polish + permission a11y
+
+- **Clear stale**: toolbar button + command palette; leaves live parks alone
+- Badge distinguishes live vs stale-only (muted when only stale)
+- Permission bars: `role=region`, option `aria-label` with CLI optionId,
+  compact cancel labeled for screen readers
+- Inbox list `role=list` / cards `listitem`; stale banner `role=status`
+- Unit test for `clearStale` vs live
+
 ## [1.32.0] — 2026-07-24
 
 ### Permission density + durable Inbox (display-only)

@@ -10734,7 +10734,8 @@ function showPermissionBar(task, d) {
       const isAllow = /allow|approve|yes|ok/i.test(String(o.optionId) + ' ' + String(o.name));
       const isDeny = /reject|deny|cancel|no\b/i.test(String(o.optionId) + ' ' + String(o.name));
       const cls = isAllow ? 'btn small primary' : isDeny ? 'btn small ghost' : 'btn small ghost';
-      return `<button type="button" class="${cls}" data-opt="${id}" title="${id}">${label}</button>`;
+      const aria = esc(`${o.name || o.optionId || 'option'} (${o.optionId || i})`);
+      return `<button type="button" class="${cls}" data-opt="${id}" title="${id}" aria-label="${aria}">${label}</button>`;
     })
     .join('');
   let argsPreview = '';
@@ -10743,13 +10744,20 @@ function showPermissionBar(task, d) {
   } catch {
     argsPreview = '';
   }
+  bar.setAttribute('role', 'region');
+  bar.setAttribute(
+    'aria-label',
+    en
+      ? `Tool permission${density === 'compact' ? ' (compact)' : ''}: ${title}`
+      : `工具授权${density === 'compact' ? '（紧凑）' : ''}：${title}`
+  );
   if (density === 'compact') {
     bar.innerHTML = `
       <div class="permission-compact-row">
-        <span class="permission-compact-title" title="${esc(d.toolName || '')}">${esc(title)}</span>
-        <div class="permission-opts compact-opts">
+        <span class="permission-compact-title" id="permTitle-${esc(String(d.requestId))}" title="${esc(d.toolName || '')}">${esc(title)}</span>
+        <div class="permission-opts compact-opts" role="group" aria-label="${en ? 'Permission options' : '授权选项'}">
           ${optBtns || `<span class="muted">${en ? 'No options' : '无选项'}</span>`}
-          <button type="button" class="btn small ghost" data-act="cancel">✕</button>
+          <button type="button" class="btn small ghost" data-act="cancel" aria-label="${en ? 'Cancel permission' : '取消授权'}">✕</button>
         </div>
       </div>
       <label class="permission-remember compact-remember">
@@ -10768,9 +10776,9 @@ function showPermissionBar(task, d) {
       <input type="checkbox" class="perm-remember-cb" checked />
       <span>${en ? 'Remember for this flight (same tool + CLI optionId only)' : '本回合记住此工具选择（仅 CLI optionId）'}</span>
     </label>
-    <div class="retry-actions permission-opts">
+    <div class="retry-actions permission-opts" role="group" aria-label="${en ? 'Permission options' : '授权选项'}">
       ${optBtns || `<span class="muted">${en ? 'No options from CLI' : 'CLI 未返回选项'}</span>`}
-      <button type="button" class="btn small ghost" data-act="cancel">✕ ${en ? 'Cancel' : '取消'}</button>
+      <button type="button" class="btn small ghost" data-act="cancel" aria-label="${en ? 'Cancel permission' : '取消授权'}">✕ ${en ? 'Cancel' : '取消'}</button>
     </div>`;
   }
   const send = async (payload) => {

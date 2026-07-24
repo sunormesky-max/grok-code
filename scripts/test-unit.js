@@ -1463,6 +1463,17 @@ function testInboxDurableStale() {
   inbox.resolve(inbox.itemId('question', 't2', 1));
   assert.ok(!inbox.listPending().some((i) => i.id.includes('t2')));
 
+  // clearStale leaves live items
+  inbox.clearAll();
+  inbox.upsert({ kind: 'plan', taskId: 'live', requestId: 1, title: 'Live' });
+  inbox.upsert({ kind: 'plan', taskId: 'old', requestId: 2, title: 'Old', stale: true });
+  assert.equal(inbox.countStale(), 1);
+  assert.equal(inbox.countLive(), 1);
+  assert.equal(inbox.clearStale(), 1);
+  assert.equal(inbox.countStale(), 0);
+  assert.equal(inbox.countLive(), 1);
+  assert.equal(inbox.count(), 1);
+
   delete global.localStorage;
   console.log('ok  inbox durable stale rehydrate');
 }

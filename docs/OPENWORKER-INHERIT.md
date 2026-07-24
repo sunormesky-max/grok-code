@@ -18,6 +18,7 @@ OpenWorker-specific internal-flow footguns.
 | Plan exec tier + tool permission park | plan bar + `request_permission` | **1.30.0** | CLI optionIds only; flight-local autoApprove flip |
 | Standing grants (flight) | `AcpClient.standingGrants` | **1.31.0** | tool→optionId only if still offered; no invent |
 | Permission density + stale Inbox | humanize + localStorage | **1.32.0** | stale = dismiss only; no resolve without ACP |
+| Clear-stale + permission a11y | Inbox toolbar + region/labels | **1.33.0** | polish only |
 
 ## Hard boundaries (never break)
 
@@ -52,8 +53,8 @@ against the thin-host contract instead of copying OpenWorker.
 
 ## Next candidates (optional, still host-only)
 
-1. Further a11y / polish on compact permission rows  
-2. Optional “clear all stale” control  
+1. NVDA/VO walkthrough notes for permission + Inbox  
+2. Keyboard roving on permission option group  
 
 Not scheduled: unattended router, multi-root permission engine, automation
 scheduler, provider matrix, durable grants across restarts (would need user
