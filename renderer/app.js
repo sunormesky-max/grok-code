@@ -9008,6 +9008,15 @@ function paintLiveAssistantRole(task) {
   if (!role || !task.running) return;
   const phase = task.phase || '';
   const det = String(task.phaseDetail || '').slice(0, 48);
+  const gate = window.GrokStreamGate?.modeForTask?.(task);
+  if (gate === 'hold') {
+    role.textContent = localeIsEn() ? 'Grok · working…' : 'Grok · 工作中…';
+    return;
+  }
+  if (gate === 'quiet') {
+    role.textContent = localeIsEn() ? 'Grok · mid-turn' : 'Grok · 回合中';
+    return;
+  }
   if (phase === 'tool') {
     role.textContent = det ? `Grok · tool · ${det}` : 'Grok · tool';
   } else if (phase === 'thinking') {
@@ -9031,7 +9040,17 @@ function paintLiveStreamMirrors(task) {
   const empty = box.querySelector('#liveEmpty');
   if (empty && (task.streamBuf || task.thoughtBuf || task.running)) empty.remove();
 
-  const paintOne = (kind, text) => {
+  const paintOne = (kind, text, streamMode) => {
+    if (!text && kind === 'thought') return;
+    // hold: no floating stream mirror (role spinner is enough)
+    if (kind === 'stream' && streamMode === 'hold') {
+      document.getElementById('liveStreamMirror')?.remove();
+      return;
+    }
+    if (kind === 'stream' && streamMode === 'none') {
+      document.getElementById('liveStreamMirror')?.remove();
+      return;
+    }
     if (!text) return;
     const id = kind === 'thought' ? 'liveThoughtMirror' : 'liveStreamMirror';
     let row = document.getElementById(id);
@@ -9050,6 +9069,7 @@ function paintLiveStreamMirrors(task) {
         </div>`;
       box.appendChild(row);
     }
+    row.dataset.streamMode = streamMode || '';
     const ts = new Date();
     const t = `${String(ts.getHours()).padStart(2, '0')}:${String(ts.getMinutes()).padStart(2, '0')}:${String(
       ts.getSeconds()
@@ -9058,25 +9078,38 @@ function paintLiveStreamMirrors(task) {
     if (tEl) tEl.textContent = t;
     const titleEl = row.querySelector('.title');
     if (titleEl) {
-      titleEl.textContent =
-        kind === 'thought'
-          ? `Thinking · ${text.length} 字`
-          : task.phase === 'tool'
-            ? `回复流 · ${text.length} 字（工具进行中）`
-            : `流式输出 · ${text.length} 字`;
+      if (kind === 'thought') {
+        titleEl.textContent = `Thinking · ${text.length} 字`;
+      } else if (streamMode === 'quiet') {
+        titleEl.textContent = localeIsEn()
+          ? `Quiet · mid-turn · ${text.length} chars`
+          : `旁白 · 回合中 · ${text.length} 字`;
+      } else if (task.phase === 'tool') {
+        titleEl.textContent = `回复流 · ${text.length} 字（工具进行中）`;
+      } else {
+        titleEl.textContent = `流式输出 · ${text.length} 字`;
+      }
     }
     const body = row.querySelector('.stream-mirror-body');
     if (body) {
-      const s = String(text);
-      // Keep tail so long replies stay readable while streaming
-      body.textContent = s.length > 1600 ? `…${s.slice(-1600)}` : s;
+      let s = String(text);
+      if (kind === 'stream' && streamMode === 'quiet') {
+        s = window.GrokStreamGate?.displayForMode?.(s, 'quiet', { en: localeIsEn() }) || s.slice(0, 120);
+      } else if (s.length > 1600) {
+        s = `…${s.slice(-1600)}`;
+      }
+      body.textContent = s;
     }
     row.classList.toggle('running', Boolean(task.running));
+    row.classList.toggle('stream-quiet', kind === 'stream' && streamMode === 'quiet');
   };
 
-  // Thought first, then stream (path order)
-  if (task.thoughtBuf) paintOne('thought', task.thoughtBuf);
-  if (task.streamBuf) paintOne('stream', task.streamBuf);
+  // Thought first, then stream (path order) — stream gated (OpenWorker-style)
+  if (task.thoughtBuf) paintOne('thought', task.thoughtBuf, 'answer');
+  if (task.streamBuf) {
+    const mode = window.GrokStreamGate?.modeForTask?.(task) || 'answer';
+    paintOne('stream', task.streamBuf, mode);
+  }
 
   if (box.scrollHeight - box.scrollTop - box.clientHeight < 140) {
     box.scrollTop = box.scrollHeight;
@@ -9327,9 +9360,8 @@ function paintToolStorm(task) {
       .slice(0, 24)
       .map((t) => {
         const mark = t.status === 'running' ? '…' : t.ok === false ? '✗' : '✓';
-        const path =
-          t.args?.path || t.args?.file_path || t.args?.target_file || t.args?.command || '';
-        return `<div class="storm-row">${mark} ${esc(t.name)}${path ? ` · ${esc(String(path).slice(0, 60))}` : ''}</div>`;
+        const human = humanToolTitle(t.name, t.args || {});
+        return `<div class="storm-row" title="${esc(t.name || '')}">${mark} ${esc(human)}</div>`;
       })
       .join('');
     if (items.length > 24) {
@@ -9437,6 +9469,9 @@ function bindAgentEvents() {
       if (active) StreamFair.flushTask(task);
       appendToolStart(d, task);
       task.toolCount += 1;
+      task._hasToolThisTurn = true;
+      // Re-gate stream: short narration may flip hold → quiet once tools start
+      if (task.streamBuf) scheduleStreamPaint(task);
       setTaskPhase(task, 'tool', `${d.name || 'tool'}…`);
       // Live noise for single tools only (storm path emits one summary)
       const pending = ToolStorm.pending.get(task.id);
@@ -9452,7 +9487,9 @@ function bindAgentEvents() {
       const write = window.DiffUtil.isWriteTool(d.name);
       if (write) task.writeCount = (task.writeCount || 0) + 1;
       if (fpath && active) cacheFileBefore(fpath);
-      const liveTitle = `[${task.title}] ${d.name || 'tool'}`;
+      task._hasToolThisTurn = true;
+      const human = humanToolTitle(d.name, d.args || {});
+      const liveTitle = `[${task.title}] ${human}`;
       const liveSub = fpath || summarizeToolSub(d.name, d.args);
       if (active) {
         pushLiveEvent({
@@ -9462,7 +9499,7 @@ function bindAgentEvents() {
           running: true,
           projectId: task.projectId,
         });
-        setLivePhase(write ? 'writing…' : `${d.name || 'tool'}…`, fpath || task.title);
+        setLivePhase(write ? 'writing…' : human, fpath || task.title);
         if (fpath && state.followAgent) {
           setLiveFocus(fpath, contentCacheMap().get(fpath) || '');
         }
@@ -9794,6 +9831,11 @@ function withTask(task, fn) {
 }
 
 function summarizeToolSub(name, args = {}) {
+  if (window.GrokHumanize?.formatLine) {
+    const line = window.GrokHumanize.humanizeTool(name, args, { en: localeIsEn() });
+    const s = window.GrokHumanize.formatLine(line);
+    if (s) return s.slice(0, 140);
+  }
   if (args.command) return String(args.command).slice(0, 120);
   if (args.query) return String(args.query).slice(0, 80);
   if (args.path || args.file_path || args.target_file) {
@@ -9804,6 +9846,16 @@ function summarizeToolSub(name, args = {}) {
   } catch {
     return '';
   }
+}
+
+/** Human one-liner for tool cards / Live titles */
+function humanToolTitle(name, args = {}) {
+  if (window.GrokHumanize?.formatLine) {
+    return window.GrokHumanize.formatLine(
+      window.GrokHumanize.humanizeTool(name, args, { en: localeIsEn() })
+    );
+  }
+  return name || 'tool';
 }
 
 function scheduleStreamPaint(task) {
@@ -9950,6 +10002,7 @@ async function runTaskPrompt(task, text, opts = {}) {
   task.liveThoughtEl = null;
   task.toolCount = 0;
   task.writeCount = 0;
+  task._hasToolThisTurn = false;
   task.turnMode = modeUsed;
   task.lastError = null;
   if (!Array.isArray(task.turns)) task.turns = [];
@@ -11271,23 +11324,39 @@ function upsertAssistant(text, streaming, task) {
     el.classList.add('is-streaming');
     body.classList.remove('md');
     body.classList.add('stream-body', 'is-streaming');
-    const next = text || '';
+    // OpenWorker-style gate: hold short pre-tool narration; quiet mid-tool; answer otherwise
+    const raw = text || '';
+    const mode =
+      window.GrokStreamGate?.streamMode?.(raw, window.GrokStreamGate.ctxFromTask(task)) ||
+      'answer';
+    el.dataset.streamMode = mode;
+    el.classList.toggle('stream-hold', mode === 'hold');
+    el.classList.toggle('stream-quiet', mode === 'quiet');
+    const next =
+      window.GrokStreamGate?.displayForMode?.(raw, mode, { en: localeIsEn() }) ?? raw;
     // Prefer append when prefix matches — avoids full string rewrite every frame
     const prev = body.textContent || '';
     if (prev === next) {
       /* no-op */
-    } else if (next.startsWith(prev) && next.length - prev.length < 400) {
+    } else if (
+      mode === 'answer' &&
+      next.startsWith(prev) &&
+      next.length - prev.length < 400 &&
+      !el.classList.contains('stream-quiet') &&
+      !el.classList.contains('stream-hold')
+    ) {
       body.appendChild(document.createTextNode(next.slice(prev.length)));
     } else {
       body.textContent = next;
     }
     if (role) paintLiveAssistantRole(task);
   } else {
-    el.classList.remove('is-streaming');
+    el.classList.remove('is-streaming', 'stream-hold', 'stream-quiet');
     body.classList.add('md');
     body.classList.remove('stream-body', 'is-streaming');
     body.innerHTML = renderMarkdown(text || '');
     delete el.dataset.live;
+    delete el.dataset.streamMode;
     if (role) role.textContent = 'Grok';
   }
   scrollMessages(false, task);
@@ -11409,6 +11478,7 @@ function appendToolStartDirect(d, task) {
   if (task.turnId) div.dataset.turn = task.turnId;
   const startedAt = Number(d.startedAt) || Date.now();
   div.dataset.toolStarted = String(startedAt);
+  const human = humanToolTitle(d.name, d.args || {});
   let argsPreview = '';
   try {
     argsPreview = JSON.stringify(summarizeArgs(d.name, d.args), null, 0);
@@ -11418,7 +11488,7 @@ function appendToolStartDirect(d, task) {
   div.innerHTML = `
     <div class="role">Tool</div>
     <div class="body">
-      <div class="name">⚙ ${esc(d.name)}</div>
+      <div class="name" title="${esc(d.name || '')}">⚙ ${esc(human || d.name)}</div>
       <div class="args">${esc(argsPreview)}</div>
       <div class="result">running… 0s</div>
     </div>`;

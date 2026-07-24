@@ -1133,6 +1133,57 @@ function testAgentStreamAcpFixture() {
   console.log('ok  ACP session/update fixture contract');
 }
 
+function testStreamGate() {
+  const g = require(path.join(root, 'renderer', 'stream-gate.js'));
+  assert.equal(g.streamMode('', { running: true }), 'none');
+  assert.equal(g.streamMode('hi', { running: true, toolCount: 0 }), 'hold');
+  assert.equal(
+    g.streamMode('short mid', { running: true, toolCount: 2 }),
+    'quiet'
+  );
+  const long = Array(g.STREAM_PROMOTE_WORDS + 2)
+    .fill('word')
+    .join(' ');
+  assert.equal(g.streamMode(long, { running: true, toolCount: 0 }), 'answer');
+  // CJK promote by char threshold
+  const cjk = '中'.repeat(g.STREAM_PROMOTE_CHARS);
+  assert.equal(g.streamMode(cjk, { running: true, toolCount: 0 }), 'answer');
+  // Done turn always answer
+  assert.equal(g.streamMode('short', { running: false }), 'answer');
+  assert.equal(g.displayForMode('abc', 'hold'), '');
+  assert.ok(g.displayForMode('hello world', 'quiet', { en: true }).includes('Working'));
+  assert.equal(g.displayForMode('full text', 'answer'), 'full text');
+  assert.equal(
+    g.modeForTask({ streamBuf: 'x', running: true, toolCount: 0 }),
+    'hold'
+  );
+  console.log('ok  stream-gate hold/quiet/answer');
+}
+
+function testHumanize() {
+  const h = require(path.join(root, 'renderer', 'humanize.js'));
+  const readZh = h.formatLine(h.humanizeTool('read_file', { path: 'src/app.js' }, { en: false }));
+  assert.ok(readZh.includes('app.js'), readZh);
+  assert.ok(/读取/.test(readZh), readZh);
+  const readEn = h.formatLine(
+    h.humanizeTool('read_file', { path: 'src/app.js' }, { en: true })
+  );
+  assert.ok(readEn.includes('Read') && readEn.includes('app.js'), readEn);
+  const shell = h.formatLine(
+    h.humanizeTool('run_terminal_command', { command: 'npm test' }, { en: true })
+  );
+  assert.ok(shell.includes('npm test'), shell);
+  const write = h.formatLine(
+    h.humanizeTool('search_replace', { path: 'a/b/c.ts' }, { en: true })
+  );
+  assert.ok(write.includes('Edited') && write.includes('c.ts'), write);
+  const ask = h.formatLine(
+    h.humanizeApproval('run_shell', { command: 'rm -rf /' }, { en: true })
+  );
+  assert.ok(/Run a command/i.test(ask), ask);
+  console.log('ok  humanize tool lines');
+}
+
 function testStreamFairness() {
   const sched = require(path.join(root, 'renderer', 'stream-scheduler.js'));
   const entries = [
@@ -1273,6 +1324,8 @@ try {
   testAgentStreamNdjsonFixture();
   testAgentStreamAcpFixture();
   testStreamFairness();
+  testStreamGate();
+  testHumanize();
   Promise.resolve()
     .then(() => testAgentExports())
     .then(() => testSessionModeNormalize())

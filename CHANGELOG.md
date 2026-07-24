@@ -11,6 +11,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 - See [ROADMAP.md](ROADMAP.md)
 
+## [1.28.0] — 2026-07-24
+
+### Stream gate + tool humanize (OpenWorker-inspired)
+
+Host-side UX only — still a thin CLI host (see `docs/OPENWORKER-INHERIT.md`).
+
+- **stream-gate** (`hold` / `quiet` / `answer`): short pre-tool narration stays
+  off the main bubble; mid-tool chatter is a quiet one-liner; full answers promote
+  by word/CJK threshold
+- Wired into chat assistant stream + Live stream mirror + role label
+- **humanize**: tool rows, ToolStorm list, Live titles as “Read app.js” /
+  “执行 npm test” (zh/en), not raw `read_file` + JSON
+- Unit tests for both modules
+
 ## [1.27.0] — 2026-07-24
 
 ### CLI-native surface copy

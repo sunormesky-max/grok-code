@@ -4160,6 +4160,27 @@ button.pill:hover {
     0 0 0 1px rgba(56, 189, 248, 0.12),
     0 8px 28px rgba(0, 0, 0, 0.25);
 }
+/* stream-gate: hold = spinner only; quiet = mid-turn one-liner (OpenWorker-inspired) */
+.msg.assistant.stream-hold {
+  border-color: rgba(125, 211, 252, 0.12);
+  box-shadow: none;
+  min-height: 2.2em;
+}
+.msg.assistant.stream-hold .body.stream-body {
+  min-height: 0.5em;
+  opacity: 0.35;
+}
+.msg.assistant.stream-quiet .body.stream-body {
+  font-size: 12px;
+  opacity: 0.72;
+  font-style: italic;
+  color: var(--muted, #a1a1aa);
+}
+.live-event.stream-quiet .stream-mirror-body {
+  font-size: 11px;
+  opacity: 0.75;
+  font-style: italic;
+}
 .msg.assistant .body.stream-body.is-streaming::after {
   content: "";
   display: inline-block;
