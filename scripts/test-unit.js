@@ -1347,6 +1347,19 @@ function testInboxQueue() {
   console.log('ok  inbox queue plan/question');
 }
 
+function testUpdaterHelpers() {
+  const u = require(path.join(root, 'electron', 'updater.js'));
+  assert.equal(typeof u.formatBytes, 'function');
+  assert.ok(u.formatBytes(500).includes('B'));
+  assert.ok(u.formatBytes(2048).includes('KB'));
+  assert.ok(u.formatBytes(2 * 1024 * 1024).includes('MB'));
+  assert.ok(String(u.releasesUrl()).includes('github.com'));
+  assert.equal(typeof u.getStatus, 'function');
+  const st = u.getStatus();
+  assert.ok(st && typeof st.status === 'string');
+  console.log('ok  updater helpers');
+}
+
 function testThemesContrastSuggest() {
   const pathT = path.join(root, 'renderer', 'themes.js');
   const store = {};
@@ -1739,6 +1752,7 @@ try {
   testInboxDurableStale();
   testA11yRovingKeyboard();
   testThemesContrastSuggest();
+  testUpdaterHelpers();
   Promise.resolve()
     .then(() => testAgentExports())
     .then(() => testSessionModeNormalize())

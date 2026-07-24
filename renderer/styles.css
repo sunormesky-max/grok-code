@@ -5679,6 +5679,65 @@ body.booted #app {
   font-size: 11.5px;
   color: var(--ok, #4ade80);
 }
+
+/* Software update status */
+.update-status {
+  margin-top: 8px;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--muted, #a1a1aa);
+}
+.update-status.status-checking { color: var(--ice, #7dd3fc); }
+.update-status.status-available { color: var(--warn, #fbbf24); }
+.update-status.status-downloading { color: var(--ice, #7dd3fc); }
+.update-status.status-ready { color: var(--ok, #4ade80); font-weight: 600; }
+.update-status.status-error { color: var(--danger, #fb7185); }
+.update-status.status-disabled,
+.update-status.status-none { color: var(--faint, #71717a); }
+.update-progress {
+  margin-top: 8px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.update-progress.hidden { display: none; }
+.update-progress-track {
+  flex: 1;
+  height: 6px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+}
+.update-progress-track i {
+  display: block;
+  height: 100%;
+  width: 0;
+  background: linear-gradient(90deg, var(--ice, #7dd3fc), var(--accent, #38bdf8));
+  transition: width 0.2s ease;
+}
+.update-progress-label {
+  font-family: var(--mono, monospace);
+  font-size: 11px;
+  color: var(--muted);
+  min-width: 2.5em;
+}
+#btnUpdateBadge {
+  color: var(--ok, #4ade80);
+  position: relative;
+}
+#btnUpdateBadge[data-status='ready'] {
+  animation: updatePulse 1.4s ease-in-out infinite;
+}
+#btnUpdateBadge[data-status='available'],
+#btnUpdateBadge[data-status='downloading'] {
+  color: var(--warn, #fbbf24);
+}
+@keyframes updatePulse {
+  50% { opacity: 0.55; }
+}
+body.reduce-motion #btnUpdateBadge[data-status='ready'] {
+  animation: none;
+}
 .update-status {
   font-family: var(--mono); font-size: 11.5px; color: var(--muted);
   min-height: 1.2em;

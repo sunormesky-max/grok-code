@@ -103,11 +103,12 @@ Living plan for the GrokCode open-source ecosystem. Order may change based on co
 - [x] High-contrast themes + Diff keyboard SR (v1.35.0)
 - [x] prefers-contrast soft suggest + Diff multi-select keys (v1.36.0)
 - [x] Diff `*` select-pending + Doctor InProgress actions (v1.37.0)
+- [x] Auto-update / packaging UX polish (v1.38.0)
 
 ## Next (host UX — carefully; refuse OW engine flow)
 
-- [ ] Optional: deeper packaging / auto-update polish
 - [ ] Optional: NVDA full pass with HC theme
+- [ ] Optional: code-signing notes for Windows SmartScreen
 
 See `docs/OPENWORKER-INHERIT.md` anti-patterns before any further port.
 

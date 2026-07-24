@@ -175,6 +175,9 @@
           <span class="btn-inbox-ico" aria-hidden="true">◎</span>
           <span id="inboxBadge" class="hidden">0</span>
         </button>
+        <button type="button" class="btn ghost icon-only hidden" id="btnUpdateBadge" title="有可用更新" aria-label="Update available" hidden>
+          <span aria-hidden="true">↑</span>
+        </button>
         <button type="button" class="btn ghost icon-only" id="btnSettings" data-i18n-title="btn.settings" data-i18n-aria="btn.settings" title="设置 (Ctrl+,)">⚙</button>
         <!-- Linux / 无 titleBarOverlay 时显示；Windows 由系统绘制，JS 会隐藏 -->
         <div class="win-controls" id="winControls" role="group" aria-label="窗口控制">
@@ -694,12 +697,19 @@
         <div class="diag-box">
           <div class="diag-head">
             <strong data-i18n="cfg.update">软件更新</strong>
+            <span class="muted" id="updateCurrentVer"></span>
           </div>
-          <div class="diag-actions">
+          <div class="diag-actions" style="flex-wrap:wrap">
             <button type="button" class="btn small ghost" id="btnCheckUpdate" data-i18n="cfg.update.check">检查更新</button>
+            <button type="button" class="btn small ghost hidden" id="btnUpdateDownload" data-i18n="cfg.update.download">下载更新</button>
             <button type="button" class="btn small primary hidden" id="btnUpdateInstall" data-i18n="cfg.update.install">重启并安装</button>
+            <button type="button" class="btn small ghost" id="btnOpenReleases" data-i18n="cfg.update.releases">GitHub Releases</button>
           </div>
-          <div class="update-status" id="updateStatusText">—</div>
+          <div class="update-status" id="updateStatusText" role="status" aria-live="polite">—</div>
+          <div class="update-progress hidden" id="updateProgress" aria-hidden="true">
+            <div class="update-progress-track"><i id="updateProgressFill"></i></div>
+            <span class="update-progress-label" id="updateProgressLabel"></span>
+          </div>
         </div>
 
         <div class="diag-box">

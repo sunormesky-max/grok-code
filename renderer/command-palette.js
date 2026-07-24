@@ -280,6 +280,26 @@
         }),
       },
       {
+        id: 'update.check',
+        title: t('cmd.update.check', '检查软件更新'),
+        keywords: 'update upgrade 更新 release',
+        run: run(() => {
+          document.getElementById('btnSettings')?.click();
+          setTimeout(() => document.getElementById('btnCheckUpdate')?.click(), 150);
+        }),
+      },
+      {
+        id: 'update.releases',
+        title: t('cmd.update.releases', '打开 GitHub Releases'),
+        keywords: 'github releases 发布 下载',
+        run: run(async () => {
+          const url =
+            (await global.grok?.updateReleasesUrl?.()) ||
+            'https://github.com/sunormesky-max/grok-code/releases';
+          await global.grok?.openExternal?.(url);
+        }),
+      },
+      {
         id: 'doctor',
         title: t('cmd.doctor', '环境体检'),
         keywords: 'doctor 体检 diagnose inprogress patch 补丁',

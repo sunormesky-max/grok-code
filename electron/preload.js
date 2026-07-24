@@ -110,6 +110,7 @@ contextBridge.exposeInMainWorld('grok', {
   updateCheck: () => ipcRenderer.invoke('update:check'),
   updateDownload: () => ipcRenderer.invoke('update:download'),
   updateInstall: () => ipcRenderer.invoke('update:install'),
+  updateReleasesUrl: () => ipcRenderer.invoke('update:releasesUrl'),
 
   // Plugins marketplace
   pluginList: () => ipcRenderer.invoke('plugin:list'),

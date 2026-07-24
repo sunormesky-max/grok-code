@@ -895,6 +895,7 @@ ipcMain.handle('update:status', () => updater.getStatus());
 ipcMain.handle('update:check', () => updater.checkForUpdates());
 ipcMain.handle('update:download', () => updater.downloadUpdate());
 ipcMain.handle('update:install', () => updater.quitAndInstall());
+ipcMain.handle('update:releasesUrl', () => updater.releasesUrl?.() || 'https://github.com/sunormesky-max/grok-code/releases');
 
 // ── Projects（多项目并行） ──────────────────────────────
 ipcMain.handle('project:list', () => [...projects.values()].map(publicProject));

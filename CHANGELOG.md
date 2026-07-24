@@ -11,6 +11,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 - See [ROADMAP.md](ROADMAP.md)
 
+## [1.38.0] — 2026-07-25
+
+### Auto-update / packaging UX polish
+
+- Richer update status: current version, download progress bar (MB), status colors
+- **Download** button when auto-download is off; **Install** when ready
+- **GitHub Releases** button + command palette
+- Titlebar **↑** badge when update available / downloading / ready (opens Settings)
+- Assertive SR announce when update is ready to install
+- `updater.formatBytes` / `releasesUrl` unit-tested
+
+Dev / unpackaged builds still skip auto-update (by design).
+
 ## [1.37.0] — 2026-07-24
 
 ### Diff `*` select-pending + Doctor InProgress actions

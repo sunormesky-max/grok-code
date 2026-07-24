@@ -238,11 +238,90 @@
   function renderUpdateStatus(st) {
     const el = $('#updateStatusText');
     if (!el || !st) return;
-    el.textContent = st.message || st.status || '—';
+    const en = window.GrokI18n?.getLocale?.() === 'en';
+    const ver = st.currentVersion ? `v${st.currentVersion}` : '';
+    const curEl = $('#updateCurrentVer');
+    if (curEl && ver) curEl.textContent = ver;
+
+    let msg = st.message || st.status || '—';
+    if (st.status === 'disabled' && en) {
+      msg = 'Dev / unpackaged — updates disabled';
+    } else if (st.status === 'none' && st.version) {
+      msg = en
+        ? `Up to date (v${st.version})`
+        : `已是最新 v${st.version}`;
+    } else if (st.status === 'available' && st.version) {
+      msg = en
+        ? `Update available: v${st.version}${st.autoDownload === false ? ' — click Download' : ' — downloading…'}`
+        : `发现新版本 v${st.version}${st.autoDownload === false ? ' · 请点下载' : ' · 自动下载中…'}`;
+    } else if (st.status === 'ready' && st.version) {
+      msg = en
+        ? `v${st.version} ready — restart to install`
+        : `v${st.version} 已就绪 · 重启安装`;
+    }
+    el.textContent = msg;
     el.dataset.status = st.status || '';
+    el.className = `update-status status-${st.status || 'idle'}`;
+
     const installBtn = $('#btnUpdateInstall');
+    const downloadBtn = $('#btnUpdateDownload');
     if (installBtn) {
       installBtn.classList.toggle('hidden', st.status !== 'ready');
+    }
+    if (downloadBtn) {
+      // Show download when available and not auto-downloading, or retry after error mid-download
+      const showDl =
+        st.status === 'available' && st.autoDownload === false;
+      downloadBtn.classList.toggle('hidden', !showDl);
+    }
+
+    const prog = $('#updateProgress');
+    const fill = $('#updateProgressFill');
+    const plab = $('#updateProgressLabel');
+    if (prog) {
+      const show = st.status === 'downloading' && st.percent != null;
+      prog.classList.toggle('hidden', !show);
+      prog.setAttribute('aria-hidden', show ? 'false' : 'true');
+      if (show && fill) {
+        const pct = Math.max(0, Math.min(100, Math.round(Number(st.percent) || 0)));
+        fill.style.width = `${pct}%`;
+        if (plab) plab.textContent = `${pct}%`;
+      }
+    }
+
+    // Titlebar badge for available / ready / downloading
+    const badge = document.getElementById('btnUpdateBadge');
+    if (badge) {
+      const hot = st.status === 'ready' || st.status === 'available' || st.status === 'downloading';
+      badge.classList.toggle('hidden', !hot);
+      badge.hidden = !hot;
+      if (hot) {
+        badge.title =
+          st.status === 'ready'
+            ? en
+              ? 'Update ready — restart to install'
+              : '更新已就绪 · 点此打开设置'
+            : en
+              ? 'Update available'
+              : '有可用更新';
+        badge.setAttribute('aria-label', badge.title);
+        badge.dataset.status = st.status;
+      }
+    }
+
+    // One assertive announce when ready
+    if (st.status === 'ready' && st.version && !renderUpdateStatus._readyAnnounced) {
+      renderUpdateStatus._readyAnnounced = st.version;
+      try {
+        window.GrokA11y?.announce?.(
+          en
+            ? `Update ${st.version} downloaded. Restart to install.`
+            : `已下载更新 ${st.version}，重启即可安装。`,
+          { assertive: true, force: true }
+        );
+      } catch {
+        /* optional */
+      }
     }
   }
 
@@ -254,6 +333,29 @@
       window.toast?.(st.message || '检查完成', st.status === 'error' ? 'err' : 'ok');
     } catch (err) {
       renderUpdateStatus({ status: 'error', message: err.message });
+    }
+  }
+
+  async function downloadUpdate() {
+    renderUpdateStatus({ status: 'downloading', message: '开始下载…', percent: 0 });
+    try {
+      const st = await window.grok.updateDownload();
+      renderUpdateStatus(st);
+      if (st.status === 'error') window.toast?.(st.message, 'err');
+    } catch (err) {
+      renderUpdateStatus({ status: 'error', message: err.message });
+      window.toast?.(err.message || String(err), 'err');
+    }
+  }
+
+  async function openReleases() {
+    try {
+      const url =
+        (await window.grok.updateReleasesUrl?.()) ||
+        'https://github.com/sunormesky-max/grok-code/releases';
+      await window.grok.openExternal?.(url);
+    } catch (err) {
+      window.toast?.(err.message || String(err), 'err');
     }
   }
 
@@ -294,9 +396,20 @@
     $('#btnOpenPatches')?.addEventListener('click', () => openPatchesFolder());
     $('#btnCopyFeedback')?.addEventListener('click', () => copyUpstreamFeedback());
     $('#btnCheckUpdate')?.addEventListener('click', () => checkUpdate());
+    $('#btnUpdateDownload')?.addEventListener('click', () => downloadUpdate());
+    $('#btnOpenReleases')?.addEventListener('click', () => openReleases());
     $('#btnUpdateInstall')?.addEventListener('click', async () => {
       const ok = await window.grok.updateInstall();
       if (!ok) window.toast?.('当前无法安装更新（开发模式或未下载）', 'err');
+    });
+    $('#btnUpdateBadge')?.addEventListener('click', () => {
+      document.getElementById('btnSettings')?.click();
+      // Prefer diagnostics pane if tabs exist
+      document.querySelector('[data-stab="general"], #stab-general')?.click?.();
+      setTimeout(() => {
+        document.getElementById('btnCheckUpdate')?.scrollIntoView?.({ block: 'nearest' });
+        checkUpdate();
+      }, 200);
     });
     $('#btnShowOnboarding')?.addEventListener('click', () => {
       window.GrokOnboarding?.show();
