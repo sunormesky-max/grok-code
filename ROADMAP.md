@@ -96,11 +96,12 @@ Living plan for the GrokCode open-source ecosystem. Order may change based on co
 - [x] Global Inbox for plan / ask across tasks (v1.29.0)
 - [x] Harden OW inheritance: no blank hold + inbox resolve lock (v1.29.1)
 - [x] Plan exec tiers + interactive tool permission park (v1.30.0)
+- [x] Session standing grants within CLI option IDs (v1.31.0)
 
 ## Next (host UX — carefully; refuse OW engine flow)
 
-- [ ] Session standing grants (within CLI option IDs only — auto-pick remembered)
-- [ ] Durable park resume across app restart (UI rehydrate only; no second SM)
+- [ ] Durable park UI rehydrate across app restart (display only; cannot resolve without live ACP)
+- [ ] Compact vs full permission card density
 
 See `docs/OPENWORKER-INHERIT.md` anti-patterns before any further port.
 

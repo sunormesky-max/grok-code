@@ -138,6 +138,15 @@
   background: rgba(249, 115, 22, 0.15);
   color: #fb923c;
 }
+.inbox-remember {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--muted, #a1a1aa);
+  margin-bottom: 6px;
+  user-select: none;
+}
 .inbox-where {
   flex: 1;
   min-width: 0;

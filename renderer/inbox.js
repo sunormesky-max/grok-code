@@ -301,6 +301,10 @@
             </div>
             <div class="inbox-card-title">${esc(it.title)}</div>
             ${preview ? `<div class="inbox-preview-text">${esc(preview)}</div>` : ''}
+            <label class="inbox-remember">
+              <input type="checkbox" class="inbox-remember-cb" data-id="${esc(it.id)}" checked />
+              <span>${esc(en ? 'Remember for this flight' : '本回合记住')}</span>
+            </label>
             <div class="inbox-actions">
               ${optHtml}
               <button type="button" class="btn small ghost" data-act="perm-cancel" data-id="${esc(it.id)}">✕ ${esc(en ? 'Cancel' : '取消')}</button>
@@ -395,8 +399,15 @@
           global.toast?.(t('inbox.busy', '正在处理，请勿重复点击'), 'err');
           return;
         }
+        let remember = true;
+        document.querySelectorAll?.('.inbox-remember-cb')?.forEach((cb) => {
+          if (cb.dataset.id === id) remember = Boolean(cb.checked);
+        });
         try {
-          const r = await handlers.replyPermission?.(it, { optionId: extra.optionId });
+          const r = await handlers.replyPermission?.(it, {
+            optionId: extra.optionId,
+            remember,
+          });
           if (r && r.ok === false) {
             endResolve(id);
             global.toast?.(r.error || 'permission failed', 'err');
@@ -408,7 +419,8 @@
           } catch {
             /* optional */
           }
-          global.toast?.(`${t('inbox.perm.ok', '已允许')} · ${extra.optionId}`, 'ok');
+          const mem = r?.remembered || remember ? ` · ${t('inbox.perm.mem', '已记住')}` : '';
+          global.toast?.(`${t('inbox.perm.ok', '已允许')} · ${extra.optionId}${mem}`, 'ok');
         } catch (e) {
           endResolve(id);
           global.toast?.(e.message || String(e), 'err');

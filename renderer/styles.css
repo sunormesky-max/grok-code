@@ -4050,6 +4050,17 @@ button.pill:hover {
 .permission-opts {
   flex-wrap: wrap;
 }
+.permission-remember {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11.5px;
+  color: var(--muted, #a1a1aa);
+  user-select: none;
+}
+.permission-remember input {
+  accent-color: #f59e0b;
+}
 
 /* ACP x.ai/ask_user_question — multi-choice questionnaire */
 .user-question-bar {

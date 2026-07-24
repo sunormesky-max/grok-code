@@ -179,6 +179,50 @@ function extractToolFromPermissionParams(params = {}) {
   };
 }
 
+/**
+ * Normalize tool name for standing-grant keys (session-local memory).
+ * @param {string} name
+ */
+function normToolKey(name) {
+  return String(name || '')
+    .trim()
+    .replace(/([a-z])([A-Z])/g, '$1_$2')
+    .replace(/[\s-]+/g, '_')
+    .toLowerCase();
+}
+
+/**
+ * If grant optionId is still offered by the CLI, return it; else null.
+ * Never invent optionIds.
+ * @param {object[]} options normalized
+ * @param {string|null|undefined} grantOptionId
+ */
+function matchStandingGrant(options, grantOptionId) {
+  const want = String(grantOptionId || '').trim();
+  if (!want) return null;
+  const list = (options || []).map((o) => (o.optionId ? o : normalizeOption(o))).filter(Boolean);
+  const hit = list.find((o) => o.optionId === want);
+  return hit ? hit.optionId : null;
+}
+
+/**
+ * Should this host reply be remembered as a standing grant?
+ * - explicit remember flag
+ * - or CLI kind/name looks like allow-always
+ * @param {object} body host reply
+ * @param {object[]} options options that were offered
+ */
+function shouldRememberGrant(body, options) {
+  if (body?.remember === true || body?.standing === true) return true;
+  const id = String(body?.optionId || body?.selected || '').trim();
+  if (!id) return false;
+  const list = (options || []).map((o) => (o.optionId ? o : normalizeOption(o))).filter(Boolean);
+  const opt = list.find((o) => o.optionId === id);
+  if (!opt) return false;
+  const blob = `${opt.kind || ''} ${opt.optionId} ${opt.name || ''}`.toLowerCase();
+  return /allow.?always|always.?allow|allow_always/.test(blob);
+}
+
 module.exports = {
   normalizeOption,
   extractOptions,
@@ -186,4 +230,7 @@ module.exports = {
   buildPermissionResult,
   resolvePermissionResponse,
   extractToolFromPermissionParams,
+  normToolKey,
+  matchStandingGrant,
+  shouldRememberGrant,
 };

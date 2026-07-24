@@ -11,6 +11,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 - See [ROADMAP.md](ROADMAP.md)
 
+## [1.31.0] — 2026-07-24
+
+### Session standing grants (CLI optionId only)
+
+After a careful (non-YOLO) tool permission, you can **remember for this flight**:
+
+- Stored on the live ACP client: `toolKey → optionId`
+- Next same tool auto-applies **only if** that optionId is still in the CLI list
+- Invented optionIds are rejected (cancel)
+- Checkbox on permission bar + Inbox (default on)
+- `allow-always` kind also auto-remembers without checkbox
+- Live event mode `standing` when grant applied
+- Grants die with the client (no durable second SM)
+
 ## [1.30.0] — 2026-07-24
 
 ### Plan exec tiers + interactive tool permission

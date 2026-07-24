@@ -2512,6 +2512,7 @@ function bindUi() {
         projectId: item.projectId || pid(),
         taskId: item.taskId,
         requestId: item.requestId,
+        remember: payload?.remember !== false && !payload?.cancelled,
         ...(payload || { cancelled: true }),
       });
     },
@@ -9757,17 +9758,20 @@ function bindAgentEvents() {
         });
       }
       if (!isActiveTask(task)) return;
-      const sub =
-        d.mode === 'auto'
-          ? `${localeIsEn() ? 'auto' : '自动'} · ${d.selected || '?'}`
-          : d.mode === 'no-allow-option'
-            ? localeIsEn()
-              ? 'no allow option · cancelled'
-              : '无 allow 选项 · 已取消'
-            : d.selected || d.mode || 'done';
+      const en = localeIsEn();
+      let sub;
+      if (d.mode === 'auto') {
+        sub = `${en ? 'auto' : '自动'} · ${d.selected || '?'}`;
+      } else if (d.mode === 'standing') {
+        sub = `${en ? 'standing grant' : '本回合记忆'} · ${d.selected || '?'}`;
+      } else if (d.mode === 'no-allow-option') {
+        sub = en ? 'no allow option · cancelled' : '无 allow 选项 · 已取消';
+      } else {
+        sub = d.selected || d.mode || 'done';
+      }
       pushLiveEvent({
         kind: 'status',
-        title: localeIsEn() ? 'Permission' : '权限',
+        title: en ? 'Permission' : '权限',
         sub,
         projectId: task.projectId,
       });
@@ -10727,6 +10731,10 @@ function showPermissionBar(task, d) {
     </div>
     <div class="permission-title">${esc(title)}</div>
     ${argsPreview ? `<div class="permission-args muted">${esc(argsPreview)}</div>` : ''}
+    <label class="permission-remember">
+      <input type="checkbox" class="perm-remember-cb" checked />
+      <span>${en ? 'Remember for this flight (same tool + CLI optionId only)' : '本回合记住此工具选择（仅 CLI optionId）'}</span>
+    </label>
     <div class="retry-actions permission-opts">
       ${optBtns || `<span class="muted">${en ? 'No options from CLI' : 'CLI 未返回选项'}</span>`}
       <button type="button" class="btn small ghost" data-act="cancel">✕ ${en ? 'Cancel' : '取消'}</button>
@@ -10741,6 +10749,7 @@ function showPermissionBar(task, d) {
       toast(en ? 'Already resolving…' : '正在处理，请勿重复点击', 'err');
       return;
     }
+    const remember = Boolean(bar.querySelector('.perm-remember-cb')?.checked);
     bar.querySelectorAll('button').forEach((b) => {
       b.disabled = true;
     });
@@ -10749,6 +10758,7 @@ function showPermissionBar(task, d) {
         projectId: task.projectId || pid(),
         taskId: task.id,
         requestId: d.requestId,
+        remember: payload.cancelled ? false : remember,
         ...payload,
       });
       if (!r?.ok) {
@@ -10765,14 +10775,20 @@ function showPermissionBar(task, d) {
         taskId: task.id,
         requestId: d.requestId,
       });
+      const mem =
+        r.remembered || (remember && !payload.cancelled)
+          ? en
+            ? ' · remembered'
+            : ' · 已记住'
+          : '';
       toast(
         payload.cancelled
           ? en
             ? 'Permission cancelled'
             : '已取消授权'
           : en
-            ? `Allowed · ${payload.optionId || payload.selected || ''}`
-            : `已允许 · ${payload.optionId || payload.selected || ''}`,
+            ? `Allowed · ${payload.optionId || payload.selected || ''}${mem}`
+            : `已允许 · ${payload.optionId || payload.selected || ''}${mem}`,
         'ok'
       );
     } catch (err) {

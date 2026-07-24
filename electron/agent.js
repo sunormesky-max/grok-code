@@ -2536,7 +2536,7 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
     }
     const r = c.resolveInteractive(requestId, body || { cancelled: true });
     streamDebug(
-      `task=${taskId} permission reply req=${requestId} outcome=${r.outcome || '?'} sel=${r.selected || '-'} ok=${r.ok ? 1 : 0}`,
+      `task=${taskId} permission reply req=${requestId} outcome=${r.outcome || '?'} sel=${r.selected || '-'} remembered=${r.remembered ? 1 : 0} ok=${r.ok ? 1 : 0}`,
       { force: true }
     );
     return r;

@@ -14,6 +14,9 @@ const {
   extractOptions,
   buildPermissionResult,
   extractToolFromPermissionParams,
+  normToolKey,
+  matchStandingGrant,
+  shouldRememberGrant,
 } = require('./acp-permission');
 
 class AcpClient {
@@ -42,6 +45,12 @@ class AcpClient {
     this.onUserQuestion = opts.onUserQuestion || null;
     this.onAgentRequest = opts.onAgentRequest || null;
     this.autoApprove = opts.autoApprove !== false;
+    /**
+     * Session/flight standing grants: toolKey → optionId that was offered by CLI
+     * and chosen (or allow-always). Cleared with client lifecycle — not a second SM.
+     * @type {Map<string, string>}
+     */
+    this.standingGrants = new Map();
     /**
      * When true (default), exit_plan_mode waits for host UI (approve/revise/quit).
      * Set false or GROKCODE_AUTO_APPROVE_PLAN=1 to auto-approve like pure YOLO.
@@ -272,11 +281,42 @@ class AcpClient {
 
       const options = extractOptions(params || {});
       const tool = extractToolFromPermissionParams(params || {});
+      // Standing grant: only if optionId is still in this request's CLI list
+      const grantKey = normToolKey(tool.name);
+      const grantId = this.standingGrants.get(grantKey);
+      const matched = matchStandingGrant(options, grantId);
+      if (matched) {
+        const result = buildPermissionResult('selected', matched);
+        try {
+          if (typeof this.onPermission === 'function') {
+            this.onPermission({
+              method,
+              params,
+              requestId: reqId,
+              pending: false,
+              mode: 'standing',
+              selected: matched,
+              options,
+              toolName: tool.name,
+              toolTitle: tool.title,
+              toolArgs: tool.args,
+              toolCallId: tool.toolCallId,
+            });
+          }
+        } catch {
+          /* ignore */
+        }
+        this._respond(reqId, result);
+        return;
+      }
+
       this.pendingInteractive.set(String(reqId), {
         kind: 'permission',
         method,
         requestId: reqId,
         toolCallId: tool.toolCallId || '',
+        toolName: tool.name,
+        options,
         at: Date.now(),
       });
       try {
@@ -487,6 +527,7 @@ class AcpClient {
     // session/request_permission — ACP wire shape is nested outcome
     if (pending?.kind === 'permission') {
       let result;
+      let selectedId = null;
       if (
         body &&
         typeof body === 'object' &&
@@ -495,22 +536,47 @@ class AcpClient {
         body.outcome.outcome
       ) {
         result = { outcome: body.outcome };
+        selectedId = body.outcome.optionId || null;
       } else if (body?.optionId || body?.selected) {
-        result = buildPermissionResult(
-          'selected',
-          String(body.optionId || body.selected)
-        );
+        selectedId = String(body.optionId || body.selected);
+        // Only accept optionIds that were offered (or still match grant list)
+        const offered = pending.options || [];
+        if (offered.length && !matchStandingGrant(offered, selectedId)) {
+          // Unknown id — refuse invent; cancel
+          result = buildPermissionResult('cancelled');
+          selectedId = null;
+        } else {
+          result = buildPermissionResult('selected', selectedId);
+        }
       } else if (body?.cancelled || body?.outcome === 'cancelled') {
         result = buildPermissionResult('cancelled');
       } else {
         result = buildPermissionResult('cancelled');
       }
+
+      // Remember grant for this flight if asked / allow-always
+      if (
+        selectedId &&
+        result.outcome?.outcome === 'selected' &&
+        shouldRememberGrant(
+          { ...body, optionId: selectedId },
+          pending.options || []
+        )
+      ) {
+        const key = normToolKey(pending.toolName || body?.toolName || '');
+        if (key) this.standingGrants.set(key, selectedId);
+      }
+
       this._respond(requestId, result);
       return {
         ok: true,
         kind: 'permission',
         outcome: result.outcome?.outcome || 'cancelled',
         selected: result.outcome?.optionId || null,
+        remembered: Boolean(
+          selectedId &&
+            this.standingGrants.get(normToolKey(pending.toolName || '')) === selectedId
+        ),
       };
     }
 

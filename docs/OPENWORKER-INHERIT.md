@@ -16,6 +16,7 @@ OpenWorker-specific internal-flow footguns.
 | Tool humanize one-liners | `renderer/humanize.js` | 1.28.0 | CLI tool names only |
 | Global Inbox (plan + question) | `renderer/inbox.js` | 1.29 → **1.29.1** | **Shared resolve lock**; mirror of ACP park, not a second SM |
 | Plan exec tier + tool permission park | plan bar + `request_permission` | **1.30.0** | CLI optionIds only; flight-local autoApprove flip |
+| Standing grants (flight) | `AcpClient.standingGrants` | **1.31.0** | tool→optionId only if still offered; no invent |
 
 ## Hard boundaries (never break)
 
@@ -50,9 +51,9 @@ against the thin-host contract instead of copying OpenWorker.
 
 ## Next candidates (optional, still host-only)
 
-1. Session standing grants **within CLI option IDs only**  
-2. Compact vs full approval density (presentation)  
-3. Durable UI rehydrate of parks (no second SM)
+1. Compact vs full approval density (presentation)  
+2. Durable UI rehydrate of parks (display only — cannot resolve without live ACP)
 
 Not scheduled: unattended router, multi-root permission engine, automation
-scheduler, provider matrix.
+scheduler, provider matrix, durable grants across restarts (would need user
+opt-in store and is easy to get wrong).

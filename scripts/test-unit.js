@@ -801,6 +801,86 @@ function testPermissionParkInteractive() {
   console.log('ok  permission park + YOLO auto');
 }
 
+function testStandingGrants() {
+  const {
+    matchStandingGrant,
+    shouldRememberGrant,
+    normToolKey,
+  } = require(path.join(root, 'electron', 'acp-permission.js'));
+  const { AcpClient } = require(path.join(root, 'electron', 'acp-client.js'));
+
+  assert.equal(normToolKey('WriteFile'), 'write_file');
+  const opts = [
+    { optionId: 'allow-once', name: 'Allow once', kind: 'allowOnce' },
+    { optionId: 'allow-always', name: 'Always', kind: 'allowAlways' },
+    { optionId: 'reject', name: 'No', kind: 'rejectOnce' },
+  ];
+  assert.equal(matchStandingGrant(opts, 'allow-once'), 'allow-once');
+  assert.equal(matchStandingGrant(opts, 'invented'), null, 'never invent');
+  assert.equal(shouldRememberGrant({ optionId: 'allow-always' }, opts), true);
+  assert.equal(shouldRememberGrant({ optionId: 'allow-once' }, opts), false);
+  assert.equal(shouldRememberGrant({ optionId: 'allow-once', remember: true }, opts), true);
+
+  const client = new AcpClient({ bin: 'grok', autoApprove: false });
+  const replies = [];
+  client._respond = (id, result) => replies.push({ id, result });
+  client.alive = true;
+  client.child = { stdin: { writable: true } };
+  let last = null;
+  client.onPermission = (info) => {
+    last = info;
+  };
+
+  // First: park
+  client._handleAgentRequest({
+    id: 1,
+    method: 'session/request_permission',
+    params: {
+      options: opts,
+      toolCall: { title: 'write_file', toolCallId: 'a', rawInput: { path: 'x' } },
+    },
+  });
+  assert.equal(last?.pending, true);
+  const r1 = client.resolveInteractive(1, { optionId: 'allow-once', remember: true });
+  assert.equal(r1.ok, true);
+  assert.equal(r1.remembered, true);
+  assert.equal(client.standingGrants.get('write_file'), 'allow-once');
+
+  // Second: auto standing (option still offered)
+  last = null;
+  client._handleAgentRequest({
+    id: 2,
+    method: 'session/request_permission',
+    params: {
+      options: opts,
+      toolCall: { title: 'write_file', toolCallId: 'b', rawInput: { path: 'y' } },
+    },
+  });
+  assert.equal(last?.pending, false);
+  assert.equal(last?.mode, 'standing');
+  assert.equal(last?.selected, 'allow-once');
+  assert.equal(replies.filter((x) => x.id === 2).length, 1);
+
+  // Grant not in options → park again
+  last = null;
+  client._handleAgentRequest({
+    id: 3,
+    method: 'session/request_permission',
+    params: {
+      options: [{ optionId: 'reject', name: 'No', kind: 'rejectOnce' }],
+      toolCall: { title: 'write_file', toolCallId: 'c' },
+    },
+  });
+  assert.equal(last?.pending, true, 'grant missing from list → park');
+
+  // Invented optionId rejected
+  const rBad = client.resolveInteractive(3, { optionId: 'hacked-allow' });
+  assert.equal(rBad.selected, null);
+  assert.equal(rBad.outcome, 'cancelled');
+
+  console.log('ok  standing grants (CLI optionId only)');
+}
+
 /**
  * x.ai/ask_user_question: park, replace cancels prior, accepted/cancelled shapes.
  * Aligns with AskUserQuestionExtResponse (tagged outcome).
@@ -1455,6 +1535,7 @@ try {
   testExitPlanModeApproval();
   testAskUserQuestion();
   testPermissionParkInteractive();
+  testStandingGrants();
   testDoctorPromptProbeSkipped();
   testPickChunkTextMultimodal();
   testIpcChannelContract();

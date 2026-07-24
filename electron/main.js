@@ -1340,10 +1340,12 @@ ipcMain.handle('agent:permission_reply', (_e, payload = {}) => {
   if (!p?.agent?.replyPermission) {
     return { ok: false, error: 'project not open' };
   }
+  const { remember } = payload || {};
   return p.agent.replyPermission(taskId, requestId, {
     optionId: optionId || selected,
     selected: selected || optionId,
     cancelled: Boolean(cancelled),
+    remember: Boolean(remember),
   });
 });
 
