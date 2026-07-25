@@ -93,6 +93,7 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for stream path, transport tabl
 | Model chip | `session/set_model` · `grok models` |
 | Effort chip | `set_model` meta `reasoning_effort` |
 | Long tools | handles `in_progress`; optional CLI patch under `patches/grok-build/` |
+| Streaming reliability | long-horizon plan: [`docs/STREAM-PLAN.md`](docs/STREAM-PLAN.md) |
 
 ---
 

@@ -168,6 +168,8 @@ We advertise **no** client fs/terminal capabilities (correct for “agent runs t
 
 ## 11. Recommended work order
 
+**Active long-horizon plan:** [STREAM-PLAN.md](STREAM-PLAN.md) (phases 0–5).
+
 | Item | Status |
 |------|--------|
 | P0 `x.ai/session_notification` | Done (1.10.12) |

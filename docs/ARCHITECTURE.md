@@ -100,6 +100,9 @@ ACP session/update  or  headless NDJSON
 
 Upstream silence between stages is normal; host shows activity clock + phase.
 
+**Long-horizon reliability plan:** [STREAM-PLAN.md](STREAM-PLAN.md)  
+(phases 0–5: metrics → paint → InProgress → silence → transport → observability).
+
 ## Settings & warm ACP
 
 Changing **model / grok path / agentTransport / YOLO / rules / reasoning effort /

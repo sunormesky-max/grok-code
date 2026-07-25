@@ -9,7 +9,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Planned
 
-- See [ROADMAP.md](ROADMAP.md)
+- See [ROADMAP.md](ROADMAP.md) · streaming long-horizon: [docs/STREAM-PLAN.md](docs/STREAM-PLAN.md)
+
+## [1.40.0] — 2026-07-25
+
+### Streaming long-horizon kickoff (Phase 0)
+
+- **docs/STREAM-PLAN.md** — symptom matrix, metrics, phases 0–5, triage runbook
+- ROADMAP / ARCHITECTURE / ACP audit / README link the plan
+- **STREAM_SUMMARY** line at end of each ACP run in stream log:
+  `firstTokenMs`, `textChunks`, `toolStarts`, `toolInProgress`, `maxSilentSec`, …
+
+Next: Phase 1 host paint hardening (see STREAM-PLAN).
 
 ## [1.39.0] — 2026-07-25
 

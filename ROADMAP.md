@@ -117,6 +117,17 @@ See `docs/OPENWORKER-INHERIT.md` anti-patterns before any further port.
 
 - [ ] Upstream still needs normal-tool InProgress emit for long tools (stock CLI; patch optional — see patches/)
 
+## Long-horizon: streaming reliability (active)
+
+See **[docs/STREAM-PLAN.md](docs/STREAM-PLAN.md)** — full symptom matrix, metrics, phases.
+
+- [x] **Phase 0** — Plan doc + run-end `STREAM_SUMMARY` metrics (v1.40.0)
+- [ ] **Phase 1** — Host paint path (IPC flush on tools, multi-task fairness, empty tools-only UX, phase SR)
+- [ ] **Phase 2** — Tool mid-flight host + keep InProgress patch kit rebased
+- [ ] **Phase 3** — Silence UX + upstream heartbeat / stock InProgress (feedback)
+- [ ] **Phase 4** — Headless/transport honesty banners
+- [ ] **Phase 5** — Open stream log + diagnostic export of last-run summary
+
 ## Now (UI / experience)
 
 - [x] Outline panel / split layout visual pass

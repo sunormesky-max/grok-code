@@ -513,6 +513,11 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
       let textChunks = 0;
       let thoughtChunks = 0;
       let firstTokenAt = 0;
+      /** Stream health counters (STREAM-PLAN Phase 0) */
+      let toolStarts = 0;
+      let toolEnds = 0;
+      let toolInProgressFrames = 0;
+      let maxSilentSec = 0;
       /** @type {Set<string>} */
       const openTools = new Set();
       /** Shared state for resolveToolCallDelta (index→id, arg fragments). */
@@ -534,6 +539,29 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
           kind === 'tool' ? 'tool' : kind === 'thought' ? 'thinking' : 'streaming',
           `首包 ${sinceSpawn}ms`
         );
+      };
+      const logStreamSummary = (extra = {}) => {
+        const totalMs = Date.now() - t0;
+        const firstMs = firstTokenAt ? firstTokenAt - t0 : -1;
+        const parts = [
+          `=== STREAM_SUMMARY task=${taskId}`,
+          `transport=acp`,
+          `firstTokenMs=${firstMs}`,
+          `totalMs=${totalMs}`,
+          `textChunks=${textChunks}`,
+          `thoughtChunks=${thoughtChunks}`,
+          `toolStarts=${toolStarts}`,
+          `toolEnds=${toolEnds}`,
+          `toolInProgress=${toolInProgressFrames}`,
+          `maxSilentSec=${maxSilentSec}`,
+          `finalTextLen=${finalText.length}`,
+          `thoughtLen=${thoughtText.length}`,
+          `openTools=${openTools.size}`,
+        ];
+        for (const [k, v] of Object.entries(extra)) {
+          if (v != null && v !== '') parts.push(`${k}=${v}`);
+        }
+        streamDebug(parts.join(' '), { force: true });
       };
 
       const STREAM_IPC_MS = 16;
@@ -635,6 +663,10 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
       };
 
       const bumpActivity = () => {
+        if (lastActivityAt > 0 && promptSentAt > 0) {
+          const gap = Math.floor((Date.now() - lastActivityAt) / 1000);
+          if (gap > maxSilentSec) maxSilentSec = gap;
+        }
         lastActivityAt = Date.now();
       };
 
@@ -691,6 +723,7 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
             return;
           }
           const silentSec = Math.max(0, Math.floor((Date.now() - lastActivityAt) / 1000));
+          if (silentSec > maxSilentSec) maxSilentSec = silentSec;
           const totalSec = Math.max(0, Math.floor((Date.now() - promptSentAt) / 1000));
           const tok = tokenBrief();
           if (!firstTokenAt) {
@@ -884,6 +917,7 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
             if (!openTools.has(info.id)) {
               openTools.add(info.id);
               toolDepth += 1;
+              toolStarts += 1;
               if (textChunks === 0 && thoughtChunks === 0) noteFirstToken('tool');
               emitT('agent:tool_start', {
                 id: info.id,
@@ -907,9 +941,11 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
               status === 'pending' ||
               status === 'running'
             ) {
+              if (status === 'in_progress') toolInProgressFrames += 1;
               if (!openTools.has(info.id)) {
                 openTools.add(info.id);
                 toolDepth += 1;
+                toolStarts += 1;
                 if (textChunks === 0 && thoughtChunks === 0) noteFirstToken('tool');
                 emitT('agent:tool_start', {
                   id: info.id,
@@ -946,6 +982,7 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
             ) {
               openTools.add(info.id);
               toolDepth += 1;
+              toolStarts += 1;
               emitT('agent:tool_start', {
                 id: info.id,
                 name: info.name,
@@ -959,6 +996,7 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
                 openTools.delete(info.id);
                 toolDepth = Math.max(0, toolDepth - 1);
               }
+              toolEnds += 1;
               flushStreamIpc();
               emitT('agent:tool_end', {
                 id: info.id,
@@ -1596,6 +1634,12 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
               usage,
             });
             setPhase('stopped', '已停止');
+            logStreamSummary({
+              reused: reused ? 1 : 0,
+              stopReason: 'user_stop',
+              prepMs: prepMs || 0,
+              code: 0,
+            });
             finish(
               {
                 text: finalText,
@@ -1624,6 +1668,12 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
             `=== RUN end task=${taskId} transport=acp reused=${reused ? 1 : 0} code=0 finalTextLen=${finalText.length} thoughtLen=${thoughtText.length} textChunks=${textChunks} thoughtChunks=${thoughtChunks} firstTokenMs=${firstTokenAt ? firstTokenAt - t0 : -1} totalMs=${Date.now() - t0} prepMs=${prepMs || 0}`,
             { force: true }
           );
+          logStreamSummary({
+            reused: reused ? 1 : 0,
+            stopReason: stopReason || 'end',
+            prepMs: prepMs || 0,
+            code: 0,
+          });
           finish({
             text: finalText,
             stopped: false,
@@ -1647,6 +1697,10 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
               stopped: true,
               thought: thoughtText || undefined,
               usage,
+            });
+            logStreamSummary({
+              stopReason: 'user_stop_err_path',
+              prepMs: prepMs || 0,
             });
             finish(
               {
