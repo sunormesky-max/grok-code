@@ -54,9 +54,9 @@ against the thin-host contract instead of copying OpenWorker.
 
 ## Next candidates (optional, still host-only)
 
-1. NVDA/VO walkthrough notes for permission + Inbox  
-2. Keyboard roving on permission option group  
+1. CI Authenticode when a cert is available (see docs/PACKAGING.md)  
+2. More locales beyond en/zh  
 
 Not scheduled: unattended router, multi-root permission engine, automation
 scheduler, provider matrix, durable grants across restarts (would need user
-opt-in store and is easy to get wrong).
+opt-in store and is easy to get wrong). OpenWorker engine patterns remain out.

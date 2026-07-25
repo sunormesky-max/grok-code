@@ -98,7 +98,13 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for stream path, transport tabl
 
 ## Accessibility & motion
 
-See **[docs/A11Y.md](docs/A11Y.md)** for the NVDA/VoiceOver walkthrough checklist (plan approval, menus, skip link).
+See **[docs/A11Y.md](docs/A11Y.md)** for the NVDA/VoiceOver checklist (plan, permission, Inbox, **HC theme full pass**).
+
+## Packaging & updates
+
+- Installed builds: Settings → **软件更新** (check / download / install)  
+- Windows SmartScreen on unsigned community EXEs: see **[docs/PACKAGING.md](docs/PACKAGING.md)**  
+- Dev/`npm start` does **not** auto-update (by design)
 
 GrokCode’s flight-deck UI includes glows and micro-animations. They **respect OS reduced-motion**:
 

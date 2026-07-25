@@ -23,3 +23,14 @@ Include: impact, reproduction steps, and affected commit/version.
 
 GrokCode spawns the local **Grok CLI** and can run tools with auto-approve (YOLO).  
 Treat YOLO mode as full trust for that workspace. Use deny rules / non-YOLO when untrusted.
+
+## Distribution & SmartScreen
+
+Community installers may be **unsigned**. Windows SmartScreen (“Unknown publisher”)
+is expected for OSS without a paid Authenticode certificate — it is not itself a
+remote-code exploit. Only download from official
+[GitHub Releases](https://github.com/sunormesky-max/grok-code/releases).
+
+Maintainers who want signed builds: see **[docs/PACKAGING.md](docs/PACKAGING.md)**
+(CSC secrets, electron-builder, macOS notarization overview). **Never** commit
+certificates or private keys.

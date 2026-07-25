@@ -104,11 +104,12 @@ Living plan for the GrokCode open-source ecosystem. Order may change based on co
 - [x] prefers-contrast soft suggest + Diff multi-select keys (v1.36.0)
 - [x] Diff `*` select-pending + Doctor InProgress actions (v1.37.0)
 - [x] Auto-update / packaging UX polish (v1.38.0)
+- [x] Packaging/SmartScreen docs + NVDA×HC walkthrough (v1.39.0)
 
 ## Next (host UX — carefully; refuse OW engine flow)
 
-- [ ] Optional: NVDA full pass with HC theme
-- [ ] Optional: code-signing notes for Windows SmartScreen
+- [ ] Optional: CI secrets template for signed Windows releases (when cert available)
+- [ ] Optional: community translation pass beyond en/zh
 
 See `docs/OPENWORKER-INHERIT.md` anti-patterns before any further port.
 

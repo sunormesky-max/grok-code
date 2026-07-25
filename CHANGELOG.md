@@ -11,6 +11,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 - See [ROADMAP.md](ROADMAP.md)
 
+## [1.39.0] — 2026-07-25
+
+### Packaging / SmartScreen docs + NVDA×HC walkthrough
+
+- **docs/PACKAGING.md** — Releases matrix, auto-update, Windows SmartScreen,
+  optional Authenticode / macOS notarization (no secrets in repo)
+- **SECURITY.md** + **README** link to packaging / unsigned-build guidance
+- **docs/A11Y.md** — full NVDA pass table with high-contrast theme; Diff `*`; updates
+- Ship `docs/PACKAGING.md` + `docs/A11Y.md` in app package files
+
 ## [1.38.0] — 2026-07-25
 
 ### Auto-update / packaging UX polish
