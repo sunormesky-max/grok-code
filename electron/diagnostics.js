@@ -176,8 +176,8 @@ function checkGrokAuthFile() {
 }
 
 /**
- * Recent stream log: ACP agent stdio 403 (cli-chat-proxy) while -p may still work.
- * Aligns with upstream: host uses grok agent stdio; Build gate is server-side.
+ * Recent stream log: ACP agent stdio 403 / AuthorizationRequired.
+ * Headless / TUI may still work — do not diagnose as “Build not open”.
  */
 function checkBuildGateLog() {
   const logPath = path.join(os.tmpdir(), 'grokcode-stream.log');
@@ -185,7 +185,7 @@ function checkBuildGateLog() {
     if (!fs.existsSync(logPath)) {
       return {
         id: 'build_gate',
-        name: 'Build API 门控',
+        name: 'ACP agent 路径',
         ok: true,
         level: 'ok',
         detail: '尚无 stream 日志（未跑过 agent）',
@@ -200,37 +200,40 @@ function checkBuildGateLog() {
     fs.readSync(fd, buf, 0, buf.length, start);
     fs.closeSync(fd);
     const tail = buf.toString('utf8');
+    const authHit = /AuthorizationRequired|Auth\(Authorization/i.test(tail);
     const gated =
-      /coming soon|don't have access|cli-chat-proxy\.grok\.com\/v1\/responses/i.test(
+      (/coming soon|don't have access|cli-chat-proxy\.grok\.com\/v1\/responses/i.test(
         tail
-      ) && /403|Forbidden|Internal error/i.test(tail);
+      ) &&
+        /403|Forbidden|Internal error/i.test(tail)) ||
+      authHit;
     if (gated) {
       return {
         id: 'build_gate',
-        name: 'Build API 门控',
+        name: 'ACP agent 路径',
         ok: true,
         level: 'warn',
         detail:
-          '最近 stream 日志出现 ACP/agent stdio 403（Grok Build coming soon）。' +
-          '终端 grok -p 可能仍可用。GrokCode 会自动 headless 回退。',
+          '最近 stream 日志出现 ACP 失败（403 / AuthorizationRequired）。' +
+          '不等于 Build 未开通：headless / grok -p 往往仍可用。auto 会自动回退 headless。',
         path: logPath,
         fix:
-          '设置 → Agent transport 选 headless 或 auto；或待账号开通 agent stdio / cli-chat-proxy',
+          '设置 → Agent transport 选 headless 或 auto；必要时终端 grok login 后重启 GrokCode',
       };
     }
     return {
       id: 'build_gate',
-      name: 'Build API 门控',
+      name: 'ACP agent 路径',
       ok: true,
       level: 'ok',
-      detail: '最近日志未见 agent 403 门控',
+      detail: '最近日志未见 ACP agent 路径 403/鉴权失败',
       path: logPath,
       fix: null,
     };
   } catch (err) {
     return {
       id: 'build_gate',
-      name: 'Build API 门控',
+      name: 'ACP agent 路径',
       ok: true,
       level: 'ok',
       detail: err.message || String(err),
@@ -497,7 +500,7 @@ function checkHeadlessTransport(cfg = {}) {
     ok: true,
     level: 'ok',
     detail:
-      'agentTransport=auto：优先 ACP（工具流），Build 门禁 403 / 冷启动失败时回退 headless（无工具卡片，有 Live 横幅）',
+      'agentTransport=auto：优先 ACP（工具流）；ACP 403/鉴权/冷启动失败时回退 headless（≠ Build 未开通；无工具卡片，有 Live 横幅）',
     transport: t || 'auto',
     noToolStream: false,
     fix: null,

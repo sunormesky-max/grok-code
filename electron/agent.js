@@ -44,33 +44,62 @@ const {
 } = require('./agent-stream');
 
 /**
+ * Auth / re-login signals from CLI agent worker (not the same as “Build closed”).
+ */
+function isAuthRequiredBlob(blob) {
+  return /authorizationrequired|auth\(authorization|re-authentication|session expired|not authenticated|login required/i.test(
+    String(blob || '')
+  );
+}
+
+/**
+ * ACP agent stdio / cli-chat-proxy 403. Server body may still say “coming soon”
+ * even when the same account can use headless / TUI / this Build product.
+ */
+function isAcpStdio403Blob(blob, err) {
+  const b = String(blob || '');
+  return (
+    /coming soon|don't have access|do not have access|not have access/i.test(b) ||
+    ((/403/.test(b) || err?.httpStatus === 403) &&
+      /forbidden|access|grok build|cli-chat-proxy|responses/i.test(b)) ||
+    (/internal error/i.test(b) && /403|coming soon|access/i.test(b))
+  );
+}
+
+/**
  * Map opaque CLI/ACP errors to actionable Chinese (or EN) copy for the UI.
  * Upstream often wraps 403 as "Internal error" — never surface that bare string.
+ * Never claim “Build 未开通” solely from agent-stdio 403: headless may still work.
  */
 function humanizeAgentError(raw) {
   const msg = String(raw?.message || raw || '').trim();
   const blob = msg.toLowerCase();
-  if (
-    /coming soon|don't have access|do not have access|not have access/i.test(msg) ||
-    (/403/.test(msg) && /forbidden|access|grok build/i.test(msg))
-  ) {
+  const authReq = isAuthRequiredBlob(blob);
+  const stdio403 = isAcpStdio403Blob(msg, raw);
+
+  // Combined: common in stream logs — Auth(AuthorizationRequired) then 403 body
+  if (authReq && stdio403) {
     return (
-      '当前账号无权使用 Grok Build API（403）。\n' +
-      '官方提示：Grok Build is coming soon / You don\'t have access now。\n' +
-      '处理：在终端执行 grok login 重新登录，确认账号已开通 Grok Build；' +
-      '或在设置中填写可用的 XAI_API_KEY。\n' +
+      'ACP agent 路径鉴权/代理失败（AuthorizationRequired + 403）。\n' +
+      '这不等于 Build 未开通：终端 grok -p / headless 往往仍可用，GrokCode 在 auto 下会自动回退。\n' +
+      '处理：终端执行 grok login 后重启 GrokCode；或设置 → Agent transport 选 headless。\n' +
       '这不是 GrokCode 崩溃。'
     );
   }
-  if (
-    /authorizationrequired|auth\(authorization|re-authentication|session expired|not authenticated|login required/i.test(
-      blob
-    )
-  ) {
+  if (authReq) {
     return (
       'Grok CLI 需要重新登录（AuthorizationRequired）。\n' +
       '请在终端运行：grok login\n' +
-      '完成后重启 GrokCode 再试。'
+      '完成后重启 GrokCode 再试。Build 已开通时通常仍可用 headless。'
+    );
+  }
+  if (stdio403) {
+    return (
+      'ACP agent 路径返回 403（服务端文案可能仍写 “Grok Build is coming soon”）。\n' +
+      '这不等于账号没有 Build——同一账号的 headless / TUI 可能正常。\n' +
+      'GrokCode 在 auto 模式下会改用 headless（无工具卡片，仍有流式回复）。\n' +
+      '若 headless 也失败：终端 grok login，或在设置中填写 XAI_API_KEY。\n' +
+      '这不是 GrokCode 崩溃。'
     );
   }
   if (/401|unauthorized/i.test(msg) && /api|auth|token|key/i.test(msg)) {
@@ -85,7 +114,7 @@ function humanizeAgentError(raw) {
   // Strip giant JSON dumps after Internal error
   if (/^internal error/i.test(msg)) {
     const inner = msg.replace(/^internal error[:\s]*/i, '').slice(0, 400);
-    if (/403|coming soon|access/i.test(inner)) {
+    if (/403|coming soon|access|authorization/i.test(inner)) {
       return humanizeAgentError(inner);
     }
     return `Grok 代理内部错误：${inner || msg}`.slice(0, 500);
@@ -354,9 +383,9 @@ function createAgent({ getConfig, workspaceRoot, emit, reportStreamTelemetry } =
    * Primary path: ACP (`grok agent stdio`) — streams thought + text + tool_call.
    * Headless streaming-json is text/thought/end only (no tool progress).
    *
-   * Some accounts can use `grok -p` / headless but get 403 on agent stdio
-   * (cli-chat-proxy.grok.com/v1/responses "Grok Build is coming soon"). In that
-   * case we fall back to headless so the desktop shell still works for chat.
+   * Some installs can use `grok -p` / headless (Build works) while agent stdio
+   * still returns 403 with a stale “coming soon” body, or Auth(AuthorizationRequired).
+   * That is an ACP path failure — not proof Build is closed. Fall back to headless.
    * Override: GROKCODE_AGENT_TRANSPORT=headless|acp|streaming-json
    * Disable fallback: GROKCODE_ACP_NO_FALLBACK=1
    */
@@ -391,16 +420,17 @@ function createAgent({ getConfig, workspaceRoot, emit, reportStreamTelemetry } =
       const coldFail =
         err?.code === 'ACP_FALLBACK' ||
         /ENOENT|spawn |initialize|not writable|找不到 Grok/i.test(msg);
-      // Account can run -p but agent stdio prompt is gated (403 coming soon)
-      const buildGate403 =
-        /coming soon|don't have access|do not have access/i.test(blob) ||
-        ((/403/.test(blob) || err?.httpStatus === 403) &&
-          /forbidden|access|grok build|cli-chat-proxy|responses/i.test(blob)) ||
-        (/internal error/i.test(blob) && /403|coming soon|access/i.test(blob));
-      if (!noFallback && (coldFail || buildGate403)) {
-        const fallbackReason = buildGate403 ? 'acp_build_403' : 'acp_cold';
+      // Agent stdio 403 / auth — not “Build product closed”
+      const acpStdio403 = isAcpStdio403Blob(blob, err);
+      const authRequired = isAuthRequiredBlob(blob);
+      if (!noFallback && (coldFail || acpStdio403 || authRequired)) {
+        const fallbackReason = acpStdio403
+          ? 'acp_stdio_403'
+          : authRequired
+            ? 'acp_auth'
+            : 'acp_cold';
         streamDebug(
-          `ACP → headless fallback (${buildGate403 ? 'build-gate-403' : 'cold'}): ${msg.slice(0, 200)}`,
+          `ACP → headless fallback (${fallbackReason}): ${msg.slice(0, 200)}`,
           { force: true }
         );
         // STREAM_SUMMARY for the failed ACP attempt so triage sees fallback
@@ -418,9 +448,10 @@ function createAgent({ getConfig, workspaceRoot, emit, reportStreamTelemetry } =
           { force: true }
         );
         try {
-          const reason = buildGate403
-            ? 'ACP agent 路径 403（Build 代理未开放），改用 headless（与 grok -p 同路）…'
-            : 'ACP 不可用，改用 headless…';
+          const reason =
+            acpStdio403 || authRequired
+              ? 'ACP 路径失败（≠ Build 未开通），改用 headless（与 grok -p 同路）…'
+              : 'ACP 不可用，改用 headless…';
           opts?.emit?.('agent:phase', {
             taskId: opts.taskId || 'default',
             phase: 'boot',
@@ -1922,7 +1953,7 @@ function createAgent({ getConfig, workspaceRoot, emit, reportStreamTelemetry } =
             );
             return;
           }
-          // Cold-start / Build-gate 403 → outer run() may headless-fallback
+          // Cold-start / ACP stdio 403 / auth → outer run() may headless-fallback
           const msg = err?.message || String(err);
           const dataMsg =
             err?.data && typeof err.data === 'object'
@@ -1930,13 +1961,15 @@ function createAgent({ getConfig, workspaceRoot, emit, reportStreamTelemetry } =
               : '';
           const blob = `${msg}\n${dataMsg}`;
           const noOutputYet = !finalText && !thoughtText && openTools.size === 0;
-          const buildGate =
+          const acpPathFail =
+            isAcpStdio403Blob(blob, err) ||
+            isAuthRequiredBlob(blob) ||
             /coming soon|don't have access|403|cli-chat-proxy/i.test(blob) ||
             err?.httpStatus === 403;
           if (
             noOutputYet &&
             (/initialize|ENOENT|spawn|not writable|timeout: initialize/i.test(msg) ||
-              buildGate)
+              acpPathFail)
           ) {
             settled = true;
             cleanup();
@@ -1988,13 +2021,19 @@ function createAgent({ getConfig, workspaceRoot, emit, reportStreamTelemetry } =
     ).toLowerCase();
     if (_acpFallback || transportMode === 'headless') {
       const reason = _fallbackReason || (transportMode === 'headless' ? 'headless' : 'acp');
+      // acp_build_403 kept as legacy alias of acp_stdio_403
+      const fromAcpPath =
+        reason === 'acp_stdio_403' ||
+        reason === 'acp_build_403' ||
+        reason === 'acp_auth' ||
+        reason === 'acp_cold';
+      const headlessDetail = fromAcpPath
+        ? 'ACP 路径失败 → headless（Build 仍可能可用；无工具流）'
+        : 'headless 传输（无工具卡片）';
       emit('agent:phase', {
         taskId,
         phase: 'running',
-        detail:
-          reason === 'acp_build_403' || reason === 'acp_cold'
-            ? 'ACP 不可用 → headless（无工具流）'
-            : 'headless 传输（无工具卡片）',
+        detail: headlessDetail,
         transport: 'headless',
         noToolStream: true,
         fallbackReason: reason,
@@ -2002,10 +2041,7 @@ function createAgent({ getConfig, workspaceRoot, emit, reportStreamTelemetry } =
       emit('agent:status', {
         taskId,
         status: 'running',
-        detail:
-          reason === 'acp_build_403' || reason === 'acp_cold'
-            ? 'ACP 不可用 → headless（无工具流）'
-            : 'headless 传输（无工具卡片）',
+        detail: headlessDetail,
         noToolStream: true,
       });
     }
@@ -2974,4 +3010,11 @@ function getStreamDebugPath() {
   return STREAM_DEBUG_PATH;
 }
 
-module.exports = { createAgent, humanizeAgentError, getStreamDebugPath, STREAM_DEBUG_PATH };
+module.exports = {
+  createAgent,
+  humanizeAgentError,
+  isAuthRequiredBlob,
+  isAcpStdio403Blob,
+  getStreamDebugPath,
+  STREAM_DEBUG_PATH,
+};

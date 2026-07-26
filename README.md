@@ -16,7 +16,7 @@
 
 | Area | What you get |
 |------|----------------|
-| **Transport** | ACP primary · auto headless on Build 403 · settings `agentTransport` |
+| **Transport** | ACP primary · auto headless on ACP 403/auth (≠ Build closed) · settings `agentTransport` |
 | **Modes** | **CLI-native** only — host docks `session/set_mode` (`default` / `plan` / `ask`); no Craft/Plan/Ask inject |
 | **Plan / Q&A** | Interactive `exit_plan_mode` + `ask_user_question` bars (open-source outcomes) |
 | **Model** | Live list from `grok models` + ACP modelState · `session/set_model` · effort chip (`/effort`) |

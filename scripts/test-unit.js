@@ -550,20 +550,27 @@ function testAgentExports() {
   assert.ok(/no active ACP|ACP client/i.test(String(noClient.error || '')));
   const noQ = agent.replyUserQuestion('missing-task', 2, { outcome: 'cancelled' });
   assert.equal(noQ.ok, false);
+  const mapped403 = humanizeAgentError(
+    'Internal error: {"message":"API error (status 403 Forbidden): Grok Build is coming soon. You don\'t have access now."}'
+  );
+  assert.ok(/403|coming soon|ACP|headless/i.test(mapped403), '403 access mapped');
+  // Must not claim the product/account has no Build
   assert.ok(
-    /无权|403|coming soon|access/i.test(
-      humanizeAgentError(
-        'Internal error: {"message":"API error (status 403 Forbidden): Grok Build is coming soon. You don\'t have access now."}'
-      )
-    ),
-    '403 access mapped'
+    !/无权使用 Grok Build|Build 未开通|账号无权/i.test(mapped403),
+    '403 must not claim Build closed'
   );
   assert.ok(
-    /登录|Authorization/i.test(
+    /登录|Authorization|headless/i.test(
       humanizeAgentError('Transport channel closed, when Auth(AuthorizationRequired)')
     ),
     'auth required mapped'
   );
+  const dual = humanizeAgentError(
+    'Transport channel closed, when Auth(AuthorizationRequired)\n' +
+      'API error (status 403 Forbidden): Grok Build is coming soon. You don\'t have access now.'
+  );
+  assert.ok(/不等于.*Build|headless|自动回退/i.test(dual), 'dual auth+403 soft message');
+  assert.ok(!/无权使用 Grok Build/i.test(dual), 'dual must not claim no Build');
   return Promise.resolve(agent.setSessionMode('missing-task', 'plan'))
     .then((r) => {
       assert.equal(r.ok, false);

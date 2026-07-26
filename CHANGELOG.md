@@ -14,6 +14,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Optional: worker for multi-MB LCS; SBS hunk actions
 - Optional: wire `execution-route.reduceRouteTick` from ACP activity clock (ledger dual-bookkeep)
 
+## [1.47.5] — 2026-07-26
+
+### Fix — ACP 403 ≠ Build 未开通
+
+User with Build open still saw “无权 / coming soon / Build 未开放” when ACP
+agent stdio failed while headless worked:
+
+- **humanizeAgentError** — never claim Build closed from agent-stdio 403;
+  Auth + 403 combined message points to headless / `grok login`
+- **fallback reason** `acp_stdio_403` / `acp_auth` (legacy `acp_build_403` still recognized)
+- **UI phase** — “ACP 路径失败 → headless（Build 仍可能可用）”
+- **diagnostics** — rename “Build API 门控” → “ACP agent 路径”
+
 ## [1.47.4] — 2026-07-26
 
 ### Fix — chat live stream paint (user-visible)
