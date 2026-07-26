@@ -14,6 +14,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Optional: worker for multi-MB LCS; SBS hunk actions
 - Optional: wire `execution-route.reduceRouteTick` from ACP activity clock (ledger dual-bookkeep)
 
+## [1.47.10] — 2026-07-26
+
+### Fix — chat bubble stuck on static「等待首包」
+
+Headless TTFT is still ~60–90s (CLI/model). Host activity clock ticked, but the
+assistant bubble stayed on frozen `Grok · 等待首包` / `等待模型首包…` with no seconds.
+
+- **Local wait-shell ticker** (500ms): body + role + Live wait row show
+  `等待模型首包… Ns · 无工具事件 · headless（常见 60–90s）`
+- Prefer host phase detail when richer; clear ticker on first text/thought/done
+- Honest copy: long wait is expected under headless, not a dead UI
+
 ## [1.47.9] — 2026-07-26
 
 ### Fix — P0/P1 transport honesty (Doctor ACP probe + sticky config)

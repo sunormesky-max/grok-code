@@ -9961,6 +9961,14 @@ function setTaskPhase(task, phase, detail) {
   // Keep "Grok · stream" role in sync with real phase — otherwise long tool
   // stretches look frozen under a stuck "stream" label (log: only tool_delta).
   paintLiveAssistantRole(task);
+  // Tick chat wait bubble from host clock detail (headless ~90s TTFT)
+  if (
+    task.running &&
+    !(task.streamBuf || '').trim() &&
+    /等待模型|首包|Waiting|无工具|headless|silent/i.test(det)
+  ) {
+    paintWaitShell(task, det);
+  }
   // 流式执行路线: discrete stage enter (skip clock thrash / tool spam)
   if (task.running && prev !== next) {
     if (next === 'boot') appendExecRouteStep(task, { kind: 'boot', detail: det });
@@ -10035,6 +10043,91 @@ function paintLiveAssistantRole(task) {
     const short = det.length > 36 ? det.slice(0, 34) + '…' : det;
     role.textContent = short ? `Grok · ${short}` : `Grok · ${phase || 'run'}`;
   }
+}
+
+/**
+ * Chat bubble + Live wait row: keep ticking seconds while streamBuf empty.
+ * Host activity clock may lag; local ticker guarantees the dialog never freezes
+ * on static "等待首包" for the ~90s headless TTFT.
+ */
+function clearWaitShellTicker(task) {
+  if (!task) return;
+  if (task._waitShellTimer) {
+    clearInterval(task._waitShellTimer);
+    task._waitShellTimer = null;
+  }
+}
+
+function paintWaitShell(task, detailOverride) {
+  task = task || T();
+  if (!task?.running) return;
+  if ((task.streamBuf || '').trim() || (task.thoughtBuf || '').trim()) {
+    clearWaitShellTicker(task);
+    return;
+  }
+  const en = localeIsEn();
+  const started = task._waitShellStartedAt || task.runStartedAt || Date.now();
+  task._waitShellStartedAt = started;
+  const sec = Math.max(0, Math.floor((Date.now() - started) / 1000));
+  const hostDet = String(detailOverride || task.phaseDetail || '').trim();
+  const headless =
+    /headless|无工具|no tool|degrad/i.test(hostDet) ||
+    Boolean(task._headlessBannerShown) ||
+    Boolean(_lastTransportState?.stickyHeadless || _lastTransportState?.noToolStream);
+  let line;
+  if (hostDet && /等待模型|首包|silent|Waiting|无工具|headless/i.test(hostDet)) {
+    line = hostDet;
+  } else if (en) {
+    line = headless
+      ? `Waiting for first token… ${sec}s · no tools · headless (often ~60–90s)`
+      : `Waiting for first token… ${sec}s`;
+  } else {
+    line = headless
+      ? `等待模型首包… ${sec}s · 无工具事件 · headless（常见 60–90s）`
+      : `等待模型首包… ${sec}s`;
+  }
+  ensureLiveAssistant(task);
+  const el = task.liveAssistantEl;
+  if (el) {
+    const body = el.querySelector('.body');
+    const role = el.querySelector('.role');
+    if (body && (!(task.streamBuf || '').trim() || body.classList.contains('stream-waiting'))) {
+      body.classList.add('stream-waiting');
+      if (body.textContent !== line) body.textContent = line;
+    }
+    if (role) {
+      const short = line.length > 42 ? line.slice(0, 40) + '…' : line;
+      const nextRole = `Grok · ${short}`;
+      if (role.textContent !== nextRole) role.textContent = nextRole;
+    }
+  }
+  const waitRow = document.getElementById('liveWaitMirror');
+  if (waitRow && isActiveTask(task)) {
+    const title = waitRow.querySelector('.title');
+    if (title && title.textContent !== line) title.textContent = line;
+  }
+  if (isActiveTask(task)) {
+    setLivePhase(line, `${task.title} · wait`);
+  }
+}
+
+function startWaitShellTicker(task) {
+  task = task || T();
+  if (!task) return;
+  clearWaitShellTicker(task);
+  task._waitShellStartedAt = Date.now();
+  paintWaitShell(task);
+  task._waitShellTimer = setInterval(() => {
+    if (!task.running) {
+      clearWaitShellTicker(task);
+      return;
+    }
+    if ((task.streamBuf || '').trim() || (task.thoughtBuf || '').trim()) {
+      clearWaitShellTicker(task);
+      return;
+    }
+    paintWaitShell(task);
+  }, 500);
 }
 
 /**
@@ -10579,6 +10672,7 @@ function bindAgentEvents() {
           degrade: true,
           noToolStream: true,
         });
+        paintWaitShell(task, d.detail || '');
       }
       if (isActiveTask(task)) {
         const detail = d.detail || d.phase || 'running';
@@ -10586,7 +10680,10 @@ function bindAgentEvents() {
         const isClock = isActivityClockDetail(detail);
         setAgentStatus(detail, true, false, { skipAnnounce: isClock });
         setLivePhase(detail, `${task.title} · ${d.phase || 'run'}`);
-        if (isClock) maybeAnnouncePhaseSilence(task, detail);
+        if (isClock) {
+          maybeAnnouncePhaseSilence(task, detail);
+          paintWaitShell(task, detail);
+        }
       }
     }),
     window.grok.on('agent:status', (d) => {
@@ -10603,6 +10700,13 @@ function bindAgentEvents() {
       }
     }),
     window.grok.on('agent:text', (d) => {
+      // first real token ends wait shell ticker
+      try {
+        const _t = taskFromEvent(d);
+        if (_t && (d?.text || d?.delta)) clearWaitShellTicker(_t);
+      } catch {
+        /* ignore */
+      }
       const task = taskFromEvent(d);
       if (!task) return;
       const prevLen = (task.streamBuf || '').length;
@@ -10645,6 +10749,12 @@ function bindAgentEvents() {
       }
     }),
     window.grok.on('agent:thought', (d) => {
+      try {
+        const _t = taskFromEvent(d);
+        if (_t && (d?.text || d?.delta || d?.thought)) clearWaitShellTicker(_t);
+      } catch {
+        /* ignore */
+      }
       const task = taskFromEvent(d);
       if (!task) return;
       const prevLen = (task.thoughtBuf || '').length;
@@ -11104,6 +11214,7 @@ function bindAgentEvents() {
     window.grok.on('agent:done', (d) => {
       const task = taskFromEvent(d);
       if (!task) return;
+      clearWaitShellTicker(task);
       const proj = window.ProjectStore.get(task.projectId);
       if (d?.streamSummary) task.streamSummary = d.streamSummary;
       appendExecRouteStep(task, {
@@ -11397,18 +11508,8 @@ async function runTaskPrompt(task, text, opts = {}) {
   // Empty streaming shell + caret so dialog never looks "dead" before first token
   ensureLiveAssistant(task);
   upsertAssistant('', true, task);
-  const shell = task.liveAssistantEl;
-  if (shell) {
-    const body = shell.querySelector('.body');
-    const role = shell.querySelector('.role');
-    if (body && !(task.streamBuf || '').trim()) {
-      body.textContent = localeIsEn()
-        ? 'Waiting for first token…'
-        : '等待模型首包…';
-      body.classList.add('stream-waiting');
-    }
-    if (role) role.textContent = localeIsEn() ? 'Grok · waiting' : 'Grok · 等待首包';
-  }
+  // Local 500ms ticker — body/role/Live show "… Ns" even before host phase IPC
+  startWaitShellTicker(task);
   renderTaskTabs();
 
   if (state.followAgent || state.activeTab === 'live') switchTab('live');
@@ -11440,6 +11541,7 @@ async function runTaskPrompt(task, text, opts = {}) {
       box.appendChild(row);
     }
   }
+  paintWaitShell(task);
   updateLiveStats();
 
   const liveTick = setInterval(updateLiveStats, 500);
@@ -11628,6 +11730,7 @@ async function runTaskPrompt(task, text, opts = {}) {
     toast(msg || t('live.phase.error'), 'err');
   } finally {
     clearInterval(liveTick);
+    clearWaitShellTicker(task);
     const wasStopped = task.stopRequested || task.phase === 'stopped';
     task.running = false;
     task.stopRequested = false;
