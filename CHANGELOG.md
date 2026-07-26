@@ -14,6 +14,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Optional: worker for multi-MB LCS; SBS hunk actions
 - Optional: wire `execution-route.reduceRouteTick` from ACP activity clock (ledger dual-bookkeep)
 
+## [1.48.1] — 2026-07-26
+
+### Fix — ACP hard-fail UX (no IPC wrapper spam)
+
+User saw `Error invoking remote method 'agent:run': Error: 【Build 主路径失败】…`
+
+- `agent:run` returns `{ ok:false, error, code }` instead of throw (no Electron wrap)
+- Renderer strips any leftover IPC prefix; bubble shows `失败：` + clean body
+- Retry bar for Build path fail: **重试 ACP** · **允许 -p 并重试** · 流式日志 · 诊断
+
 ## [1.48.0] — 2026-07-26
 
 ### Breaking (product) — GrokCode is Grok Build frontend

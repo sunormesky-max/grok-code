@@ -4159,6 +4159,13 @@ button.pill:hover {
   border-color: rgba(251, 113, 133, 0.3);
   background: linear-gradient(90deg, rgba(251, 113, 133, 0.08), rgba(0, 0, 0, 0.25));
 }
+.retry-bar-build-fail {
+  border-color: rgba(248, 113, 113, 0.45);
+  background: linear-gradient(90deg, rgba(239, 68, 68, 0.12), rgba(0, 0, 0, 0.28));
+}
+.retry-bar-build-fail .retry-hint {
+  color: #fecaca;
+}
 .stop-bar .retry-hint,
 .retry-bar .retry-hint {
   flex: 1;

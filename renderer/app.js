@@ -11595,6 +11595,51 @@ async function runTaskPrompt(task, text, opts = {}) {
     flushStreamPaint(task);
     LiveBatcher.flush();
 
+    // Structured failure from main (no Electron IPC throw wrapper)
+    if (result && result.ok === false) {
+      const msg = cleanAgentErrorMessage(result.error || 'Agent failed');
+      task.lastError = msg;
+      clearWaitShellTicker(task);
+      upsertAssistant(
+        localeIsEn() ? `Failed:\n${msg}` : `失败：\n${msg}`,
+        true,
+        task
+      );
+      finalizeLiveMessages(task);
+      markTurnEnded(task, {
+        error: msg,
+        tools: task.toolCount || 0,
+        code: result.code,
+      });
+      appendRetryBar(task, text, msg, {
+        buildPathFailed: Boolean(result.buildPathFailed || result.code === 'ACP_PATH_FAILED'),
+        code: result.code,
+        fallbackReason: result.fallbackReason,
+      });
+      if (result.buildPathFailed || result.code === 'ACP_PATH_FAILED') {
+        showTransportDegrade({
+          stickyHeadless: true,
+          buildPathFailed: true,
+          degrade: true,
+          noToolStream: true,
+          stickyReason: result.fallbackReason || 'acp_stdio_403',
+          stickyReasonLabel: localeIsEn()
+            ? 'Build agent stdio failed'
+            : 'Build 主路径（agent stdio）失败',
+        });
+      }
+      if (isActiveTask(task)) {
+        setAgentStatus(localeIsEn() ? 'Build path failed' : '主路径失败', false, true);
+        setLivePhase(localeIsEn() ? 'failed' : '失败', msg.slice(0, 120));
+      }
+      toast(
+        localeIsEn() ? 'Build agent path failed' : 'Build 主路径失败',
+        'err'
+      );
+      schedulePersist(true);
+      return;
+    }
+
     const finalText = result?.text || task.streamBuf || '';
     if (result?.sessionId) task.sessionId = result.sessionId;
     if (result?.usage) task.lastUsage = result.usage;
@@ -11724,7 +11769,7 @@ async function runTaskPrompt(task, text, opts = {}) {
     schedulePersist(true);
     if (isActiveTask(task)) renderContextTiers(task);
   } catch (err) {
-    const msg = err.message || String(err);
+    const msg = cleanAgentErrorMessage(err?.message || String(err));
     // Stop can race as error depending on kill timing — treat as stop when requested
     if (task.stopRequested || /已由用户停止|aborted|AbortError/i.test(msg)) {
       const partial = task.streamBuf || '';
@@ -11743,15 +11788,39 @@ async function runTaskPrompt(task, text, opts = {}) {
       return;
     }
     task.lastError = msg;
-    upsertAssistant(t('chat.error', `错误：${msg}`, { msg }), true, task);
+    const buildFail = /主路径失败|ACP_PATH|Build path failed/i.test(msg);
+    upsertAssistant(
+      buildFail
+        ? localeIsEn()
+          ? `Failed:\n${msg}`
+          : `失败：\n${msg}`
+        : t('chat.error', `错误：${msg}`, { msg }),
+      true,
+      task
+    );
     finalizeLiveMessages(task);
     markTurnEnded(task, { error: msg, tools: task.toolCount || 0 });
-    appendRetryBar(task, text, msg);
+    appendRetryBar(task, text, msg, { buildPathFailed: buildFail });
     if (isActiveTask(task)) {
-      setAgentStatus(t('live.phase.error', '出错'), false, true);
-      setLivePhase(t('live.phase.error', '出错'), msg);
+      setAgentStatus(
+        buildFail
+          ? localeIsEn()
+            ? 'Build path failed'
+            : '主路径失败'
+          : t('live.phase.error', '出错'),
+        false,
+        true
+      );
+      setLivePhase(t('live.phase.error', '出错'), msg.slice(0, 120));
     }
-    toast(msg || t('live.phase.error'), 'err');
+    toast(
+      buildFail
+        ? localeIsEn()
+          ? 'Build agent path failed'
+          : 'Build 主路径失败'
+        : msg || t('live.phase.error'),
+      'err'
+    );
   } finally {
     clearInterval(liveTick);
     clearWaitShellTicker(task);
@@ -12904,23 +12973,92 @@ function markTurnEnded(task, meta = {}) {
   }
 }
 
+/** Strip Electron IPC invoke wrapper noise from error strings */
+function cleanAgentErrorMessage(raw) {
+  let s = String(raw || '').trim();
+  s = s.replace(
+    /^Error invoking remote method ['"][^'"]+['"]:\s*(?:Error:\s*)?/i,
+    ''
+  );
+  s = s.replace(/^Error:\s*/i, '');
+  return s.trim() || String(raw || '');
+}
+
 /** 失败后可一键重试 / 清空 session 重试 / 导出诊断 */
-function appendRetryBar(task, promptText, errMsg) {
+function appendRetryBar(task, promptText, errMsg, opts = {}) {
   if (!task?.pane) return;
   task.pane.querySelectorAll('.retry-bar, .stop-bar').forEach((el) => el.remove());
+  const en = localeIsEn();
+  const buildFail = Boolean(
+    opts.buildPathFailed || /主路径失败|ACP_PATH|Build path failed/i.test(String(errMsg || ''))
+  );
   const bar = document.createElement('div');
-  bar.className = 'retry-bar';
+  bar.className = 'retry-bar' + (buildFail ? ' retry-bar-build-fail' : '');
+  const hint = buildFail
+    ? en
+      ? 'Build agent path failed — retry ACP, or enable -p escape hatch'
+      : 'Build 主路径失败 — 可重试 ACP，或临时允许 -p 逃生'
+    : t('chat.retryHint', '任务失败 — 可重试或新开会话');
+  const short = errMsg ? String(errMsg).replace(/\s+/g, ' ').slice(0, 72) : '';
   bar.innerHTML = `
-    <span class="retry-hint">${esc(t('chat.retryHint', '任务失败 — 可重试或新开会话'))}${errMsg ? ` · ${esc(String(errMsg).slice(0, 80))}` : ''}</span>
+    <span class="retry-hint">${esc(hint)}${short ? ` · ${esc(short)}` : ''}</span>
     <div class="retry-actions">
-      <button type="button" class="btn small primary" data-act="retry">${esc(t('chat.retry', '重试'))}</button>
-      <button type="button" class="btn small ghost" data-act="fresh">${esc(t('chat.retryFresh', '新会话重试'))}</button>
-      <button type="button" class="btn small ghost" data-act="diag">${esc(t('chat.exportDiag', '导出诊断'))}</button>
+      <button type="button" class="btn small primary" data-act="retry-acp">${esc(
+        en ? 'Retry ACP' : '重试 ACP'
+      )}</button>
+      ${
+        buildFail
+          ? `<button type="button" class="btn small ghost" data-act="enable-p">${esc(
+              en ? 'Allow -p & retry' : '允许 -p 并重试'
+            )}</button>`
+          : `<button type="button" class="btn small ghost" data-act="retry">${esc(
+              t('chat.retry', '重试')
+            )}</button>`
+      }
+      <button type="button" class="btn small ghost" data-act="fresh">${esc(
+        t('chat.retryFresh', '新会话重试')
+      )}</button>
+      <button type="button" class="btn small ghost" data-act="log">${esc(
+        en ? 'Stream log' : '流式日志'
+      )}</button>
+      <button type="button" class="btn small ghost" data-act="diag">${esc(
+        t('chat.exportDiag', '导出诊断')
+      )}</button>
     </div>`;
-  bar.querySelector('[data-act="retry"]').onclick = () => {
+  const retryAcp = async () => {
     bar.remove();
+    try {
+      await window.grok.clearStickyHeadless?.({ projectId: task.projectId, by: 'retry_bar' });
+    } catch {
+      /* ignore */
+    }
     runTaskPrompt(task, promptText, { isRetry: true, skipResume: false });
   };
+  bar.querySelector('[data-act="retry-acp"]')?.addEventListener('click', () => {
+    retryAcp();
+  });
+  bar.querySelector('[data-act="retry"]')?.addEventListener('click', () => {
+    bar.remove();
+    runTaskPrompt(task, promptText, { isRetry: true, skipResume: false });
+  });
+  bar.querySelector('[data-act="enable-p"]')?.addEventListener('click', async () => {
+    bar.remove();
+    try {
+      await window.grok.setConfig?.({ allowHeadlessFallback: true });
+      const el = document.getElementById('cfgAllowHeadlessFallback');
+      if (el) el.checked = true;
+      toast(
+        en
+          ? 'Enabled -p fallback — retrying (no tool UI)'
+          : '已允许 -p 降级 — 正在重试（无工具 UI）',
+        'ok'
+      );
+    } catch (e) {
+      toast(e?.message || String(e), 'err');
+      return;
+    }
+    runTaskPrompt(task, promptText, { isRetry: true, skipResume: true, resetSession: true });
+  });
   bar.querySelector('[data-act="fresh"]').onclick = async () => {
     bar.remove();
     try {
@@ -12931,6 +13069,13 @@ function appendRetryBar(task, promptText, errMsg) {
     task.sessionId = null;
     runTaskPrompt(task, promptText, { isRetry: true, skipResume: true, resetSession: true });
   };
+  bar.querySelector('[data-act="log"]')?.addEventListener('click', async () => {
+    try {
+      await window.grok.doctorOpenStreamLog?.();
+    } catch {
+      toast(en ? 'Cannot open log' : '无法打开日志', 'err');
+    }
+  });
   bar.querySelector('[data-act="diag"]').onclick = () => {
     window.GrokSettingsExtra?.exportDiag?.();
   };

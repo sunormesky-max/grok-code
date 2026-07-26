@@ -1405,6 +1405,7 @@ ipcMain.handle('agent:run', async (_e, payload) => {
       setTaskSession(p.path, tid, result.sessionId);
     }
     return {
+      ok: true,
       ...result,
       taskId: tid,
       projectId,
@@ -1415,15 +1416,28 @@ ipcMain.handle('agent:run', async (_e, payload) => {
       stylePack,
     };
   } catch (err) {
-    // electron IPC often surfaces only err.message — ensure 403/auth is human-readable
+    // Return structured failure (do NOT throw) — Electron invoke wraps throws as
+    // "Error invoking remote method 'agent:run': Error: …" which confuses users.
     const { humanizeAgentError } = require('./agent');
     const friendly =
       typeof humanizeAgentError === 'function'
         ? humanizeAgentError(err)
         : err?.message || String(err);
-    const e = new Error(friendly);
-    e.cause = err;
-    throw e;
+    const code = err?.code || 'AGENT_RUN_FAILED';
+    return {
+      ok: false,
+      error: friendly,
+      code,
+      fallbackReason: err?.fallbackReason || '',
+      buildPathFailed:
+        code === 'ACP_PATH_FAILED' || /主路径失败|Build path failed/i.test(friendly),
+      taskId: tid,
+      projectId,
+      context,
+      contextTiers: context?.tiers,
+      workMode,
+      stylePack,
+    };
   } finally {
     p._configOverride = null;
     if (p.aborts.get(tid) === ac) p.aborts.delete(tid);
