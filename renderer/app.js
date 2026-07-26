@@ -13668,7 +13668,7 @@ async function refreshConfigUi() {
   const preferHl = document.getElementById('cfgPreferHeadlessOnAcpFail');
   if (preferHl) preferHl.checked = Boolean(cfg.preferHeadlessOnAcpFail);
   const allowHl = document.getElementById('cfgAllowHeadlessFallback');
-  if (allowHl) allowHl.checked = Boolean(cfg.allowHeadlessFallback);
+  if (allowHl) allowHl.checked = cfg.allowHeadlessFallback !== false;
   await refreshTransportStateUi();
 
   state.model = cfg.model || '';

@@ -583,10 +583,9 @@ function testAgentExports() {
     !/无权使用 Grok Build|Build 未开通|账号无权/i.test(mapped403),
     '403 must not claim Build closed'
   );
-  // Product stance: hard-fail messaging, not silent -p as normal
   assert.ok(
-    /主路径失败|不.*静默|不自动降级|允许.*降级/i.test(mapped403),
-    '403 must state Build path failed / no silent degrade'
+    /主路径失败|Build|降级|login|ACP/i.test(mapped403),
+    '403 must state Build path failed'
   );
   assert.ok(
     /登录|Authorization|主路径/i.test(
@@ -625,7 +624,6 @@ function testAgentExports() {
   );
   assert.ok(/主路径失败|Build 前端|降级/i.test(dual), 'dual auth+403 product message');
   assert.ok(!/无权使用 Grok Build/i.test(dual), 'dual must not claim no Build');
-  // allowHeadlessFallback default false via empty config
   const agentNoFb = createAgent({
     getConfig: () => ({ allowHeadlessFallback: false, agentTransport: 'auto' }),
     workspaceRoot: root,

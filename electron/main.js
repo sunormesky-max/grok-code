@@ -136,11 +136,11 @@ const store = new Store({
      */
     preferHeadlessOnAcpFail: false,
     /**
-     * OPT-IN only. When false (default), ACP 403/auth hard-fails — GrokCode is
-     * Grok Build frontend and must not silently become tool-less -p chat.
-     * When true, auto may fall back to grok -p (no tool_call UI).
+     * When true (default), ACP 403/auth may fall back to grok -p so the app
+     * still works on machines where agent stdio is gated but -p has tools.
+     * Loud degrade banner always. Set false for hard-fail-only (strict Build path).
      */
-    allowHeadlessFallback: false,
+    allowHeadlessFallback: true,
     /**
      * User asserts custom grok binary includes tool InProgress patch
      * (patches/grok-build/0001). Also: GROKCODE_PATCHED_CLI=1 or marker file.
@@ -148,6 +148,17 @@ const store = new Store({
     grokPatched: false,
   },
 });
+
+// 1.48.0 briefly defaulted allowHeadlessFallback=false (hard-fail only), leaving
+// machines with agent-stdio 403 unable to run. 1.48.2 restores usable default.
+try {
+  if (store.get('allowHeadlessFallback') === false && !store.get('_migratedAllowHl1482')) {
+    store.set('allowHeadlessFallback', true);
+    store.set('_migratedAllowHl1482', true);
+  }
+} catch {
+  /* ignore */
+}
 
 let mainWindow = null;
 
@@ -207,7 +218,8 @@ function getConfig() {
       return 30;
     })(),
     preferHeadlessOnAcpFail: Boolean(store.get('preferHeadlessOnAcpFail')),
-    allowHeadlessFallback: Boolean(store.get('allowHeadlessFallback')),
+    // undefined → true (usable default); only explicit false hard-fails
+    allowHeadlessFallback: store.get('allowHeadlessFallback') !== false,
   };
 }
 
@@ -611,7 +623,7 @@ ipcMain.handle('config:get', () => {
     agentTransport: getConfig().agentTransport || 'auto',
     stickyHeadlessMinutes: getConfig().stickyHeadlessMinutes || 30,
     preferHeadlessOnAcpFail: Boolean(getConfig().preferHeadlessOnAcpFail),
-    allowHeadlessFallback: Boolean(getConfig().allowHeadlessFallback),
+    allowHeadlessFallback: getConfig().allowHeadlessFallback !== false,
     modes: modes.listModes(),
     styles: modes.listStyles(),
   };
@@ -713,7 +725,6 @@ ipcMain.handle('config:set', (_e, partial) => {
   }
   if (p.allowHeadlessFallback !== undefined) {
     store.set('allowHeadlessFallback', Boolean(p.allowHeadlessFallback));
-    // Turning off degraded mode: clear sticky so next send retries Build path
     if (!p.allowHeadlessFallback) {
       for (const proj of projects.values()) {
         try {

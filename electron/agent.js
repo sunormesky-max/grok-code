@@ -81,26 +81,23 @@ function humanizeAgentError(raw) {
   if (authReq && stdio403) {
     return (
       '【Build 主路径失败】grok agent stdio 鉴权/代理错误（AuthorizationRequired + 403）。\n' +
-      'GrokCode 是 Grok Build 前端，正常态必须走 agent stdio（工具/Live/Code/Diff）。\n' +
-      '本机探测：同一 CLI 的 grok -p 可能仍可用，但那不是 TUI 级 agent 甲板。\n' +
-      '处理：1) 终端 grok login  2) 设置→探测 ACP  3) 仅临时需要时可勾选「允许 -p 降级」。\n' +
-      '默认不再静默降级成无工具聊天。'
+      '正常态应是 agent stdio（完整工具流）。若已允许 -p 降级，将自动改用 grok -p 继续（黑盒工具、无 tool 卡片）。\n' +
+      '处理：终端 grok login；设置→探测 ACP；设置里可开关「允许 -p 降级」。'
     );
   }
   if (authReq) {
     return (
       '【Build 主路径失败】Grok CLI 需要重新登录（AuthorizationRequired）。\n' +
-      '请在终端运行：grok login\n' +
-      '完成后点「重试 ACP」。GrokCode 默认不自动降级到无工具的 -p。'
+      '请在终端运行：grok login 后点「重试 ACP」。\n' +
+      '若已允许 -p 降级，可先用 -p 应急。'
     );
   }
   if (stdio403) {
     return (
       '【Build 主路径失败】grok agent stdio 返回 403（文案可能仍写 coming soon）。\n' +
-      'GrokCode 作为 Build 前端，此时不应假装正常工作。\n' +
-      '对照：本机 grok -p 往往仍能黑盒调工具，但无 tool 事件 → 无 TUI 级 Live/Diff。\n' +
-      '处理：终端 grok login；设置→探测 ACP；临时逃生请显式勾选「允许 -p 降级」。\n' +
-      '这不是界面卡死，是 agent 主路径被拒。'
+      '同一 CLI 的 grok -p 往往仍可用（工具黑盒、无 tool 事件）。\n' +
+      '默认会降级到 -p 并显示黄条；关闭「允许 -p 降级」则只报错不干活。\n' +
+      '处理：grok login · 探测 ACP · 或接受 -p 应急。'
     );
   }
   if (/401|unauthorized/i.test(msg) && /api|auth|token|key/i.test(msg)) {
@@ -512,8 +509,9 @@ function createAgent({ getConfig, workspaceRoot, emit, reportStreamTelemetry } =
     ) {
       return true;
     }
-    // Default false: GrokCode is Build frontend — do not silently become chat-only
-    return Boolean(cfg?.allowHeadlessFallback);
+    // Default true: stay usable when agent stdio is 403 but -p works (loud banner).
+    // Explicit false → hard-fail only.
+    return cfg?.allowHeadlessFallback !== false;
   }
 
   async function run(opts) {

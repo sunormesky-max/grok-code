@@ -14,6 +14,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Optional: worker for multi-MB LCS; SBS hunk actions
 - Optional: wire `execution-route.reduceRouteTick` from ACP activity clock (ledger dual-bookkeep)
 
+## [1.48.2] — 2026-07-26
+
+### Fix — stop stranding users on hard-fail only
+
+1.48.0 set `allowHeadlessFallback: false` by default; user config kept failing every
+send with Build path 403 while `grok -p` works on the same machine.
+
+- Default **允许 -p 降级 = on** (loud yellow bar; not silent)
+- One-shot migrate stored `false` → `true` (flag `_migratedAllowHl1482`)
+- Explicit Settings off still hard-fails if user wants strict Build-only
+
 ## [1.48.1] — 2026-07-26
 
 ### Fix — ACP hard-fail UX (no IPC wrapper spam)

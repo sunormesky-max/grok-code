@@ -646,10 +646,10 @@
               默认 ACP 失败会硬失败，不再偷偷变成无工具聊天。
             </small>
             <label class="field check" style="margin-top:8px">
-              <input type="checkbox" id="cfgAllowHeadlessFallback" />
+              <input type="checkbox" id="cfgAllowHeadlessFallback" checked />
               <span>
-                <strong>允许 -p 降级（逃生舱）</strong>
-                <small>勾选后 ACP 403 才可退到 grok -p。无 tool 事件 → 无完整 Diff 写流。非 TUI 能力。</small>
+                <strong>允许 -p 降级（默认开）</strong>
+                <small>ACP 403 时自动用 grok -p，保证能干活；无 tool 事件条。关掉 = 硬失败只报主路径。</small>
               </span>
             </label>
             <div class="field-row" style="margin-top:8px;gap:12px;flex-wrap:wrap">
