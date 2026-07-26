@@ -1035,6 +1035,21 @@ function taskPhaseLabel(t) {
   return map[p] || p;
 }
 
+/** Compact live counters for task strip (dialog + task box feel connected). */
+function taskStreamHint(t) {
+  if (!t?.running) return '';
+  const sc = (t.streamBuf || '').length;
+  const tc = (t.thoughtBuf || '').length;
+  const parts = [];
+  if (tc) parts.push(`想${tc}`);
+  if (sc) parts.push(`流${sc}`);
+  if (!parts.length && t.phaseDetail) {
+    const d = String(t.phaseDetail).replace(/\s+/g, ' ').trim();
+    if (d) return d.length > 18 ? d.slice(0, 16) + '…' : d;
+  }
+  return parts.join('·');
+}
+
 function renderTaskTabs() {
   const host = $('#taskTabs');
   if (!host) return;
@@ -1046,14 +1061,18 @@ function renderTaskTabs() {
       const run = t.running ? ' running' : '';
       const pin = t.pinned ? ' pinned' : '';
       const phase = t.running && t.phase ? ` phase-${esc(t.phase)}` : '';
+      const hint = taskStreamHint(t);
       const phaseTip = t.running
-        ? ` · ${taskPhaseLabel(t)}${t.phaseDetail ? `: ${t.phaseDetail}` : ''}`
+        ? ` · ${taskPhaseLabel(t)}${t.phaseDetail ? `: ${t.phaseDetail}` : ''}${hint ? ` · ${hint}` : ''}`
+        : '';
+      const phaseBadge = t.running
+        ? `<span class="task-phase">${esc(taskPhaseLabel(t))}${hint ? ` · ${esc(hint)}` : ''}</span>`
         : '';
       return `<div class="task-tab${act}${run}${pin}${phase}" data-id="${t.id}" draggable="true" title="${esc(t.title)}${esc(phaseTip)} · 双击重命名 · 拖拽排序">
         <button type="button" class="task-pin" data-pin="${t.id}" title="${t.pinned ? '取消固定' : '固定'}">${t.pinned ? '📌' : '📍'}</button>
         <span class="task-dot"></span>
         <span class="task-name" data-rename="${t.id}">${esc(t.title)}</span>
-        ${t.running ? `<span class="task-phase">${esc(taskPhaseLabel(t))}</span>` : ''}
+        ${phaseBadge}
         <button type="button" class="task-x" data-close="${t.id}" title="关闭任务">×</button>
       </div>`;
     })
@@ -10011,7 +10030,9 @@ function paintLiveAssistantRole(task) {
   } else if (phase === 'streaming') {
     role.textContent = det ? `Grok · stream · ${det}` : 'Grok · stream';
   } else if (phase === 'running' || phase === 'boot' || phase === 'retry') {
-    role.textContent = det ? `Grok · ${det}` : `Grok · ${phase || 'run'}`;
+    // Show full clock detail (首包 Ns) truncated for role chrome
+    const short = det.length > 36 ? det.slice(0, 34) + '…' : det;
+    role.textContent = short ? `Grok · ${short}` : `Grok · ${phase || 'run'}`;
   }
 }
 
@@ -10026,6 +10047,10 @@ function paintLiveStreamMirrors(task) {
   if (!box) return;
   const empty = box.querySelector('#liveEmpty');
   if (empty && (task.streamBuf || task.thoughtBuf || task.running)) empty.remove();
+  // Drop pre-token wait row once we have real stream/thought
+  if ((task.streamBuf || task.thoughtBuf) && document.getElementById('liveWaitMirror')) {
+    document.getElementById('liveWaitMirror')?.remove();
+  }
 
   const paintOne = (kind, text, streamMode) => {
     if (!text && kind === 'thought') return;
@@ -10103,6 +10128,7 @@ function clearLiveStreamMirrors() {
   document.getElementById('liveStreamMirror')?.remove();
   document.getElementById('liveThoughtMirror')?.remove();
   document.getElementById('livePlanMirror')?.remove();
+  document.getElementById('liveWaitMirror')?.remove();
 }
 
 function paintLivePlanMirror(task, lines) {
@@ -10376,9 +10402,11 @@ function bindAgentEvents() {
         pushLiveEvent({
           kind: 'signal',
           title: localeIsEn()
-            ? `${task.title} · headless (no tools)`
-            : `${task.title} · headless（无工具流）`,
-          sub: String(d.detail || d.fallbackReason || 'headless'),
+            ? `${task.title} · headless stream`
+            : `${task.title} · headless 流式`,
+          sub: localeIsEn()
+            ? 'Chat+Live text stream on. Tool cards / write→Diff need ACP. Disk fs still fills Diff.'
+            : '对话框+Live 文本流可用。工具卡片/写文件→Diff 需 ACP。磁盘变更仍进 Diff。',
           projectId: task.projectId,
         });
       }
@@ -10411,7 +10439,9 @@ function bindAgentEvents() {
       // Prefer full text snapshot (main coalesces ~60fps); delta only as fallback
       if (typeof d.text === 'string') task.streamBuf = d.text;
       else if (d.delta) task.streamBuf = (task.streamBuf || '') + d.delta;
-      if (task.running) setTaskPhase(task, 'streaming', 'speaking…');
+      const n = (task.streamBuf || '').length;
+      // Detail carries live length so task strip re-renders (was stuck on "speaking…")
+      if (task.running) setTaskPhase(task, 'streaming', n ? `输出 ${n} 字` : 'speaking…');
       if (task.running && !task._routeFirstText && task.streamBuf) {
         task._routeFirstText = true;
         appendExecRouteStep(task, { kind: 'streaming', detail: 'speaking…' });
@@ -10420,19 +10450,24 @@ function bindAgentEvents() {
       // "no streaming" when tools/phase work crowded the frame or gate was quiet.
       if (isActiveTask(task)) {
         upsertAssistant(task.streamBuf || '', true, task);
-        StreamFair.scheduleLiveMirror(task);
+        // First token: paint Live mirror immediately (no 32ms throttle)
+        if (prevLen === 0) {
+          paintLiveStreamMirrors(task);
+          StreamFair.lastLiveMirror = 0;
+        } else {
+          StreamFair.scheduleLiveMirror(task);
+        }
         if (task.running) {
           const now = performance.now();
           if (prevLen === 0 || !task._lastStreamPhaseAt || now - task._lastStreamPhaseAt > 100) {
             task._lastStreamPhaseAt = now;
-            setLivePhase(
-              'streaming…',
-              `${task.title} · ${(task.streamBuf || '').length} 字`
-            );
+            setLivePhase('streaming…', `${task.title} · ${n} 字`);
           }
         }
       } else {
         scheduleStreamPaint(task);
+        // Background tasks still need tab strip live counts
+        StreamFair.scheduleTabs();
       }
     }),
     window.grok.on('agent:thought', (d) => {
@@ -10441,26 +10476,30 @@ function bindAgentEvents() {
       const prevLen = (task.thoughtBuf || '').length;
       if (typeof d.text === 'string') task.thoughtBuf = d.text;
       else if (d.delta) task.thoughtBuf = (task.thoughtBuf || '') + d.delta;
-      if (task.running) setTaskPhase(task, 'thinking', 'thinking…');
+      const n = (task.thoughtBuf || '').length;
+      if (task.running) setTaskPhase(task, 'thinking', n ? `思考 ${n} 字` : 'thinking…');
       if (task.running && !task._routeFirstThought && task.thoughtBuf) {
         task._routeFirstThought = true;
         appendExecRouteStep(task, { kind: 'thinking', detail: 'thinking…' });
       }
       if (isActiveTask(task)) {
         upsertThought(task.thoughtBuf || '', true, task);
-        StreamFair.scheduleLiveMirror(task);
+        if (prevLen === 0) {
+          paintLiveStreamMirrors(task);
+          StreamFair.lastLiveMirror = 0;
+        } else {
+          StreamFair.scheduleLiveMirror(task);
+        }
         if (task.running) {
           const now = performance.now();
           if (prevLen === 0 || !task._lastThoughtPhaseAt || now - task._lastThoughtPhaseAt > 100) {
             task._lastThoughtPhaseAt = now;
-            setLivePhase(
-              'thinking…',
-              `${task.title} · ${(task.thoughtBuf || '').length} 字`
-            );
+            setLivePhase('thinking…', `${task.title} · ${n} 字`);
           }
         }
       } else {
         scheduleThoughtPaint(task);
+        StreamFair.scheduleTabs();
       }
     }),
     window.grok.on('agent:tool_start', (d) => {
@@ -11166,7 +11205,21 @@ async function runTaskPrompt(task, text, opts = {}) {
     setAgentStatus(localeIsEn() ? st.en : st.zh, true);
   }
   startElapsed(task);
+  // Empty streaming shell + caret so dialog never looks "dead" before first token
   ensureLiveAssistant(task);
+  upsertAssistant('', true, task);
+  const shell = task.liveAssistantEl;
+  if (shell) {
+    const body = shell.querySelector('.body');
+    const role = shell.querySelector('.role');
+    if (body && !(task.streamBuf || '').trim()) {
+      body.textContent = localeIsEn()
+        ? 'Waiting for first token…'
+        : '等待模型首包…';
+      body.classList.add('stream-waiting');
+    }
+    if (role) role.textContent = localeIsEn() ? 'Grok · waiting' : 'Grok · 等待首包';
+  }
   renderTaskTabs();
 
   if (state.followAgent || state.activeTab === 'live') switchTab('live');
@@ -11176,9 +11229,28 @@ async function runTaskPrompt(task, text, opts = {}) {
     sub: text.slice(0, 100),
   });
   setLivePhase(
-    localeIsEn() ? 'grokking…' : 'grokking…',
+    localeIsEn() ? 'waiting first token…' : '等待模型首包…',
     `${task.title}: ${text.slice(0, 60)}`
   );
+  // Sticky Live row so Live tab is never an empty black box while waiting
+  paintLiveStreamMirrors(task);
+  {
+    const box = document.getElementById('liveTimeline');
+    if (box && !document.getElementById('liveWaitMirror')) {
+      const row = document.createElement('div');
+      row.id = 'liveWaitMirror';
+      row.className = 'live-event status live-mirror running';
+      row.innerHTML = `
+        <div class="t"></div>
+        <div class="dot"></div>
+        <div class="card">
+          <div class="kind">wait</div>
+          <div class="title">${localeIsEn() ? 'Waiting for model…' : '等待模型首包…'}</div>
+          <pre class="sub stream-mirror-body">${esc(text.slice(0, 120))}</pre>
+        </div>`;
+      box.appendChild(row);
+    }
+  }
   updateLiveStats();
 
   const liveTick = setInterval(updateLiveStats, 500);
@@ -12820,14 +12892,25 @@ function upsertAssistant(text, streaming, task) {
     el.dataset.streamMode = mode;
     el.classList.toggle('stream-hold', mode === 'hold');
     el.classList.toggle('stream-quiet', mode === 'quiet');
-    const next =
+    let next =
       window.GrokStreamGate?.displayForMode?.(raw, mode, { en: localeIsEn() }) ?? raw;
     // Prefer append when prefix matches — avoids full string rewrite every frame
     const prev = body.textContent || '';
+    const prevIsWait =
+      body.classList.contains('stream-waiting') ||
+      /等待模型首包|Waiting for first token/i.test(prev);
+    // Keep waiting shell until real tokens (mode none would blank the caret bubble)
+    if (!String(next || '').trim()) {
+      next = localeIsEn() ? 'Waiting for first token…' : '等待模型首包…';
+      body.classList.add('stream-waiting');
+    } else {
+      body.classList.remove('stream-waiting');
+    }
     if (prev === next) {
       /* no-op */
     } else if (
       mode === 'answer' &&
+      !prevIsWait &&
       next.startsWith(prev) &&
       next.length - prev.length < 400 &&
       !el.classList.contains('stream-quiet') &&
@@ -12839,6 +12922,7 @@ function upsertAssistant(text, streaming, task) {
     }
     if (role) paintLiveAssistantRole(task);
   } else {
+    body.classList.remove('stream-waiting');
     el.classList.remove('is-streaming', 'stream-hold', 'stream-quiet');
     body.classList.add('md');
     body.classList.remove('stream-body', 'is-streaming');

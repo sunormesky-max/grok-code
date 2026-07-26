@@ -3926,6 +3926,12 @@ button.pill:hover {
 .msg.assistant .body.stream-body {
   min-height: 1.2em;
 }
+.msg.assistant .body.stream-body.stream-waiting {
+  opacity: 0.72;
+  font-style: italic;
+  color: var(--muted, #a1a1aa);
+  font-size: 13px;
+}
 
 /* Turn markers in chat */
 .turn-marker {

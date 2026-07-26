@@ -14,6 +14,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Optional: worker for multi-MB LCS; SBS hunk actions
 - Optional: wire `execution-route.reduceRouteTick` from ACP activity clock (ledger dual-bookkeep)
 
+## [1.47.6] — 2026-07-26
+
+### Fix — dialog / task strip / Live stream feel (real gaps)
+
+User still saw “no stream” with multi-expert work done — residual was host UX under **headless** (ACP 403 then 90s+ first token):
+
+- **Headless activity clock** — `等待模型首包… Ns` every 500ms (was only on ACP; log showed firstTokenMs≈91s with static phase)
+- **Sticky headless** after ACP stdio 403/auth — auto skips ACP cold fail for 30m (faster next sends)
+- **More immediate IPC** on early headless chunks (first 8 + every 12th)
+- **Chat wait shell** — caret bubble “等待模型首包…” from send; Live wait row
+- **Task strip live** — phase shows `流N` / `想N` / clock detail (was stuck on “输出”)
+- **Live mirror** paints immediately on first token (no 32ms throttle)
+
+Honest limit: **Code/Diff write pipeline still needs ACP tool_call**; headless Live shows text mirrors; Diff still tracks disk `fs:changed`.
+
 ## [1.47.5] — 2026-07-26
 
 ### Fix — ACP 403 ≠ Build 未开通

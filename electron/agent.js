@@ -198,6 +198,14 @@ function createAgent({ getConfig, workspaceRoot, emit, reportStreamTelemetry } =
    */
   const acpPool = new Map();
   /**
+   * After ACP agent-stdio 403/auth fails, skip ACP for a while on auto transport
+   * so every send does not burn ~2s cold ACP only to fall back again.
+   * Cleared when user forces agentTransport=acp or after stickyMs.
+   * @type {number} Date.now() until which auto prefers headless
+   */
+  let stickyHeadlessUntil = 0;
+  const STICKY_HEADLESS_MS = 30 * 60 * 1000;
+  /**
    * taskIds we intentionally stopped (user stop / replace / external cleanup).
    * Without this, Windows taskkill surfaces exit 4294967295 and UI shows a fake hard error.
    * @type {Set<string>}
@@ -398,10 +406,41 @@ function createAgent({ getConfig, workspaceRoot, emit, reportStreamTelemetry } =
     if (transport === 'headless' || transport === 'streaming-json') {
       return runHeadless(opts);
     }
+    // auto + recent ACP stdio failure: go headless first (still stream chat/Live text)
+    if (
+      transport === 'auto' &&
+      stickyHeadlessUntil > Date.now() &&
+      !opts?._forceAcp &&
+      process.env.GROKCODE_FORCE_ACP !== '1'
+    ) {
+      streamDebug(
+        `sticky headless (ACP recently failed; until=${new Date(stickyHeadlessUntil).toISOString()})`,
+        { force: true }
+      );
+      try {
+        opts?.emit?.('agent:phase', {
+          taskId: opts.taskId || 'default',
+          phase: 'boot',
+          detail:
+            '跳过 ACP（上次 agent 路径失败），直接 headless 流式…',
+        });
+      } catch {
+        /* ignore */
+      }
+      return runHeadless({
+        ...opts,
+        sessionId: null,
+        _acpFallback: true,
+        _fallbackReason: 'acp_sticky',
+      });
+    }
     // acp: never fall back unless env allows (default acp still falls back on 403 via auto)
     const forceAcpOnly = transport === 'acp';
     try {
-      return await runAcp(opts);
+      const result = await runAcp(opts);
+      // ACP path worked — stop sticky headless so tool stream returns next turn
+      stickyHeadlessUntil = 0;
+      return result;
     } catch (err) {
       const msg = err?.message || String(err);
       const dataMsg =
@@ -429,6 +468,9 @@ function createAgent({ getConfig, workspaceRoot, emit, reportStreamTelemetry } =
           : authRequired
             ? 'acp_auth'
             : 'acp_cold';
+        if (acpStdio403 || authRequired) {
+          stickyHeadlessUntil = Date.now() + STICKY_HEADLESS_MS;
+        }
         streamDebug(
           `ACP → headless fallback (${fallbackReason}): ${msg.slice(0, 200)}`,
           { force: true }
@@ -2026,9 +2068,10 @@ function createAgent({ getConfig, workspaceRoot, emit, reportStreamTelemetry } =
         reason === 'acp_stdio_403' ||
         reason === 'acp_build_403' ||
         reason === 'acp_auth' ||
+        reason === 'acp_sticky' ||
         reason === 'acp_cold';
       const headlessDetail = fromAcpPath
-        ? 'ACP 路径失败 → headless（Build 仍可能可用；无工具流）'
+        ? 'headless 流式（无工具卡片 · Live 有文本镜像 · Diff 靠磁盘）'
         : 'headless 传输（无工具卡片）';
       emit('agent:phase', {
         taskId,
@@ -2158,13 +2201,61 @@ function createAgent({ getConfig, workspaceRoot, emit, reportStreamTelemetry } =
       let toolStartsHl = 0;
       let toolEndsHl = 0;
       let toolInProgressHl = 0;
-      /** Headless has no activity clock; keep field for ACP-shaped streamSummary. */
+      /** Updated by headless activity clock (parity with ACP). */
       let maxSilentSecHl = 0;
+      let lastActivityAtHl = t0Headless;
+      let waitTickTimerHl = null;
       /** Assigned before stdout handlers; may be null if spawn fails early. */
       let streamState = null;
 
       const noteFirstTokenHl = () => {
-        if (!firstTokenAtHl) firstTokenAtHl = Date.now();
+        if (!firstTokenAtHl) {
+          firstTokenAtHl = Date.now();
+          lastActivityAtHl = firstTokenAtHl;
+        } else {
+          lastActivityAtHl = Date.now();
+        }
+      };
+
+      const clearWaitTickHl = () => {
+        if (waitTickTimerHl) {
+          clearInterval(waitTickTimerHl);
+          waitTickTimerHl = null;
+        }
+      };
+
+      /** Anti-black-box: 等待模型首包 / 段间静默 — headless was missing this (91s blank). */
+      const startActivityClockHl = () => {
+        clearWaitTickHl();
+        lastActivityAtHl = Date.now();
+        waitTickTimerHl = setInterval(() => {
+          if (settled) {
+            clearWaitTickHl();
+            return;
+          }
+          const silentSec = Math.max(
+            0,
+            Math.floor((Date.now() - lastActivityAtHl) / 1000)
+          );
+          if (silentSec > maxSilentSecHl) maxSilentSecHl = silentSec;
+          const totalSec = Math.max(0, Math.floor((Date.now() - t0Headless) / 1000));
+          if (!firstTokenAtHl) {
+            setPhase(
+              'running',
+              `等待模型首包… ${silentSec}s · headless · 总 ${totalSec}s`
+            );
+          } else if (toolDepth > 0) {
+            setPhase(
+              'tool',
+              `工具执行中 ×${toolDepth} · 已静默 ${silentSec}s · 总 ${totalSec}s`
+            );
+          } else if (silentSec >= 2) {
+            setPhase(
+              'running',
+              `等待模型继续… ${silentSec}s（段间静默）· 总 ${totalSec}s`
+            );
+          }
+        }, 500);
       };
 
       /** ACP-shaped summary object for agent:done + mission bar (transport=headless). */
@@ -2236,6 +2327,7 @@ function createAgent({ getConfig, workspaceRoot, emit, reportStreamTelemetry } =
       };
 
       const cleanup = () => {
+        clearWaitTickHl();
         try {
           fs.unlinkSync(promptFile);
         } catch {
@@ -2387,6 +2479,16 @@ function createAgent({ getConfig, workspaceRoot, emit, reportStreamTelemetry } =
           .map((a, i) => (args[i - 1] === '--prompt-file' ? '<prompt>' : a))
           .join(' ')} log=${STREAM_DEBUG_PATH}`
       );
+      streamDebug(`task=${taskId} listening stdout/stderr log=${STREAM_DEBUG_PATH}`, {
+        force: true,
+      });
+      setPhase(
+        'running',
+        _acpFallback
+          ? 'headless 已启动，等待模型首包…'
+          : 'CLI 已启动，等待模型首包…'
+      );
+      startActivityClockHl();
       try {
         child.stdout.setEncoding('utf8');
       } catch {
@@ -2406,16 +2508,21 @@ function createAgent({ getConfig, workspaceRoot, emit, reportStreamTelemetry } =
             if (a.channel === 'agent:text') {
               textChunksHl += 1;
               noteFirstTokenHl();
-              // First headless text/thought flush immediately so chat paints
-              // without waiting STREAM_IPC_MS coalesce (true stream feel).
-              emitTextStream(a.payload, Boolean(a.immediate) || textChunksHl === 1);
+              // First 8 chunks + every 12th: immediate IPC so chat/Live feel live
+              // under Windows Electron IPC batching (not only chunk #1).
+              const immediateText =
+                Boolean(a.immediate) ||
+                textChunksHl <= 8 ||
+                textChunksHl % 12 === 0;
+              emitTextStream(a.payload, immediateText);
             } else if (a.channel === 'agent:thought') {
               thoughtChunksHl += 1;
               noteFirstTokenHl();
-              emitThoughtStream(
-                a.payload,
-                Boolean(a.immediate) || thoughtChunksHl === 1
-              );
+              const immediateThought =
+                Boolean(a.immediate) ||
+                thoughtChunksHl <= 8 ||
+                thoughtChunksHl % 12 === 0;
+              emitThoughtStream(a.payload, immediateThought);
             } else {
               if (a.channel === 'agent:tool_start') {
                 if (a.payload?.progress) {
@@ -2496,10 +2603,6 @@ function createAgent({ getConfig, workspaceRoot, emit, reportStreamTelemetry } =
         );
         handleEvent(parsed.event);
       };
-
-      streamDebug(
-        `task=${taskId} listening stdout/stderr log=${STREAM_DEBUG_PATH}`
-      );
 
       child.stdout.on('data', (chunk) => {
         const s = typeof chunk === 'string' ? chunk : chunk.toString('utf8');
