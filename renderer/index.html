@@ -271,6 +271,8 @@
                   </div>
                   <button type="button" class="live-side-toggle" id="btnToggleLiveSide" title="展开/折叠侧栏（焦点·变更·上下文）" aria-expanded="false">详情 ▹</button>
                 </div>
+                <!-- 流式执行路线 strip (durable steps for this turn) -->
+                <div class="exec-route-strip hidden" id="execRouteStrip" role="navigation" aria-label="执行路线"></div>
                 <div class="live-timeline" id="liveTimeline">
                   <div class="live-empty" id="liveEmpty">
                     <div class="grok-sigil" aria-hidden="true"><span></span><span></span><span></span></div>
@@ -677,6 +679,7 @@
           <div class="diag-actions">
             <button type="button" class="btn small ghost" id="btnRunDoctor" data-i18n="cfg.doctor.run">一键体检</button>
             <button type="button" class="btn small ghost" id="btnExportDiag" data-i18n="cfg.doctor.export">导出诊断包</button>
+            <button type="button" class="btn small ghost" id="btnOpenStreamLog" data-i18n="cfg.doctor.streamLog">打开流式日志</button>
             <button type="button" class="btn small ghost" id="btnShowOnboarding" data-i18n="cfg.doctor.onb">首启向导</button>
           </div>
           <label class="diag-probe-opt muted" style="display:flex;align-items:center;gap:8px;margin:8px 0 4px;font-size:12px;cursor:pointer">

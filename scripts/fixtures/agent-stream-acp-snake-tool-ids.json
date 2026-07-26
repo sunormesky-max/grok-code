@@ -1,0 +1,14 @@
+[
+  {
+    "sessionUpdate": "tool_call",
+    "tool_call_id": "tc_snake_1",
+    "tool_name": "read_file",
+    "raw_input": { "path": "a.js" }
+  },
+  {
+    "sessionUpdate": "tool_call_update",
+    "tool_call_id": "tc_snake_1",
+    "status": "completed",
+    "rawOutput": "ok"
+  }
+]

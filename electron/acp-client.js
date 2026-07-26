@@ -762,23 +762,34 @@ class AcpClient {
 
 /**
  * Extract tool name/args from ACP tool_call / tool_call_update payload.
+ * Accepts camelCase + snake_case ids (parity with resolveToolCallDelta) so
+ * tool_start / tool_end share a stable key when the CLI emits tool_call_id.
  */
 function pickToolInfo(update) {
   const meta = update?._meta?.['x.ai/tool'] || {};
   const name =
     meta.name ||
     update?.title ||
+    update?.toolName ||
+    update?.tool_name ||
     update?.kind ||
     update?.name ||
     'tool';
   const args =
     update?.rawInput ||
+    update?.raw_input ||
     update?.input ||
     update?.arguments ||
     (update?.locations?.[0]?.path ? { path: update.locations[0].path } : {}) ||
     {};
-  const id = update?.toolCallId || update?.id || `tool-${Date.now()}`;
-  return { id, name: String(name), args: typeof args === 'object' && args ? args : {} };
+  const id =
+    update?.toolCallId ||
+    update?.tool_call_id ||
+    update?.callId ||
+    update?.call_id ||
+    update?.id ||
+    `tool-${Date.now()}`;
+  return { id: String(id), name: String(name), args: typeof args === 'object' && args ? args : {} };
 }
 
 /**
@@ -844,6 +855,9 @@ function slimToolArgs(args) {
     'path',
     'file_path',
     'target_file',
+    'file',
+    'filename',
+    'filepath',
     'command',
     'query',
     'pattern',
@@ -870,6 +884,35 @@ function slimToolArgs(args) {
   return out;
 }
 
+/**
+ * Merge open-tool meta across start/update/end frames.
+ * ACP completed updates and host force-close often omit path args; keep first non-empty.
+ * @param {{ name?: string, args?: object }|null|undefined} prev
+ * @param {{ name?: string, args?: object }|null|undefined} info
+ */
+function mergeToolMeta(prev, info) {
+  const p = prev && typeof prev === 'object' ? prev : {};
+  const n = info && typeof info === 'object' ? info : {};
+  const argsIn = slimToolArgs(n.args);
+  // preview-only from empty slim is not a real path payload — still merge if has path keys
+  const hasPathish =
+    argsIn.path ||
+    argsIn.file_path ||
+    argsIn.target_file ||
+    argsIn.file ||
+    argsIn.filename ||
+    argsIn.filepath ||
+    argsIn.command;
+  const hasUseful = hasPathish || (Object.keys(argsIn).length > 0 && !argsIn.preview);
+  const args = hasUseful
+    ? { ...(p.args && typeof p.args === 'object' ? p.args : {}), ...argsIn }
+    : { ...(p.args && typeof p.args === 'object' ? p.args : {}) };
+  const nameRaw = n.name != null ? String(n.name) : '';
+  const name =
+    nameRaw && nameRaw !== 'tool' ? nameRaw : p.name || nameRaw || 'tool';
+  return { name: String(name), args };
+}
+
 /** Structured-clone-safe plain object for Electron IPC. */
 function safeIpc(obj) {
   try {
@@ -893,7 +936,12 @@ function resolveToolCallDelta(update, state) {
     lastName: 'tool',
   };
   const rawId =
-    update?.toolCallId || update?.tool_call_id || update?.id || update?.callId || '';
+    update?.toolCallId ||
+    update?.tool_call_id ||
+    update?.callId ||
+    update?.call_id ||
+    update?.id ||
+    '';
   const idxRaw = update?.tool_index ?? update?.toolIndex;
   const idx =
     typeof idxRaw === 'number'
@@ -1088,6 +1136,7 @@ module.exports = {
   pickChunkText,
   pickToolResultText,
   slimToolArgs,
+  mergeToolMeta,
   safeIpc,
   buildInitializeParams,
   resolveToolCallDelta,

@@ -1,0 +1,14 @@
+[
+  {
+    "sessionUpdate": "tool_call",
+    "toolCallId": "t1",
+    "title": "write",
+    "rawInput": { "path": "x" }
+  },
+  {
+    "sessionUpdate": "tool_call_update",
+    "toolCallId": "t1",
+    "status": "completed",
+    "rawOutput": "wrote"
+  }
+]

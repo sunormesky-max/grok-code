@@ -11,6 +11,13 @@ side when you build a custom `grok` binary.
 |-------|----------------|
 | `0001-tool-in-progress.patch` | After tools are approved and **before** parallel dispatch, emit `tool_call_update` with `status: InProgress` so hosts can start elapsed timers for long tools. |
 
+**Keep-alive (2026-07-25):** Validated against upstream Grok Build **v0.2.111** changelog notes
+(ACP stdio hang fixes on Windows, stream transforms for host display, idle empty-frame
+reduction). Host already paints `InProgress` / ToolCallDelta without inventing tokens.
+If `git apply` fails on a newer tree, re-locate `ToolCallStatus::InProgress` near tool
+dispatch in `tool_calls.rs` (see Apply section). GrokCode host path:
+`docs/STREAM-PLAN.md` Phase 2.
+
 Upstream GitHub Issues are **disabled** on `xai-org/grok-build`. Prefer:
 
 ```text

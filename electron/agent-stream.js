@@ -2,7 +2,13 @@
  * Pure headless NDJSON + ACP session/update reducers.
  * No Electron / process — unit tests feed fixtures and assert IPC actions.
  */
-const { pickToolInfo, pickChunkText, pickToolResultText, slimToolArgs } = require('./acp-client');
+const {
+  pickToolInfo,
+  pickChunkText,
+  pickToolResultText,
+  slimToolArgs,
+  mergeToolMeta,
+} = require('./acp-client');
 
 const HEADLESS_KNOWN_TYPES = Object.freeze([
   'text',
@@ -51,7 +57,7 @@ function pickChunk(ev) {
 }
 
 /**
- * @returns {{ finalText: string, thoughtText: string, toolDepth: number, sessionId: string|null, usage: object|null, stopReason: *, numTurns: number, openTools: Set<string> }}
+ * @returns {{ finalText: string, thoughtText: string, toolDepth: number, sessionId: string|null, usage: object|null, stopReason: *, numTurns: number, openTools: Map<string, {name:string,args:object}> }}
  */
 function createStreamState(seed = {}) {
   return {
@@ -62,8 +68,16 @@ function createStreamState(seed = {}) {
     usage: null,
     stopReason: null,
     numTurns: 0,
-    openTools: new Set(),
+    openTools: new Map(),
   };
+}
+
+function noteOpenToolState(state, info) {
+  const id = String(info?.id || '');
+  if (!id) return false;
+  const was = state.openTools.has(id);
+  state.openTools.set(id, mergeToolMeta(state.openTools.get(id), info));
+  return !was;
 }
 
 /**
@@ -177,18 +191,32 @@ function reduceHeadlessEvent(state, ev) {
     type === 'function_call'
   ) {
     actions.push({ op: 'flush' });
-    state.toolDepth += 1;
+    const id = String(
+      ev.id || ev.tool_call_id || ev.call_id || `tool-${Date.now()}`
+    );
     const name = ev.name || ev.tool || ev.function?.name || 'tool';
+    const argsIn = ev.args || ev.input || ev.function?.arguments || {};
+    const isNew = noteOpenToolState(state, {
+      id,
+      name,
+      args: typeof argsIn === 'object' && argsIn ? argsIn : {},
+    });
+    if (isNew) state.toolDepth += 1;
+    const meta = state.openTools.get(id);
     actions.push({
       op: 'emit',
       channel: 'agent:tool_start',
       payload: {
-        id: ev.id || ev.tool_call_id || ev.call_id || `tool-${Date.now()}`,
-        name,
-        args: ev.args || ev.input || ev.function?.arguments || {},
+        id,
+        name: meta?.name || name,
+        args: meta?.args || slimToolArgs(argsIn),
       },
     });
-    actions.push({ op: 'phase', phase: 'tool', detail: `${name}…` });
+    actions.push({
+      op: 'phase',
+      phase: 'tool',
+      detail: `${meta?.name || name}…`,
+    });
   } else if (
     type === 'tool_result' ||
     type === 'tool_end' ||
@@ -196,14 +224,25 @@ function reduceHeadlessEvent(state, ev) {
     type === 'function_result'
   ) {
     actions.push({ op: 'flush' });
-    state.toolDepth = Math.max(0, state.toolDepth - 1);
+    const id = String(ev.id || ev.tool_call_id || ev.call_id || '');
+    const prev = id ? state.openTools.get(id) || null : null;
+    if (id && state.openTools.has(id)) {
+      state.openTools.delete(id);
+      state.toolDepth = Math.max(0, state.toolDepth - 1);
+    } else {
+      state.toolDepth = Math.max(0, state.toolDepth - 1);
+    }
+    const endMeta = mergeToolMeta(prev, {
+      name: ev.name || ev.tool || 'tool',
+      args: ev.args || {},
+    });
     actions.push({
       op: 'emit',
       channel: 'agent:tool_end',
       payload: {
-        id: ev.id || ev.tool_call_id || ev.call_id || '',
-        name: ev.name || ev.tool || 'tool',
-        args: ev.args || {},
+        id,
+        name: endMeta.name,
+        args: endMeta.args,
         result:
           typeof ev.result === 'string'
             ? ev.result
@@ -224,6 +263,25 @@ function reduceHeadlessEvent(state, ev) {
     if (typeof ev.numTurns === 'number') state.numTurns = ev.numTurns;
     if (typeof ev.text === 'string' && ev.text.length > state.finalText.length) {
       state.finalText = ev.text;
+    }
+    // Force-close open tools with retained path/name (parity with ACP)
+    if (state.openTools.size) {
+      actions.push({ op: 'flush' });
+      for (const [oid, meta] of state.openTools) {
+        actions.push({
+          op: 'emit',
+          channel: 'agent:tool_end',
+          payload: {
+            id: oid,
+            name: meta?.name || 'tool',
+            args: meta?.args || {},
+            result: '',
+            ok: true,
+          },
+        });
+      }
+      state.openTools.clear();
+      state.toolDepth = 0;
     }
     actions.push({ op: 'flush' });
     if (state.finalText) {
@@ -407,55 +465,110 @@ function reduceAcpUpdate(state, update, counters = { textChunks: 0, thoughtChunk
   } else if (kind === 'tool_call') {
     actions.push({ op: 'flush' });
     const info = pickToolInfo(update);
-    if (!state.openTools.has(info.id)) {
-      state.openTools.add(info.id);
+    if (noteOpenToolState(state, info)) {
       state.toolDepth += 1;
+      const meta = state.openTools.get(info.id);
       actions.push({
         op: 'emit',
         channel: 'agent:tool_start',
         payload: {
           id: info.id,
-          name: info.name,
-          args: slimToolArgs(info.args),
+          name: meta?.name || info.name,
+          args: meta?.args || slimToolArgs(info.args),
         },
       });
-      actions.push({ op: 'phase', phase: 'tool', detail: `${info.name}…` });
+      actions.push({
+        op: 'phase',
+        phase: 'tool',
+        detail: `${meta?.name || info.name}…`,
+      });
     }
   } else if (kind === 'tool_call_update') {
     const info = pickToolInfo(update);
     const status = String(update.status || '').toLowerCase();
+    // Mid-flight: open or re-emit progress (parity with live agent.js)
     if (
+      status === 'in_progress' ||
+      status === 'pending' ||
+      status === 'running'
+    ) {
+      actions.push({ op: 'flush' });
+      const isNew = noteOpenToolState(state, info);
+      const meta = state.openTools.get(info.id);
+      if (isNew) {
+        state.toolDepth += 1;
+        actions.push({
+          op: 'emit',
+          channel: 'agent:tool_start',
+          payload: {
+            id: info.id,
+            name: meta?.name || info.name,
+            args: meta?.args || slimToolArgs(info.args),
+            status,
+          },
+        });
+      } else {
+        const partial = pickToolResultText(update) || '';
+        actions.push({
+          op: 'emit',
+          channel: 'agent:tool_start',
+          payload: {
+            id: info.id,
+            name: meta?.name || info.name,
+            args: meta?.args || slimToolArgs(info.args),
+            status,
+            progress: true,
+            result: partial ? String(partial).slice(0, 4000) : undefined,
+          },
+        });
+      }
+      actions.push({
+        op: 'phase',
+        phase: 'tool',
+        detail:
+          status === 'in_progress'
+            ? `${meta?.name || info.name} · 执行中…`
+            : `${meta?.name || info.name}…`,
+      });
+    } else if (
       !state.openTools.has(info.id) &&
       status !== 'completed' &&
       status !== 'failed' &&
       status !== 'cancelled'
     ) {
-      state.openTools.add(info.id);
+      noteOpenToolState(state, info);
       state.toolDepth += 1;
+      const meta = state.openTools.get(info.id);
       actions.push({
         op: 'emit',
         channel: 'agent:tool_start',
         payload: {
           id: info.id,
-          name: info.name,
-          args: slimToolArgs(info.args),
+          name: meta?.name || info.name,
+          args: meta?.args || slimToolArgs(info.args),
         },
       });
-      actions.push({ op: 'phase', phase: 'tool', detail: `${info.name}…` });
+      actions.push({
+        op: 'phase',
+        phase: 'tool',
+        detail: `${meta?.name || info.name}…`,
+      });
     }
     if (status === 'completed' || status === 'failed' || status === 'cancelled') {
+      const prev = state.openTools.get(info.id) || null;
       if (state.openTools.has(info.id)) {
         state.openTools.delete(info.id);
         state.toolDepth = Math.max(0, state.toolDepth - 1);
       }
+      const endMeta = mergeToolMeta(prev, info);
       actions.push({ op: 'flush' });
       actions.push({
         op: 'emit',
         channel: 'agent:tool_end',
         payload: {
           id: info.id,
-          name: info.name,
-          args: slimToolArgs(info.args),
+          name: endMeta.name,
+          args: endMeta.args,
           result: pickToolResultText(update),
           ok: status === 'completed',
         },
@@ -482,6 +595,105 @@ function applyStreamBuffer(prev, payload) {
   return next;
 }
 
+/**
+ * Ordered thought/text IPC coalesce queue (paint-order fidelity).
+ *
+ * Host paints ~60fps: last-write-wins per channel, single timer, flush emits
+ * in **first-enqueue order** within the window (not always text-before-thought).
+ * Avoids dual independent timers that reorder thought vs text on flush.
+ *
+ * @param {(channel: string, payload: object) => void} emit  e.g. emitT
+ * @param {{ intervalMs?: number, setTimeout?: Function, clearTimeout?: Function }} [opts]
+ * @returns {{ emitText: Function, emitThought: Function, flush: Function, pending: Function }}
+ */
+function createStreamIpcCoalesce(emit, opts = {}) {
+  const intervalMs =
+    typeof opts.intervalMs === 'number' && opts.intervalMs >= 0 ? opts.intervalMs : 16;
+  const setT = typeof opts.setTimeout === 'function' ? opts.setTimeout : setTimeout;
+  const clearT = typeof opts.clearTimeout === 'function' ? opts.clearTimeout : clearTimeout;
+
+  /** @type {{ text: object|null, thought: object|null }} */
+  const pending = { text: null, thought: null };
+  /** First-seen order of channels in the current coalesce window. @type {Array<'text'|'thought'>} */
+  let order = [];
+  let timer = null;
+
+  const channelOf = (kind) => (kind === 'thought' ? 'agent:thought' : 'agent:text');
+
+  const clearTimer = () => {
+    if (timer != null) {
+      clearT(timer);
+      timer = null;
+    }
+  };
+
+  const flush = () => {
+    clearTimer();
+    const seq = order;
+    order = [];
+    for (const kind of seq) {
+      const payload = pending[kind];
+      if (payload != null) {
+        pending[kind] = null;
+        try {
+          emit(channelOf(kind), payload);
+        } catch {
+          /* never break agent on emit */
+        }
+      }
+    }
+    // Safety: pending without order entry (should not happen)
+    for (const kind of /** @type {const} */ (['text', 'thought'])) {
+      if (pending[kind] != null) {
+        const payload = pending[kind];
+        pending[kind] = null;
+        try {
+          emit(channelOf(kind), payload);
+        } catch {
+          /* ignore */
+        }
+      }
+    }
+  };
+
+  const schedule = () => {
+    if (timer != null) return;
+    timer = setT(() => {
+      timer = null;
+      flush();
+    }, intervalMs);
+  };
+
+  /**
+   * @param {'text'|'thought'} kind
+   * @param {object} payload
+   * @param {boolean} [immediate]
+   */
+  const enqueue = (kind, payload, immediate = false) => {
+    const k = kind === 'thought' ? 'thought' : 'text';
+    if (pending[k] == null) order.push(k);
+    pending[k] = payload;
+    if (immediate) {
+      flush();
+      return;
+    }
+    schedule();
+  };
+
+  return {
+    emitText: (payload, immediate = false) => enqueue('text', payload, immediate),
+    emitThought: (payload, immediate = false) => enqueue('thought', payload, immediate),
+    flush,
+    /** Test/debug: snapshot of pending state (no live timer handle leak). */
+    pending: () => ({
+      text: pending.text,
+      thought: pending.thought,
+      order: order.slice(),
+      scheduled: timer != null,
+    }),
+  };
+}
+
 module.exports = {
   HEADLESS_KNOWN_TYPES,
   isKnownHeadlessType,
@@ -493,4 +705,5 @@ module.exports = {
   reduceHeadlessNdjson,
   reduceAcpUpdate,
   applyStreamBuffer,
+  createStreamIpcCoalesce,
 };

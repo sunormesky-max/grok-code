@@ -1,0 +1,6 @@
+{"type":"status","status":"boot","detail":"starting"}
+{"type":"thought","delta":"think…"}
+{"type":"text","delta":"Hello"}
+{"type":"text","delta":" "}
+{"type":"text","delta":"world"}
+{"type":"end","sessionId":"s-text","usage":{"input_tokens":1,"output_tokens":3},"numTurns":1}

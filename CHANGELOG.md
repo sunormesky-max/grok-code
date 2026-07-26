@@ -10,6 +10,237 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ### Planned
 
 - See [ROADMAP.md](ROADMAP.md) · streaming long-horizon: [docs/STREAM-PLAN.md](docs/STREAM-PLAN.md)
+- Phase 3.2–3.3 upstream heartbeat / stock InProgress (feedback only — not host)
+- Optional: worker for multi-MB LCS; SBS hunk actions
+- Optional: wire `execution-route.reduceRouteTick` from ACP activity clock (ledger dual-bookkeep)
+
+## [1.47.3] — 2026-07-26
+
+### ACP abort-signal streamSummary
+
+- **ACP `onAbort` (signal cancel)** — attach `streamSummary` on `agent:done` + `finish`
+  (was missing; headless abort + ACP close/err-stop already attached)
+
+## [1.47.2] — 2026-07-26
+
+### ACP stop-on-error path streamSummary
+
+- **`user_stop_err_path`** — attach `streamSummary` on `agent:done` + `finish`
+  (was log-only; success stop path already attached in 1.47.0)
+
+## [1.47.1] — 2026-07-26
+
+### Headless `streamSummary` parity with ACP
+
+- **`agent:done.streamSummary` on headless** — success / user stop / forced-kill /
+  partial-nonzero paths now attach the same allowlisted counter object as ACP
+  (`transport`, TTFT, chunks, tools, `maxSilentSec`, `emptyToolsOnly`, …)
+- **Promise `finish` result** includes `streamSummary` + `transport: 'headless'`
+  so mission bar STREAM_SUMMARY lite works after `-p` / ACP-fallback turns
+- `logHeadlessStreamSummary` returns the object (was log/telemetry-only)
+
+## [1.47.0] — 2026-07-26
+
+### 流式执行路线 (stream execution route) breakthrough
+
+Multi-expert research → host-only durable path chrome (no second agent):
+
+- **`electron/execution-route.js`** — pure append-only ledger
+  (boot → think → tools → stream → silence → done/error/park)
+- **`agent:route` IPC** — goal / compact / subagent / retry / turn lifecycle
+  no longer phase-only (Live + strip keep history)
+- **Live `#execRouteStrip`** — chips `启动 → 思考 → tool → 输出 → …`
+- **Mission bar** — route text + STREAM_SUMMARY lite (TTFT / tools / silent / transport)
+- **`agent:done.streamSummary`** — allowlisted counters on success/stop
+- Unit goldens: basic timeline, long silence, park freezes silent budget
+
+## [1.46.8] — 2026-07-26
+
+### Live / Diff — BG recordFileChange Live title honesty
+
+- **`recordFileChangeForProject` Live title** — use `entry.created` (not
+  `keepBefore === ''`); baseline-miss on an existing file is 修改, not 创建
+- **BG binary Live sub** — same i18n copy as active `recordFileChange`
+- **Hunk actions gate** — also require `!baselineMiss` (belt+suspenders with
+  `beforeIncomplete`)
+
+## [1.46.7] — 2026-07-25
+
+### Live / Diff — baseline-miss honesty (shell / late fs)
+
+- **No post-write `cacheFileBefore`** when cache empty — joining only *in-flight*
+  tool_start pending; reading after the write as "before" silently dropped Diffs
+- **`baselineMiss`** flag: record still appears for shell/`fs:changed` without
+  pre-write snapshot; restore disabled; banner explains
+- **`created` honesty** — do not mark existing files as Agent-created on miss
+- Shell/`run_terminal` path extract also triggers baseline cache when possible
+- Active + BG `recordFileChange*` parity
+
+## [1.46.6] — 2026-07-25
+
+### Live / Diff — headless tool path retention
+
+- **Headless `openTools` Map** in `agent-stream` — same `mergeToolMeta` as ACP so
+  empty `tool_result`/`tool_end` frames keep start path/name for Diff capture
+- Force-close open tools on headless `end`/`done` with retained meta
+- Restore-all button hidden when only truncated-baseline files remain
+- Unit golden: headless end keeps start path
+
+## [1.46.5] — 2026-07-25
+
+### Live / Diff — restore-all + tool meta hygiene
+
+- **`restoreAllFiles`** skips `beforeIncomplete` (was writing truncated baselines;
+  multi-select restore already gated in 1.46.4)
+- Clear `task._toolFrameMeta` on new turn so reused tool ids cannot poison Diff path
+- Toast reports skipped truncated count
+
+## [1.46.4] — 2026-07-25
+
+### Live / Diff — truncation honesty recovery
+
+- **`beforeIncomplete` vs sticky `incomplete`** — after-only truncated reads no
+  longer permanently disable restore; baseline truncate is sticky, after may recover
+  on a later full read
+- Capture baseline truncate **before** after-read (do not pollute `truncatedFiles`)
+- Restore / multi-restore / hunk actions gate on `beforeIncomplete` correctly
+- Banner copy distinguishes baseline vs after truncate
+- Parity on active `recordFileChange` and BG `recordFileChangeForProject`
+
+## [1.46.3] — 2026-07-25
+
+### Live / Diff — tool_end path retention
+
+- **`mergeToolMeta`** — open-tool Map retains start `name`/`path` across ACP
+  completed frames that omit `rawInput` (and host force-close of open tools)
+- **agent.js / agent-stream** — `openTools: Map` + merged `tool_end` args so Diff
+  still gets write paths after empty end frames
+- **renderer** — `noteToolFrameMeta` / `resolveToolFrame` belt+suspenders for
+  Live Diff capture when end args empty
+- **`slimToolArgs`** also keeps `file` / `filename` / `filepath`
+- Unit goldens: mergeToolMeta; reduce end keeps start path
+
+## [1.46.2] — 2026-07-25
+
+### Live / Diff — ToolStorm baseline edge case
+
+- **`cacheWriteBaselineFromTool`** — write baselines run **before** ToolStorm
+  early-returns (2nd+ tools in the 90ms batch / open storm), for **task project**
+  not only active UI project (missed `before` on multi-write storms + BG)
+- ToolStorm `isOpen` / flush paths use the same helper (no active-only skip)
+- `writeCount` counted once on `agent:tool_start` (avoid storm double-count)
+- Hunk keep visual: `keptHunks` → `hunk-kept` / `is-kept` affordance
+
+## [1.46.1] — 2026-07-25
+
+### Live / Diff residual polish
+
+Host-only review desk fixes (no second agent):
+
+- **`recordFileChangeForProject` parity** — await race-safe baseline via
+  `cacheFileBefore(path, proj)`; `truncatedFiles` + `incomplete` match active path
+- **Background write baseline** — tool_start write caches for the **task’s project**
+  (not only the active UI project) so BG diffs keep real `before`
+- **Hunk-level keep/reject** — unified Diff ✓ keep / ↩ reject;
+  `DiffUtil.groupHunks` + `applyHunkDecisions`; reject writes disk and recomputes;
+  all-reject → restored; all-keep → reviewed + next pending
+- Unit goldens: keep-all / reject-all / reject-first / HTML action affordances
+
+## [1.46.0] — 2026-07-25
+
+### Live / Code / Diff capability breakthrough (multi-expert)
+
+Host-only review desk — no second agent loop:
+
+- **Race-safe `cacheFileBefore`** — pending Map; await before `recordFileChange`
+- **`scheduleDiffPaint`** — rAF coalesce under write storms; preserve scroll
+- **Live write clickable** — events carry `path`; click → `openReviewBridge`
+- **Word/char highlight** — paired del/add lines in unified Diff (`diff-w-*`)
+- **Binary skip** — `looksBinary` (null bytes); banner; no line ops
+- **Truncation honesty** — incomplete snapshots disable restore
+- **Diff list filter** — path / pending / reviewed / binary
+- **Accept-and-next** — after review/dismiss jump next pending
+- Unit goldens: path extract, create/delete, multi-hunk, SBS, word hl, binary
+
+## [1.45.1] — 2026-07-25
+
+### Streaming regression polish — park map teardown
+
+- **Interactive park clear on stop/cleanup** — `stop(taskId)` and ACP `cleanup()`
+  drop `interactiveParks` so fail/stop mid-permission cannot leave stale
+  “等待授权/计划审批” on the next turn’s activity clock
+- Pipeline sketch in STREAM-PLAN notes ordered coalesce helper
+
+## [1.45.0] — 2026-07-25
+
+### Streaming — ordered IPC coalesce queue (paint-order fidelity)
+
+Host-only residual from STREAM-PLAN execution board:
+
+- **`createStreamIpcCoalesce`** (`agent-stream.js`) — single 16ms timer; last-write-wins
+  per channel; **flush emits in first-enqueue order** (thought-before-text windows no
+  longer invert). Shared by ACP + headless `agent.js` paths
+- **ACP_FALLBACK STREAM_SUMMARY** before headless retry — triage sees failed ACP attempt
+  (`stopReason=ACP_FALLBACK`, `note=retry_headless`) then the headless run summary
+- Unit goldens for order / coalesce / immediate full-queue flush
+
+## [1.44.0] — 2026-07-25
+
+### Streaming breakthrough wave (multi-expert + MCP research)
+
+Research: xAI Grok Build changelog through **v0.2.111** + 3 explore experts
+(fixtures · telemetry · ACP residual). Host-only; no second agent loop.
+
+- **Interactive park clock** — permission / plan / ask wait shows honest
+  `等待授权… Ns` instead of fake “CLI 静默 / 工具执行中”
+- **Boot elapsed clock** — ACP initialize/auth/load ticks seconds before prompt
+- **tool_call_update flush** + `resolveToolCallDelta` accepts `call_id`
+- **Headless STREAM_SUMMARY** + optional Phase **5.3** `reportStreamSummary`
+  (allowlisted counters; reuses crash telemetry opt-in; no prompts/paths/keys)
+- **Phase 4.3 fixtures** — text-only, rapid chunks, snake_case tools, tools-only,
+  multi-InProgress progress re-emit (pure `agent-stream` + unit goldens)
+- **reduceAcpUpdate** mid-flight `progress: true` parity with live agent
+- Patch kit README keep-alive note vs upstream 0.2.111
+
+## [1.43.0] — 2026-07-25
+
+### Streaming Phase 4.1 / 5.2 / 3.4 — doctor + diag + silence ceilings
+
+- **Doctor** `transport_tools` check — headless transport = warn (no tool stream)
+- **Diagnostic export** includes `stream-log-tail.txt` + `stream-summaries.txt` (STREAM_SUMMARY)
+- **STREAM-PLAN §5** expected silence ceilings table (host honesty vs CLI)
+- Fix headless banner config key → `agentTransport`
+
+## [1.42.0] — 2026-07-25
+
+### Streaming Phase 1.2–1.4 + host silence / ToolCallDelta / observability
+
+Autonomous long-horizon execution (user auto-auth):
+
+- **1.2 StreamFair** — `MAX_PAINT_PER_TICK` 6 + autoScale dirty queue (cap 10); 5-task fairness golden
+- **1.3 Dual-paint** — chat + Live single path via StreamFair tick (`streamBuf` only; no extra Live schedule)
+- **1.4 Phase SR** — activity-clock ticks skip announce; polite SR when silence ≥ 5s (8s throttle)
+- **3.1 Silence UI** — last tool name in inter-stage / tool-exec clock copy
+- **2.1 ToolCallDelta** — mid-flight `result` from `arguments_delta` fragment
+- **4.2 Headless honesty** — phase banner + Live signal when ACP→headless / headless transport
+- **5.1 Open stream log** — Settings → 打开流式日志 (`%TEMP%\grokcode-stream.log`)
+
+## [1.41.0] — 2026-07-25
+
+### Streaming Phase 1.1 — host paint critical path (multi-expert board)
+
+Expert audit consensus → careful host-only fixes (no second agent loop):
+
+- **`pickToolInfo` snake_case IDs** — accept `tool_call_id` / `call_id` / `tool_name` /
+  `raw_input` so tool_start and tool_end share a stable key (parity with ToolCallDelta)
+- **`flushStreamIpc` before ToolCallDelta** tool cards — text no longer races past tool rows
+- **ACP + headless `fail()` flush** — emit pending coalesced text + ACP `STREAM_SUMMARY`
+  on error (stopReason=error)
+- **ToolCallDelta increments `toolStarts`** — metrics truth for tools-first turns
+- **Tools-only turn UX** — placeholder shows tool count; Live signal when final text empty
+- Unit tests for snake_case tool ids; multi-expert board in `docs/STREAM-PLAN.md` §8
+
+Deferred to 1.41.x: StreamFair 3+ stress, Live dual-paint, phase SR ≥5s.
 
 ## [1.40.0] — 2026-07-25
 
@@ -19,8 +250,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - ROADMAP / ARCHITECTURE / ACP audit / README link the plan
 - **STREAM_SUMMARY** line at end of each ACP run in stream log:
   `firstTokenMs`, `textChunks`, `toolStarts`, `toolInProgress`, `maxSilentSec`, …
-
-Next: Phase 1 host paint hardening (see STREAM-PLAN).
 
 ## [1.39.0] — 2026-07-25
 

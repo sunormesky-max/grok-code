@@ -28,8 +28,13 @@ Use after UI/visual changes. Prefer a **wide window (≥1600px)** and **Normal F
 
 - [ ] Live empty state: sigil + card
 - [ ] Live events: timeline rail, kind colors, hover
+- [ ] **Live write row click** opens Review bridge + Diff for that path
 - [ ] Code empty card cinematic
 - [ ] Diff empty placeholder
+- [ ] Diff list **filter** (path / pending)
+- [ ] Unified Diff **word highlight** on paired del/add lines
+- [ ] Binary / truncated banners; restore disabled when incomplete
+- [ ] Mark reviewed → jumps to next pending file
 - [ ] Diff filmstrip cards match HUD language when scrubbing
 - [ ] Review bridge chip appears when there are changes
 

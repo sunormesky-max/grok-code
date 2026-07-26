@@ -2,7 +2,7 @@ const { app, BrowserWindow, ipcMain, dialog, shell, Menu } = require('electron')
 const path = require('path');
 const fs = require('fs');
 const Store = require('electron-store');
-const { createAgent } = require('./agent');
+const { createAgent, getStreamDebugPath } = require('./agent');
 const { createTools } = require('./tools');
 const {
   resolveGrokBinary,
@@ -326,6 +326,12 @@ function openProject(dirPath) {
     getConfig: () => ({ ...getConfig(), ...(project._configOverride || {}) }),
     workspaceRoot: dirPath,
     emit: (event, payload) => emit(event, { ...payload, projectId: id }),
+    // Phase 5.3 — opt-in stream counters (same flag as crash telemetry)
+    reportStreamTelemetry: (metrics) =>
+      telemetry.reportStreamSummary(metrics, {
+        enabled: Boolean(store.get('telemetryEnabled')),
+        endpoint: store.get('telemetryEndpoint') || '',
+      }),
   });
   startWatcher(project);
   projects.set(id, project);
@@ -863,6 +869,33 @@ ipcMain.handle('doctor:export', async (e) => {
     }
   }
   return result;
+});
+
+/** Phase 5.1 — open stream diagnostic log folder / file in OS explorer */
+ipcMain.handle('doctor:openStreamLog', async () => {
+  const logPath = getStreamDebugPath();
+  try {
+    if (!fs.existsSync(logPath)) {
+      fs.writeFileSync(
+        logPath,
+        `[${new Date().toISOString()}] --- stream log created (no runs yet) ---\n`,
+        'utf8'
+      );
+    }
+    shell.showItemInFolder(logPath);
+    return { ok: true, path: logPath };
+  } catch (err) {
+    try {
+      shell.openPath(path.dirname(logPath));
+      return { ok: true, path: logPath, opened: 'dir' };
+    } catch (err2) {
+      return {
+        ok: false,
+        path: logPath,
+        error: err2?.message || err?.message || String(err),
+      };
+    }
+  }
 });
 
 ipcMain.handle('app:getVersion', () => app.getVersion());

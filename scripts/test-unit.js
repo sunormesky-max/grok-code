@@ -190,6 +190,7 @@ function testDiagnosticsShape() {
   assert.equal(typeof diag.getPatchHelp, 'function');
   assert.equal(typeof diag.resolvePatchesDir, 'function');
   assert.equal(typeof diag.checkToolInProgressPatch, 'function');
+  assert.equal(typeof diag.checkHeadlessTransport, 'function');
   assert.equal(typeof diag.detectPatchedCli, 'function');
   const tip = diag.checkToolInProgressPatch();
   assert.equal(tip.id, 'tool_in_progress');
@@ -203,6 +204,14 @@ function testDiagnosticsShape() {
   assert.equal(marked.patched, true);
   assert.equal(marked.level, 'ok');
   assert.ok(marked.reasons.some((r) => /settings/i.test(r)));
+  // Phase 4.1 transport honesty
+  const hl = diag.checkHeadlessTransport({ agentTransport: 'headless' });
+  assert.equal(hl.id, 'transport_tools');
+  assert.equal(hl.level, 'warn');
+  assert.equal(hl.noToolStream, true);
+  const autoT = diag.checkHeadlessTransport({ agentTransport: 'auto' });
+  assert.equal(autoT.level, 'ok');
+  assert.equal(autoT.noToolStream, false);
   // Env marker
   const prev = process.env.GROKCODE_PATCHED_CLI;
   process.env.GROKCODE_PATCHED_CLI = '1';
@@ -350,6 +359,45 @@ function testDiffHunks() {
   assert.equal(typeof DiffUtil.toUnifiedHtml, 'function');
   assert.equal(typeof DiffUtil.toSideBySideHtml, 'function');
   assert.equal(typeof DiffUtil.reconstructFromUnified, 'function');
+  assert.equal(typeof DiffUtil.looksBinary, 'function');
+  assert.equal(typeof DiffUtil.wordDiffHtml, 'function');
+  assert.equal(DiffUtil.looksBinary('hello'), false);
+  assert.equal(DiffUtil.looksBinary('a\u0000b'), true);
+  const wd = DiffUtil.wordDiffHtml('hello world', 'hello there');
+  assert.ok(wd.delHtml.includes('diff-w-del') || wd.addHtml.includes('diff-w-add'), 'word highlight spans');
+  // path extract matrix
+  assert.equal(DiffUtil.extractPathFromTool('write_file', { path: 'src\\app.js' }), 'src/app.js');
+  assert.equal(DiffUtil.extractPathFromTool('search_replace', { file_path: 'a/b.ts' }), 'a/b.ts');
+  assert.ok(DiffUtil.isWriteTool('search_replace'));
+  assert.ok(DiffUtil.isReadTool('read_file'));
+  // create / delete
+  const create = DiffUtil.computeLineDiff(null, 'line1\nline2');
+  assert.equal(create.created, true);
+  assert.equal(create.stats.adds, 2);
+  const del = DiffUtil.computeLineDiff('only', null);
+  assert.equal(del.deleted, true);
+  // multi-hunk
+  const mid = Array.from({ length: 10 }, (_, i) => `mid${i}`);
+  const beforeM = ['A0', 'CHANGE_ME', ...mid, 'B0', 'CHANGE_ME2', 'C0'].join('\n');
+  const afterM = ['A0', 'CHANGED', ...mid, 'B0', 'CHANGED2', 'C0'].join('\n');
+  const multi = DiffUtil.computeLineDiff(beforeM, afterM);
+  const multiHtml = DiffUtil.toUnifiedHtml(multi.ops, { context: 3 });
+  assert.ok(multiHtml.includes('data-hunk="0"') && multiHtml.includes('data-hunk="1"'), 'multi-hunk');
+  // side-by-side structure
+  const sbs = DiffUtil.toSideBySideHtml(
+    DiffUtil.computeLineDiff('a\nold\nb', 'a\nnew\nb').ops,
+    { context: 1 }
+  );
+  assert.ok(sbs.includes('diff-sbs-head') && sbs.includes('sbs-cell'), 'sbs structure');
+  // word-highlight paired del/add in unified
+  const paired = DiffUtil.toUnifiedHtml(
+    DiffUtil.computeLineDiff('const x = 1', 'const x = 2').ops,
+    { context: 0 }
+  );
+  assert.ok(
+    paired.includes('diff-w-del') || paired.includes('diff-w-add') || paired.includes('diff-row'),
+    'unified has rows (word hl optional if line rewrite)'
+  );
 
   const before = ['alpha', 'bravo', 'charlie', 'delta', 'echo'].join('\n');
   const after = ['alpha', 'bravo', 'CHARLIE', 'delta', 'echo'].join('\n');
@@ -374,6 +422,44 @@ function testDiffHunks() {
   const trunc = DiffUtil.reconstructFromUnified(text + '\n… (truncated)');
   assert.ok(trunc.ok, 'truncated reconstruct ok');
   assert.ok(trunc.truncated, 'flags truncated');
+
+  // Hunk keep/reject pure apply
+  assert.equal(typeof DiffUtil.groupHunks, 'function');
+  assert.equal(typeof DiffUtil.applyHunkDecisions, 'function');
+  const hunkBefore = ['A0', 'OLD1', ...mid, 'B0', 'OLD2', 'C0'].join('\n');
+  const hunkAfter = ['A0', 'NEW1', ...mid, 'B0', 'NEW2', 'C0'].join('\n');
+  const hunkDiff = DiffUtil.computeLineDiff(hunkBefore, hunkAfter);
+  const hunks = DiffUtil.groupHunks(hunkDiff.ops, 3);
+  assert.ok(hunks.length >= 2, 'groupHunks multi');
+  const keepAll = DiffUtil.applyHunkDecisions(
+    hunkDiff.ops,
+    hunks.map(() => 'keep'),
+    { context: 3 }
+  );
+  assert.equal(keepAll, hunkAfter, 'keep all = after');
+  const rejectAll = DiffUtil.applyHunkDecisions(
+    hunkDiff.ops,
+    hunks.map(() => 'reject'),
+    { context: 3 }
+  );
+  assert.equal(rejectAll, hunkBefore, 'reject all = before');
+  const rejectFirst = DiffUtil.applyHunkDecisions(
+    hunkDiff.ops,
+    hunks.map((_, i) => (i === 0 ? 'reject' : 'keep')),
+    { context: 3 }
+  );
+  assert.ok(rejectFirst.includes('OLD1'), 'reject first restores OLD1');
+  assert.ok(rejectFirst.includes('NEW2'), 'reject first keeps NEW2');
+  assert.ok(!rejectFirst.includes('NEW1'), 'reject first drops NEW1');
+  const withAct = DiffUtil.toUnifiedHtml(hunkDiff.ops, { context: 3, hunkActions: true });
+  assert.ok(withAct.includes('data-hunk-act="reject"'), 'hunk actions in html');
+  assert.ok(withAct.includes('diff-hunk-toggle'), 'hunk toggle button');
+  const withKept = DiffUtil.toUnifiedHtml(hunkDiff.ops, {
+    context: 3,
+    hunkActions: true,
+    keptHunks: [0],
+  });
+  assert.ok(withKept.includes('hunk-kept') && withKept.includes('is-kept'), 'kept hunk visual');
 
   console.log('ok  diff hunk + mini-diff reconstruct');
 }
@@ -585,6 +671,16 @@ function testResolveToolCallDelta() {
   assert.equal(r.name, 'write', 'name remembered');
   assert.ok(r.hintArgs.path || r.hintArgs.preview, 'path hint from fragment');
   assert.ok(r.argFrag.length > 0);
+  const callOnly = resolveToolCallDelta(
+    { call_id: 'call-only-9', name: 'grep' },
+    {
+      indexToId: new Map(),
+      names: new Map(),
+      argAccum: new Map(),
+      lastName: 'tool',
+    }
+  );
+  assert.equal(callOnly.id, 'call-only-9', 'resolveToolCallDelta accepts call_id');
   console.log('ok  ToolCallDelta index→id + arguments_delta');
 }
 
@@ -1128,11 +1224,21 @@ function testDoctorPromptProbeSkipped() {
 }
 
 function testPickChunkTextMultimodal() {
-  const { pickChunkText, pickToolInfo, slimToolArgs } = require(path.join(
+  const { pickChunkText, pickToolInfo, slimToolArgs, mergeToolMeta } = require(path.join(
     root,
     'electron',
     'acp-client.js'
   ));
+  assert.equal(typeof mergeToolMeta, 'function');
+  const m1 = mergeToolMeta(null, { name: 'write_file', args: { path: 'src/a.js', content: 'x'.repeat(500) } });
+  assert.equal(m1.name, 'write_file');
+  assert.equal(m1.args.path, 'src/a.js');
+  // completed frame often empty args / generic name — keep start path
+  const m2 = mergeToolMeta(m1, { name: 'tool', args: {} });
+  assert.equal(m2.name, 'write_file');
+  assert.equal(m2.args.path, 'src/a.js');
+  const m3 = mergeToolMeta(m1, { name: 'write_file', args: { path: 'src/b.js' } });
+  assert.equal(m3.args.path, 'src/b.js');
   assert.equal(pickChunkText({ content: 'hi' }), 'hi');
   assert.equal(pickChunkText({ content: { text: 'a' } }), 'a');
   assert.equal(
@@ -1156,7 +1262,18 @@ function testPickChunkTextMultimodal() {
   assert.equal(tool.name, 'read_file');
   const slim = slimToolArgs(tool.args);
   assert.ok(String(slim.content || '').endsWith('…') || slim.content.length <= 241);
-  console.log('ok  pickChunkText multimodal + slimToolArgs');
+  // snake_case wire (CLI / ACP often omit camelCase toolCallId)
+  const snake = pickToolInfo({
+    tool_call_id: 'tc_snake_42',
+    tool_name: 'run_terminal_command',
+    raw_input: { command: 'ls' },
+  });
+  assert.equal(snake.id, 'tc_snake_42', 'pickToolInfo must accept tool_call_id');
+  assert.equal(snake.name, 'run_terminal_command');
+  assert.equal(snake.args.command, 'ls');
+  const callId = pickToolInfo({ call_id: 'call-7', title: 'grep' });
+  assert.equal(callId.id, 'call-7', 'pickToolInfo must accept call_id');
+  console.log('ok  pickChunkText multimodal + slimToolArgs + snake_case tool ids');
 }
 
 function testIpcChannelContract() {
@@ -1197,6 +1314,7 @@ function testIpcChannelContract() {
   assert.ok(preloadSrc.includes('setSessionMode'), 'preload exposes setSessionMode');
   assert.ok(preloadSrc.includes('setSessionModel'), 'preload exposes setSessionModel');
   assert.ok(preloadSrc.includes('listModels'), 'preload exposes listModels');
+  assert.ok(preloadSrc.includes('doctorOpenStreamLog'), 'preload exposes doctorOpenStreamLog');
   assert.ok(AGENT_EVENT_CHANNELS.includes('agent:model'));
   assert.ok(AGENT_EVENT_CHANNELS.includes('agent:models'));
   assert.ok(isAllowedRendererChannel('agent:model'));
@@ -1261,6 +1379,35 @@ function testAgentStreamNdjsonFixture() {
   const endIdx = channels.indexOf('agent:tool_end');
   assert.ok(startIdx >= 0 && endIdx > startIdx, 'tool start before end');
 
+  // Headless path retention: empty tool_end args keep start path (Diff capture)
+  {
+    const { createStreamState, reduceHeadlessEvent } = require(path.join(
+      root,
+      'electron',
+      'agent-stream'
+    ));
+    let st = createStreamState();
+    const s = reduceHeadlessEvent(st, {
+      type: 'tool_call',
+      id: 'hl1',
+      name: 'write_file',
+      args: { path: 'src/hl.js', content: 'x' },
+    });
+    st = s.state;
+    const e = reduceHeadlessEvent(st, {
+      type: 'tool_result',
+      id: 'hl1',
+      // empty args on end
+      result: 'ok',
+    });
+    const endEmit = e.actions.find(
+      (a) => a.op === 'emit' && a.channel === 'agent:tool_end'
+    );
+    assert.ok(endEmit, 'headless tool_end');
+    assert.equal(endEmit.payload.args?.path, 'src/hl.js', 'headless end keeps path');
+    assert.equal(endEmit.payload.name, 'write_file');
+  }
+
   // Renderer buffer contract: prefer full text snapshot
   assert.equal(applyStreamBuffer('old', { text: 'full' }), 'full');
   assert.equal(applyStreamBuffer('old', { delta: '!' }), 'old!');
@@ -1270,11 +1417,9 @@ function testAgentStreamNdjsonFixture() {
 }
 
 function testAgentStreamAcpFixture() {
-  const { createStreamState, reduceAcpUpdate } = require(path.join(
-    root,
-    'electron',
-    'agent-stream'
-  ));
+  const { createStreamState, reduceAcpUpdate, reduceHeadlessNdjson, applyStreamBuffer } = require(
+    path.join(root, 'electron', 'agent-stream')
+  );
   const updates = JSON.parse(
     fs.readFileSync(path.join(root, 'scripts', 'fixtures', 'agent-stream-acp-updates.json'), 'utf8')
   );
@@ -1295,7 +1440,395 @@ function testAgentStreamAcpFixture() {
   assert.ok(emits.includes('agent:tool_start'));
   assert.ok(emits.includes('agent:tool_end'));
   assert.ok(emits.filter((c) => c === 'agent:text').length >= 2);
+
+  // tool_end with empty args still carries start path (Diff capture)
+  {
+    let st = createStreamState();
+    let c = { textChunks: 0, thoughtChunks: 0 };
+    const start = reduceAcpUpdate(
+      st,
+      {
+        sessionUpdate: 'tool_call',
+        toolCallId: 'tc_path_keep',
+        title: 'write_file',
+        rawInput: { path: 'src/kept.js', content: 'hello' },
+      },
+      c
+    );
+    st = start.state;
+    c = start.counters;
+    const end = reduceAcpUpdate(
+      st,
+      {
+        sessionUpdate: 'tool_call_update',
+        toolCallId: 'tc_path_keep',
+        status: 'completed',
+        // no rawInput — common ACP complete frame
+      },
+      c
+    );
+    const endEmit = end.actions.find(
+      (a) => a.op === 'emit' && a.channel === 'agent:tool_end'
+    );
+    assert.ok(endEmit, 'tool_end emitted');
+    assert.equal(endEmit.payload.args?.path, 'src/kept.js', 'end keeps start path');
+    assert.equal(endEmit.payload.name, 'write_file', 'end keeps start name');
+  }
+
   console.log('ok  ACP session/update fixture contract');
+
+  // Phase 4.3 — headless text-only (no tools)
+  const textOnly = reduceHeadlessNdjson(
+    fs.readFileSync(
+      path.join(root, 'scripts', 'fixtures', 'agent-stream-headless-text-only.ndjson'),
+      'utf8'
+    ),
+    { taskId: 'hl-text' }
+  );
+  assert.equal(textOnly.state.finalText, 'Hello world');
+  assert.equal(textOnly.state.toolDepth, 0);
+  assert.ok(!textOnly.emits.some((e) => String(e.channel).startsWith('agent:tool')));
+  assert.ok(textOnly.emits.filter((e) => e.channel === 'agent:text').length >= 3);
+
+  // Rapid chunks + buffer replay
+  const rapid = reduceHeadlessNdjson(
+    fs.readFileSync(
+      path.join(root, 'scripts', 'fixtures', 'agent-stream-headless-rapid-chunks.ndjson'),
+      'utf8'
+    ),
+    { taskId: 'hl-rapid' }
+  );
+  assert.equal(rapid.state.finalText, 'ABCDEFGHIJKLMNOPQRSTUVWXYZ');
+  assert.ok(rapid.emits.filter((e) => e.channel === 'agent:text').length >= 20);
+  let buf = '';
+  for (const e of rapid.emits.filter((e) => e.channel === 'agent:text')) {
+    buf = applyStreamBuffer(buf, e.payload);
+  }
+  assert.equal(buf, rapid.state.finalText);
+
+  // snake_case tool ids through reducer
+  function reduceAcpList(name) {
+    const list = JSON.parse(
+      fs.readFileSync(path.join(root, 'scripts', 'fixtures', name), 'utf8')
+    );
+    let st = createStreamState();
+    let c = { textChunks: 0, thoughtChunks: 0 };
+    const out = [];
+    let maxDepth = 0;
+    for (const u of list) {
+      const r = reduceAcpUpdate(st, u, c);
+      st = r.state;
+      c = r.counters;
+      if (st.toolDepth > maxDepth) maxDepth = st.toolDepth;
+      for (const a of r.actions) {
+        if (a.op === 'emit') out.push(a);
+      }
+    }
+    return { state: st, emits: out, maxDepth };
+  }
+
+  const snake = reduceAcpList('agent-stream-acp-snake-tool-ids.json');
+  const snakeStarts = snake.emits
+    .filter((a) => a.channel === 'agent:tool_start')
+    .map((a) => a.payload.id);
+  const snakeEnds = snake.emits
+    .filter((a) => a.channel === 'agent:tool_end')
+    .map((a) => a.payload.id);
+  assert.deepEqual(snakeStarts, ['tc_snake_1']);
+  assert.deepEqual(snakeEnds, ['tc_snake_1']);
+  assert.equal(snake.state.toolDepth, 0);
+
+  const toolsOnly = reduceAcpList('agent-stream-acp-tools-only.json');
+  assert.equal(toolsOnly.state.finalText, '');
+  assert.ok(toolsOnly.emits.some((a) => a.channel === 'agent:tool_end'));
+  assert.equal(toolsOnly.state.toolDepth, 0);
+
+  const multi = reduceAcpList('agent-stream-acp-multi-inprogress.json');
+  assert.ok(multi.maxDepth >= 2, 'parallel tools open depth>=2');
+  assert.equal(multi.state.toolDepth, 0);
+  assert.ok(multi.state.finalText.includes('found it'));
+  assert.ok(
+    multi.emits.some((a) => a.channel === 'agent:tool_start' && a.payload?.progress),
+    'in_progress re-emits progress'
+  );
+
+  console.log('ok  Phase 4.3 stream fixture expand (text-only/rapid/snake/tools-only/multi)');
+}
+
+/**
+ * Ordered thought/text IPC coalesce queue — paint-order fidelity (1.45.0).
+ * Single timer; flush emits in first-enqueue order; last-write-wins per channel.
+ */
+function testExecutionRouteLedger() {
+  const route = require(path.join(root, 'electron', 'execution-route.js'));
+  const {
+    reduceHeadlessEvent,
+    createStreamState,
+  } = require(path.join(root, 'electron', 'agent-stream.js'));
+
+  // create + dedupe
+  let st = route.createRouteState({ t0Ms: 0 });
+  route.appendRouteStep(st, { kind: 'boot', tMs: 0, detail: 'start' });
+  route.appendRouteStep(st, { kind: 'boot', tMs: 100, detail: 'start' });
+  assert.equal(st.steps.length, 1, 'dedupe continuous boot');
+  route.appendRouteStep(st, { kind: 'thinking', tMs: 200, detail: 't' });
+  assert.equal(st.steps.length, 2);
+
+  // mapActionToStepKind
+  assert.equal(
+    route.mapActionToStepKind({ op: 'emit', channel: 'agent:tool_start' }),
+    'tool_start'
+  );
+  assert.equal(
+    route.mapActionToStepKind({ op: 'phase', phase: 'thinking' }),
+    'thinking'
+  );
+
+  // basic timeline fixture
+  function runTimeline(name) {
+    const fix = JSON.parse(
+      fs.readFileSync(path.join(root, 'scripts', 'fixtures', name), 'utf8')
+    );
+    let stream = createStreamState();
+    let rstate = route.createRouteState({ t0Ms: fix.t0Ms || 0 });
+    for (const item of fix.timeline) {
+      const nowMs = item.atMs;
+      if (item.op === 'tick') {
+        ({ state: rstate } = route.reduceRouteTick(rstate, { nowMs }));
+      } else if (item.op === 'control') {
+        if (item.control === 'boot') {
+          ({ state: rstate } = route.routeStartBoot(rstate, {
+            nowMs,
+            detail: item.detail,
+          }));
+        } else if (item.control === 'prompt') {
+          ({ state: rstate } = route.routeStartPrompt(rstate, { nowMs }));
+        } else if (item.control === 'park') {
+          ({ state: rstate } = route.routeSetPark(rstate, {
+            nowMs,
+            label: item.label,
+            toolName: item.toolName,
+          }));
+        } else if (item.control === 'unpark') {
+          ({ state: rstate } = route.routeClearPark(rstate, { nowMs }));
+        }
+      } else if (item.op === 'event') {
+        const { actions } = reduceHeadlessEvent(stream, item.event);
+        // keep stream state in reduceHeadlessEvent (mutates)
+        ({ state: rstate } = route.reduceRouteFromActions(rstate, actions, {
+          nowMs,
+        }));
+      }
+    }
+    return {
+      route: rstate,
+      summary: route.summarizeRoute(rstate, {
+        transport: fix.transport,
+        nowMs: fix.timeline[fix.timeline.length - 1].atMs,
+      }),
+      stream,
+    };
+  }
+
+  const basic = runTimeline('execution-route-basic-timeline.json');
+  const kinds = basic.route.steps.map((s) => s.kind);
+  assert.ok(kinds.includes('boot'), 'has boot');
+  assert.ok(kinds.includes('thinking'), 'has thinking');
+  assert.ok(kinds.includes('tool_start'), 'has tool_start');
+  assert.ok(kinds.includes('tool_end'), 'has tool_end');
+  assert.ok(kinds.includes('streaming'), 'has streaming');
+  assert.ok(kinds.includes('done') || kinds.includes('streaming'), 'ended');
+  assert.equal(basic.summary.toolStarts, 1);
+  assert.equal(basic.summary.toolEnds, 1);
+  assert.ok(basic.summary.textChunks >= 1);
+
+  const silence = runTimeline('execution-route-long-silence.json');
+  assert.ok(silence.summary.maxSilentSec >= 5, 'long silence measured');
+  assert.ok(
+    silence.route.steps.some((s) => s.kind === 'silence'),
+    'silence step'
+  );
+  assert.ok(
+    silence.route.steps.some(
+      (s) => s.kind === 'silence' && /grep|等待模型继续/.test(s.detail || '')
+    ),
+    'silence mentions last tool'
+  );
+
+  // park freezes silent budget
+  let parkSt = route.createRouteState({ t0Ms: 0 });
+  route.routeStartPrompt(parkSt, { nowMs: 0 });
+  route.reduceRouteFromActions(
+    parkSt,
+    [{ op: 'emit', channel: 'agent:text', payload: { text: 'hi', delta: 'hi' } }],
+    { nowMs: 100 }
+  );
+  route.routeSetPark(parkSt, {
+    nowMs: 200,
+    label: '等待授权…',
+    toolName: 'bash',
+  });
+  route.reduceRouteTick(parkSt, { nowMs: 5200 });
+  route.reduceRouteTick(parkSt, { nowMs: 10200 });
+  assert.ok(parkSt.maxSilentSec < 2, 'park does not inflate maxSilentSec');
+  assert.ok(parkSt.steps.some((s) => s.kind === 'park'));
+
+  // strip labels
+  const strip = route.routeStripLabels(basic.route.steps, { en: false });
+  assert.ok(strip.text.includes('→') || strip.labels.length >= 2, 'strip labels');
+
+  // IPC allowlist
+  const { AGENT_EVENT_CHANNELS } = require(path.join(root, 'electron', 'ipc-channels'));
+  assert.ok(AGENT_EVENT_CHANNELS.includes('agent:route'), 'agent:route channel');
+
+  console.log('ok  execution-route ledger + silence/park goldens');
+}
+
+function testStreamIpcCoalesceOrder() {
+  const { createStreamIpcCoalesce } = require(path.join(root, 'electron', 'agent-stream'));
+
+  // Fake timers so we control flush without real 16ms waits
+  let timerId = 0;
+  /** @type {Map<number, Function>} */
+  const timers = new Map();
+  const fakeSetTimeout = (fn) => {
+    timerId += 1;
+    timers.set(timerId, fn);
+    return timerId;
+  };
+  const fakeClearTimeout = (id) => {
+    timers.delete(id);
+  };
+  const fireAll = () => {
+    const fns = [...timers.values()];
+    timers.clear();
+    for (const fn of fns) fn();
+  };
+
+  // 1) Thought first, then text — flush must preserve order (not always text-first)
+  {
+    const emits = [];
+    const q = createStreamIpcCoalesce(
+      (ch, p) => emits.push({ ch, text: p && p.text }),
+      { intervalMs: 16, setTimeout: fakeSetTimeout, clearTimeout: fakeClearTimeout }
+    );
+    q.emitThought({ text: 'T1', delta: 'T1' });
+    q.emitText({ text: 'X1', delta: 'X1' });
+    // Coalesce more into same window
+    q.emitThought({ text: 'T1T2', delta: 'T2' });
+    q.emitText({ text: 'X1X2', delta: 'X2' });
+    const snap = q.pending();
+    assert.deepEqual(snap.order, ['thought', 'text']);
+    assert.equal(snap.thought.text, 'T1T2');
+    assert.equal(snap.text.text, 'X1X2');
+    assert.equal(snap.scheduled, true);
+    fireAll();
+    assert.equal(emits.length, 2);
+    assert.equal(emits[0].ch, 'agent:thought');
+    assert.equal(emits[0].text, 'T1T2');
+    assert.equal(emits[1].ch, 'agent:text');
+    assert.equal(emits[1].text, 'X1X2');
+    assert.equal(q.pending().scheduled, false);
+  }
+
+  // 2) Text first, then thought
+  {
+    const emits = [];
+    const q = createStreamIpcCoalesce(
+      (ch, p) => emits.push(ch),
+      { intervalMs: 16, setTimeout: fakeSetTimeout, clearTimeout: fakeClearTimeout }
+    );
+    q.emitText({ text: 'a' });
+    q.emitThought({ text: 'b' });
+    q.flush();
+    assert.deepEqual(emits, ['agent:text', 'agent:thought']);
+  }
+
+  // 3) Immediate flushes whole queue in enqueue order
+  {
+    const emits = [];
+    const q = createStreamIpcCoalesce(
+      (ch, p) => emits.push({ ch, text: p.text }),
+      { intervalMs: 16, setTimeout: fakeSetTimeout, clearTimeout: fakeClearTimeout }
+    );
+    q.emitThought({ text: 'think' });
+    q.emitText({ text: 'speak' }, true); // immediate
+    assert.equal(emits.length, 2);
+    assert.equal(emits[0].ch, 'agent:thought');
+    assert.equal(emits[1].ch, 'agent:text');
+    assert.equal(q.pending().scheduled, false);
+    assert.equal(timers.size, 0);
+  }
+
+  // 4) Empty flush is a no-op
+  {
+    const emits = [];
+    const q = createStreamIpcCoalesce((ch) => emits.push(ch), {
+      intervalMs: 16,
+      setTimeout: fakeSetTimeout,
+      clearTimeout: fakeClearTimeout,
+    });
+    q.flush();
+    assert.equal(emits.length, 0);
+  }
+
+  // 5) Coalesce same channel only once in order list
+  {
+    const emits = [];
+    const q = createStreamIpcCoalesce(
+      (ch, p) => emits.push(p.text),
+      { intervalMs: 16, setTimeout: fakeSetTimeout, clearTimeout: fakeClearTimeout }
+    );
+    q.emitText({ text: '1' });
+    q.emitText({ text: '12' });
+    q.emitText({ text: '123' });
+    q.flush();
+    assert.deepEqual(emits, ['123']);
+  }
+
+  console.log('ok  stream IPC ordered coalesce queue');
+}
+
+function testTelemetryStreamSummary() {
+  const tel = require(path.join(root, 'electron', 'telemetry.js'));
+  assert.equal(typeof tel.reportStreamSummary, 'function');
+  assert.equal(tel.bucketFirstTokenMs(-1), 'none');
+  assert.equal(tel.bucketFirstTokenMs(100), 'lt_250');
+  assert.equal(tel.bucketFirstTokenMs(800), '500_1000');
+  assert.equal(tel.bucketFirstTokenMs(90000), 'ge_60s');
+  const skipped = tel.reportStreamSummary(
+    { transport: 'acp', firstTokenMs: 12, toolStarts: 1 },
+    { enabled: false }
+  );
+  assert.equal(skipped.skipped, true);
+  // enabled write to temp dir via real logDir — only when enabled
+  const prevHome = process.env.USERPROFILE || process.env.HOME;
+  const r = tel.reportStreamSummary(
+    {
+      transport: 'acp',
+      firstTokenMs: 400,
+      toolStarts: 2,
+      emptyToolsOnly: 1,
+      stopReason: 'end',
+      prompt: 'SECRET_SHOULD_NOT_APPEAR',
+      cwd: 'C:\\Users\\secret',
+    },
+    { enabled: true }
+  );
+  assert.ok(r.ok, 'stream summary written when enabled');
+  if (r.file && fs.existsSync(r.file)) {
+    const body = fs.readFileSync(r.file, 'utf8');
+    assert.ok(!body.includes('SECRET_SHOULD_NOT_APPEAR'));
+    assert.ok(!body.includes('Users\\secret'));
+    assert.ok(body.includes('stream_summary'));
+    assert.ok(body.includes('emptyToolsOnly'));
+    try {
+      fs.unlinkSync(r.file);
+    } catch {
+      /* ignore */
+    }
+  }
+  console.log('ok  telemetry stream_summary allowlist + buckets');
 }
 
 function testInboxQueue() {
@@ -1621,6 +2154,7 @@ function testStreamFairness() {
     ACTIVE_MS: 0,
     BG_MS: 100,
     MAX_PAINT_PER_TICK: 4,
+    autoScale: false,
   });
   assert.ok(
     tick0.paint.some((p) => p.id === 'active' && p.kind === 'stream'),
@@ -1634,7 +2168,14 @@ function testStreamFairness() {
     entries.map((e) =>
       e.id === 'active' ? { ...e, streamDirty: false, lastStream: 10 } : e
     ),
-    { activeId: 'active', now: 120, ACTIVE_MS: 0, BG_MS: 100, MAX_PAINT_PER_TICK: 4 }
+    {
+      activeId: 'active',
+      now: 120,
+      ACTIVE_MS: 0,
+      BG_MS: 100,
+      MAX_PAINT_PER_TICK: 4,
+      autoScale: false,
+    }
   );
   assert.ok(tickBg.paint.some((p) => p.id === 'bg1'), 'bg paints after BG_MS');
 
@@ -1646,6 +2187,55 @@ function testStreamFairness() {
     { activeId: 'a', steps: 5, stepMs: 20, ACTIVE_MS: 0, BG_MS: 40 }
   );
   assert.ok(sim.history[0].paint.some((p) => p.startsWith('a:')), 'sim active first step');
+
+  // Phase 1.2: 5 concurrent tasks — active first every tick; all eventually paint
+  const five = [
+    { id: 'active', streamDirty: true, lastStream: 0, running: true },
+    { id: 'b1', streamDirty: true, lastStream: 0, running: true },
+    { id: 'b2', streamDirty: true, lastStream: 0, running: true },
+    { id: 'b3', streamDirty: true, lastStream: 0, running: true },
+    { id: 'b4', streamDirty: true, lastStream: 0, running: true },
+  ];
+  assert.equal(sched.sortFair(five, 'active')[0].id, 'active');
+  const wave = sched.planTick(five, {
+    activeId: 'active',
+    now: 200,
+    ACTIVE_MS: 0,
+    BG_MS: 100,
+    MAX_PAINT_PER_TICK: 6,
+  });
+  assert.ok(
+    wave.paint.some((p) => p.id === 'active'),
+    '5-task wave: active paints'
+  );
+  assert.ok(wave.paint.length >= 5, 'autoScale clears full 5-task dirty wave');
+  const paintedIds = new Set(wave.paint.map((p) => p.id));
+  for (const id of ['active', 'b1', 'b2', 'b3', 'b4']) {
+    assert.ok(paintedIds.has(id), `5-task wave paints ${id}`);
+  }
+
+  // Continuous multi-task: re-dirty each step; active always first in history
+  let cont = five.map((e) => ({ ...e }));
+  let now = 0;
+  for (let step = 0; step < 8; step += 1) {
+    now += 50;
+    cont = cont.map((e) => ({ ...e, streamDirty: true }));
+    const plan = sched.planTick(cont, {
+      activeId: 'active',
+      now,
+      ACTIVE_MS: 0,
+      BG_MS: 40,
+      MAX_PAINT_PER_TICK: 6,
+    });
+    assert.equal(plan.paint[0]?.id, 'active', `step ${step}: active first`);
+    const hit = new Set(plan.paint.map((p) => p.id));
+    cont = cont.map((e) =>
+      hit.has(e.id)
+        ? { ...e, streamDirty: false, lastStream: now }
+        : e
+    );
+  }
+
   console.log('ok  stream fairness scheduler');
 }
 
@@ -1745,6 +2335,9 @@ try {
   testIpcChannelContract();
   testAgentStreamNdjsonFixture();
   testAgentStreamAcpFixture();
+  testExecutionRouteLedger();
+  testStreamIpcCoalesceOrder();
+  testTelemetryStreamSummary();
   testStreamFairness();
   testStreamGate();
   testHumanize();

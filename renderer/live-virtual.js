@@ -33,6 +33,7 @@
       box.innerHTML = list.map((ev) => rowHtml(ev, esc)).join('');
       box.scrollTop = box.scrollHeight;
       box._virt = null;
+      bindPathClicks(box);
       return true;
     }
 
@@ -80,6 +81,7 @@
     }
 
     box._virt = { state, paint };
+    bindPathClicks(box);
     // stick to bottom if was near bottom
     const nearBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 80;
     paint();
@@ -95,7 +97,13 @@
     const t = `${String(ts.getHours()).padStart(2, '0')}:${String(ts.getMinutes()).padStart(2, '0')}:${String(
       ts.getSeconds()
     ).padStart(2, '0')}`;
-    return `<div class="live-event ${esc(ev.kind || 'status')}">
+    const path = ev.path ? String(ev.path) : '';
+    const clickable =
+      path && (ev.kind === 'write' || ev.kind === 'tool')
+        ? ` data-path="${esc(path)}" role="button" tabindex="0" title="${esc(path)}"`
+        : '';
+    const pathCls = path ? ' is-path' : '';
+    return `<div class="live-event ${esc(ev.kind || 'status')}${pathCls}"${clickable}>
       <div class="t">${t}</div>
       <div class="dot"></div>
       <div class="card">
@@ -104,6 +112,31 @@
         ${ev.sub ? `<div class="sub">${esc(ev.sub)}</div>` : ''}
       </div>
     </div>`;
+  }
+
+  /** Wire Live write/tool rows → Diff review bridge (host UX breakthrough) */
+  function bindPathClicks(box) {
+    if (!box || box._livePathBound) return;
+    box._livePathBound = true;
+    box.addEventListener('click', (e) => {
+      const row = e.target?.closest?.('.live-event[data-path]');
+      if (!row) return;
+      const p = row.getAttribute('data-path');
+      if (!p) return;
+      e.preventDefault();
+      if (typeof window.openReviewBridge === 'function') {
+        window.openReviewBridge(p);
+      } else if (typeof window.switchTab === 'function') {
+        window.switchTab('diff');
+      }
+    });
+    box.addEventListener('keydown', (e) => {
+      if (e.key !== 'Enter' && e.key !== ' ') return;
+      const row = e.target?.closest?.('.live-event[data-path]');
+      if (!row) return;
+      e.preventDefault();
+      row.click();
+    });
   }
 
   /**
@@ -125,6 +158,7 @@
       return;
     }
     // non-virtual path: let caller handle, or simple append
+    bindPathClicks(box);
     const wrap = document.createElement('div');
     wrap.innerHTML = rowHtml(ev, esc);
     const row = wrap.firstElementChild;
@@ -137,6 +171,7 @@
   global.GrokLiveVirtual = {
     renderVirtualTimeline,
     appendEvent,
+    bindPathClicks,
     MAX_KEEP,
     ROW_EST,
   };

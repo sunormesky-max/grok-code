@@ -121,12 +121,33 @@ See `docs/OPENWORKER-INHERIT.md` anti-patterns before any further port.
 
 See **[docs/STREAM-PLAN.md](docs/STREAM-PLAN.md)** — full symptom matrix, metrics, phases.
 
+- [x] **Execution route UX** — durable Live strip + pure ledger + lifecycle `agent:route` (v1.47.0)  
+  → [docs/STREAM-EXEC-ROUTE.md](docs/STREAM-EXEC-ROUTE.md)
+
 - [x] **Phase 0** — Plan doc + run-end `STREAM_SUMMARY` metrics (v1.40.0)
-- [ ] **Phase 1** — Host paint path (IPC flush on tools, multi-task fairness, empty tools-only UX, phase SR)
-- [ ] **Phase 2** — Tool mid-flight host + keep InProgress patch kit rebased
-- [ ] **Phase 3** — Silence UX + upstream heartbeat / stock InProgress (feedback)
-- [ ] **Phase 4** — Headless/transport honesty banners
-- [ ] **Phase 5** — Open stream log + diagnostic export of last-run summary
+- [x] **Phase 1.1 + 1.5** — pickToolInfo IDs, ToolCallDelta flush, fail flush, tools-only UX (v1.41.0)
+- [x] **Phase 1.2–1.4** — StreamFair 5-task, dual-paint single source, phase SR ≥5s (v1.42.0)
+- [x] **Phase 2.1 host** — ToolCallDelta partial body as progress (v1.42.0); patch kit keep-alive ongoing
+- [x] **Phase 3.1 host** — Richer silence UI with last tool name (v1.42.0)
+- [ ] **Phase 3.2–3.3** — Upstream heartbeat / stock InProgress (feedback)
+- [x] **Phase 3.4** — Expected silence ceilings documented (v1.43.0)
+- [x] **Phase 4.2** — ACP→headless / headless no-tool banner (v1.42.0)
+- [x] **Phase 4.1** — Doctor stronger headless warning (v1.43.0)
+- [x] **Phase 5.1** — Settings open stream log (v1.42.0)
+- [x] **Phase 5.2** — Stream summary + log tail in diagnostic export (v1.43.0)
+- [x] **Phase 5.3** — Opt-in stream_summary counters (v1.44.0)
+- [x] **Phase 4.3** — Headless/stream fixture expand (v1.44.0)
+- [x] **Breakthrough** — Interactive park + boot clocks, headless STREAM_SUMMARY (v1.44.0)
+- [x] **Ordered IPC coalesce** — single 16ms thought/text queue, enqueue-order flush + ACP_FALLBACK STREAM_SUMMARY (v1.45.0)
+- [x] **Park teardown polish** — clear interactiveParks on stop/cleanup (v1.45.1)
+- [x] **Host stream backlog exhausted** — residual host items done; interval = regression polish only
+
+## Live / Code / Diff (host review desk)
+
+- [x] Real Diff capture + restore / multi-select / hunk nav (prior)
+- [x] **1.46.0** race-safe baseline, paint coalesce, Live→Diff click, word hl,
+  binary/truncate honesty, list filter, accept-and-next
+- [ ] Optional hunk-level keep/reject
 
 ## Now (UI / experience)
 

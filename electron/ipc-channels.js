@@ -23,6 +23,7 @@ const AGENT_EVENT_CHANNELS = Object.freeze([
   'agent:plan_approval',
   'agent:user_question',
   'agent:ext',
+  'agent:route',
 ]);
 
 const RENDERER_EVENT_CHANNELS = Object.freeze([

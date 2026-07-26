@@ -94,14 +94,18 @@ Mark the binary as patched so Doctor turns green:
 ```text
 ACP session/update  or  headless NDJSON
   → agent-stream.js reduce
-  → agent.js emit IPC
-  → StreamFair / ToolStorm / Live mirrors
+  → execution-route.js pure ledger (optional unit path)
+  → agent.js emit IPC (+ agent:route lifecycle)
+  → StreamFair / ToolStorm / Live mirrors / #execRouteStrip
 ```
 
 Upstream silence between stages is normal; host shows activity clock + phase.
 
 **Long-horizon reliability plan:** [STREAM-PLAN.md](STREAM-PLAN.md)  
 (phases 0–5: metrics → paint → InProgress → silence → transport → observability).
+
+**Execution route UX:** [STREAM-EXEC-ROUTE.md](STREAM-EXEC-ROUTE.md) — durable  
+boot→think→tools→text→done chips + STREAM_SUMMARY lite on mission bar (v1.47).
 
 ## Settings & warm ACP
 

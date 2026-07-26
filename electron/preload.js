@@ -100,6 +100,8 @@ contextBridge.exposeInMainWorld('grok', {
   /** Experimental grok-build InProgress patch help */
   doctorPatchHelp: () => ipcRenderer.invoke('doctor:patchHelp'),
   doctorOpenPatches: () => ipcRenderer.invoke('doctor:openPatches'),
+  /** Open %TEMP%/grokcode-stream.log in file manager (STREAM-PLAN Phase 5.1) */
+  doctorOpenStreamLog: () => ipcRenderer.invoke('doctor:openStreamLog'),
 
   // 外部编辑器
   openInEditor: (payload) => ipcRenderer.invoke('editor:open', payload || {}),

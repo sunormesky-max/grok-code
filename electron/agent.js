@@ -11,6 +11,7 @@ const {
   pickChunkText,
   pickToolResultText,
   slimToolArgs,
+  mergeToolMeta,
   safeIpc,
   resolveToolCallDelta,
   normalizeSessionModeId,
@@ -39,6 +40,7 @@ const {
   parseNdjsonLine,
   reduceHeadlessEvent,
   reduceNonJsonLine,
+  createStreamIpcCoalesce,
 } = require('./agent-stream');
 
 /**
@@ -151,9 +153,15 @@ function streamDebug(line, opts = {}) {
  * GrokCode multi-task agent
  * 每个 taskId 可并行跑一个 grok CLI 进程，互不抢占。
  */
-function createAgent({ getConfig, workspaceRoot, emit }) {
+function createAgent({ getConfig, workspaceRoot, emit, reportStreamTelemetry } = {}) {
   /** @type {Map<string, import('child_process').ChildProcess>} */
   const children = new Map();
+  /**
+   * Interactive parks (permission / plan / ask) — activity clock must not
+   * look like CLI silence while the host is waiting on the user.
+   * @type {Map<string, { kind: string, label: string, since: number, toolName?: string }>}
+   */
+  const interactiveParks = new Map();
   /**
    * Warm ACP sessions kept after a turn so the next prompt skips
    * initialize+session/new (~1s+ cold start). Keyed by taskId.
@@ -279,6 +287,9 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
   function stop(taskId) {
     if (taskId) {
       intentionalStops.add(String(taskId));
+      // Drop interactive park so next turn's activity clock never shows stale
+      // “等待授权/计划审批” after user stop mid-permission.
+      interactiveParks.delete(String(taskId));
       const child = children.get(taskId);
       if (child) {
         try {
@@ -301,6 +312,7 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
       disposeAcpPool(taskId, { kill: true });
       return;
     }
+    interactiveParks.clear();
     for (const [id, child] of children) {
       intentionalStops.add(String(id));
       if (child?.__acpClient) {
@@ -386,8 +398,23 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
           /forbidden|access|grok build|cli-chat-proxy|responses/i.test(blob)) ||
         (/internal error/i.test(blob) && /403|coming soon|access/i.test(blob));
       if (!noFallback && (coldFail || buildGate403)) {
+        const fallbackReason = buildGate403 ? 'acp_build_403' : 'acp_cold';
         streamDebug(
           `ACP → headless fallback (${buildGate403 ? 'build-gate-403' : 'cold'}): ${msg.slice(0, 200)}`,
+          { force: true }
+        );
+        // STREAM_SUMMARY for the failed ACP attempt so triage sees fallback
+        // before the headless retry summary (no inventing tokens).
+        streamDebug(
+          [
+            `=== STREAM_SUMMARY task=${opts.taskId || 'default'}`,
+            `transport=acp`,
+            `stopReason=ACP_FALLBACK`,
+            `fallback=${fallbackReason}`,
+            `note=retry_headless`,
+            `firstTokenMs=-1`,
+            `err=${String(msg).slice(0, 120).replace(/\s+/g, ' ')}`,
+          ].join(' '),
           { force: true }
         );
         try {
@@ -408,7 +435,7 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
           ...opts,
           sessionId: null,
           _acpFallback: true,
-          _fallbackReason: buildGate403 ? 'acp_build_403' : 'acp_cold',
+          _fallbackReason: fallbackReason,
         });
       }
       throw err;
@@ -518,8 +545,23 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
       let toolEnds = 0;
       let toolInProgressFrames = 0;
       let maxSilentSec = 0;
-      /** @type {Set<string>} */
-      const openTools = new Set();
+      /** Last tool name for inter-stage silence UI (Phase 3.1 host). */
+      let lastToolName = '';
+      /** @type {Map<string, { name: string, args: object }>} id → start meta (path survives empty end frames) */
+      const openTools = new Map();
+      const noteOpenTool = (info) => {
+        const id = String(info?.id || '');
+        if (!id) return false;
+        const was = openTools.has(id);
+        openTools.set(id, mergeToolMeta(openTools.get(id), info));
+        return !was;
+      };
+      const takeOpenTool = (id) => {
+        const key = String(id || '');
+        const meta = openTools.get(key) || null;
+        if (openTools.has(key)) openTools.delete(key);
+        return meta;
+      };
       /** Shared state for resolveToolCallDelta (index→id, arg fragments). */
       let toolDeltaState = {
         indexToId: new Map(),
@@ -540,35 +582,87 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
           `首包 ${sinceSpawn}ms`
         );
       };
-      const logStreamSummary = (extra = {}) => {
+      const buildStreamSummary = (extra = {}) => {
         const totalMs = Date.now() - t0;
         const firstMs = firstTokenAt ? firstTokenAt - t0 : -1;
+        return {
+          transport: 'acp',
+          firstTokenMs: firstMs,
+          totalMs,
+          textChunks,
+          thoughtChunks,
+          toolStarts,
+          toolEnds,
+          toolInProgress: toolInProgressFrames,
+          maxSilentSec,
+          finalTextLen: finalText.length,
+          thoughtLen: thoughtText.length,
+          openTools: openTools.size,
+          emptyToolsOnly: finalText.length === 0 && toolStarts > 0 ? 1 : 0,
+          ...extra,
+        };
+      };
+      const logStreamSummary = (extra = {}) => {
+        const sum = buildStreamSummary(extra);
         const parts = [
           `=== STREAM_SUMMARY task=${taskId}`,
-          `transport=acp`,
-          `firstTokenMs=${firstMs}`,
-          `totalMs=${totalMs}`,
-          `textChunks=${textChunks}`,
-          `thoughtChunks=${thoughtChunks}`,
-          `toolStarts=${toolStarts}`,
-          `toolEnds=${toolEnds}`,
-          `toolInProgress=${toolInProgressFrames}`,
-          `maxSilentSec=${maxSilentSec}`,
-          `finalTextLen=${finalText.length}`,
-          `thoughtLen=${thoughtText.length}`,
-          `openTools=${openTools.size}`,
+          `transport=${sum.transport}`,
+          `firstTokenMs=${sum.firstTokenMs}`,
+          `totalMs=${sum.totalMs}`,
+          `textChunks=${sum.textChunks}`,
+          `thoughtChunks=${sum.thoughtChunks}`,
+          `toolStarts=${sum.toolStarts}`,
+          `toolEnds=${sum.toolEnds}`,
+          `toolInProgress=${sum.toolInProgress}`,
+          `maxSilentSec=${sum.maxSilentSec}`,
+          `finalTextLen=${sum.finalTextLen}`,
+          `thoughtLen=${sum.thoughtLen}`,
+          `openTools=${sum.openTools}`,
         ];
         for (const [k, v] of Object.entries(extra)) {
           if (v != null && v !== '') parts.push(`${k}=${v}`);
         }
         streamDebug(parts.join(' '), { force: true });
+        // Phase 5.3 — opt-in allowlisted counters only (no prompts/paths/keys)
+        try {
+          if (typeof reportStreamTelemetry === 'function') {
+            const cfgNow = getConfig() || {};
+            if (cfgNow.telemetryEnabled) {
+              reportStreamTelemetry({
+                transport: 'acp',
+                firstTokenMs: sum.firstTokenMs,
+                toolStarts,
+                toolEnds,
+                maxSilentSec,
+                emptyToolsOnly: sum.emptyToolsOnly,
+                stopReason: extra.stopReason || 'unknown',
+                totalMs: sum.totalMs,
+                textChunks,
+                thoughtChunks,
+                code: extra.code,
+              });
+            }
+          }
+        } catch {
+          /* never break agent on telemetry */
+        }
+        return sum;
       };
 
+      /**
+       * Coalesce text/thought IPC to ~60fps with **enqueue-order** flush
+       * (single timer — thought-before-text windows no longer invert on flush).
+       */
       const STREAM_IPC_MS = 16;
-      let pendingTextPayload = null;
-      let pendingThoughtPayload = null;
-      let textIpcTimer = null;
-      let thoughtIpcTimer = null;
+      const streamIpc = createStreamIpcCoalesce(
+        (channel, payload) => emitT(channel, payload),
+        { intervalMs: STREAM_IPC_MS }
+      );
+      const emitTextStream = (payload, immediate = false) =>
+        streamIpc.emitText(payload, immediate);
+      const emitThoughtStream = (payload, immediate = false) =>
+        streamIpc.emitThought(payload, immediate);
+      const flushStreamIpc = () => streamIpc.flush();
 
       const setPhase = (phase, detail) => {
         if (phase === lastPhase && detail === lastStatusKey) return;
@@ -576,67 +670,6 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
         lastStatusKey = detail || phase;
         emitT('agent:phase', { phase, detail: detail || phase });
         emitT('agent:status', { status: phase, detail: detail || phase });
-      };
-
-      const emitTextStream = (payload, immediate = false) => {
-        pendingTextPayload = payload;
-        if (immediate) {
-          if (textIpcTimer) {
-            clearTimeout(textIpcTimer);
-            textIpcTimer = null;
-          }
-          emitT('agent:text', pendingTextPayload);
-          pendingTextPayload = null;
-          return;
-        }
-        if (textIpcTimer) return;
-        textIpcTimer = setTimeout(() => {
-          textIpcTimer = null;
-          if (pendingTextPayload) {
-            emitT('agent:text', pendingTextPayload);
-            pendingTextPayload = null;
-          }
-        }, STREAM_IPC_MS);
-      };
-
-      const emitThoughtStream = (payload, immediate = false) => {
-        pendingThoughtPayload = payload;
-        if (immediate) {
-          if (thoughtIpcTimer) {
-            clearTimeout(thoughtIpcTimer);
-            thoughtIpcTimer = null;
-          }
-          emitT('agent:thought', pendingThoughtPayload);
-          pendingThoughtPayload = null;
-          return;
-        }
-        if (thoughtIpcTimer) return;
-        thoughtIpcTimer = setTimeout(() => {
-          thoughtIpcTimer = null;
-          if (pendingThoughtPayload) {
-            emitT('agent:thought', pendingThoughtPayload);
-            pendingThoughtPayload = null;
-          }
-        }, STREAM_IPC_MS);
-      };
-
-      const flushStreamIpc = () => {
-        if (textIpcTimer) {
-          clearTimeout(textIpcTimer);
-          textIpcTimer = null;
-        }
-        if (thoughtIpcTimer) {
-          clearTimeout(thoughtIpcTimer);
-          thoughtIpcTimer = null;
-        }
-        if (pendingTextPayload) {
-          emitT('agent:text', pendingTextPayload);
-          pendingTextPayload = null;
-        }
-        if (pendingThoughtPayload) {
-          emitT('agent:thought', pendingThoughtPayload);
-          pendingThoughtPayload = null;
-        }
       };
 
       const plainUsage = (u) => {
@@ -709,19 +742,49 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
       const tokenBrief = () =>
         liveTotalTokens > 0 ? ` · ~${liveTotalTokens} tok` : '';
 
+      /** @type {'none'|'boot'|'prompt'} */
+      let clockMode = 'none';
+      let bootStartedAt = 0;
+
       /**
-       * Anti-black-box clock for the WHOLE prompt (not just pre-first-token).
-       * Upstream is silent between model spans and tool batches for seconds–minutes.
+       * Anti-black-box clock:
+       * - boot: cold initialize/auth/load elapsed (before prompt)
+       * - prompt: first-token + inter-stage silence + interactive park honesty
        */
-      const startActivityClock = () => {
+      const startActivityClock = (mode = 'prompt') => {
         clearWaitTick();
-        promptSentAt = Date.now();
-        lastActivityAt = promptSentAt;
+        clockMode = mode === 'boot' ? 'boot' : 'prompt';
+        if (clockMode === 'boot') {
+          bootStartedAt = Date.now();
+          if (!promptSentAt) promptSentAt = bootStartedAt;
+        } else {
+          promptSentAt = Date.now();
+          lastActivityAt = promptSentAt;
+        }
         waitTickTimer = setInterval(() => {
           if (settled) {
             clearWaitTick();
             return;
           }
+
+          // Interactive park: host waiting on user — not CLI silence
+          const park = interactiveParks.get(String(taskId));
+          if (park && clockMode === 'prompt') {
+            const parkSec = Math.max(0, Math.floor((Date.now() - park.since) / 1000));
+            const who = park.toolName ? ` · ${park.toolName}` : '';
+            setPhase('running', `${park.label}${who} ${parkSec}s`);
+            // Freeze activity baseline so maxSilentSec does not count user think time
+            lastActivityAt = Date.now();
+            return;
+          }
+
+          if (clockMode === 'boot') {
+            const sec = Math.max(0, Math.floor((Date.now() - bootStartedAt) / 1000));
+            const base = String(lastStatusKey || 'ACP 启动中…').replace(/\s+\d+s\s*$/, '');
+            setPhase('boot', `${base || 'ACP 启动中…'} ${sec}s`);
+            return;
+          }
+
           const silentSec = Math.max(0, Math.floor((Date.now() - lastActivityAt) / 1000));
           if (silentSec > maxSilentSec) maxSilentSec = silentSec;
           const totalSec = Math.max(0, Math.floor((Date.now() - promptSentAt) / 1000));
@@ -729,22 +792,42 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
           if (!firstTokenAt) {
             setPhase('running', `等待模型首包… ${silentSec}s${tok}`);
           } else if (toolDepth > 0) {
+            const who = lastToolName ? ` · ${lastToolName}` : '';
             setPhase(
               'tool',
-              `工具执行中 ×${toolDepth} · 已静默 ${silentSec}s · 总 ${totalSec}s${tok}`
+              `工具执行中 ×${toolDepth}${who} · 已静默 ${silentSec}s · 总 ${totalSec}s${tok}`
             );
           } else if (silentSec >= 1) {
             // Between stages: model planning next tools / next text (no session/update)
+            const last = lastToolName ? `上次 ${lastToolName} · ` : '';
             setPhase(
               'running',
-              `等待模型继续… ${silentSec}s（CLI 段间静默）· 总 ${totalSec}s${tok}`
+              `等待模型继续… ${silentSec}s（${last}CLI 段间静默）· 总 ${totalSec}s${tok}`
             );
           }
         }, 500);
       };
 
+      const setInteractivePark = (kind, label, toolName = '') => {
+        interactiveParks.set(String(taskId), {
+          kind: String(kind || 'park'),
+          label: String(label || '等待用户…'),
+          since: Date.now(),
+          toolName: String(toolName || ''),
+        });
+      };
+      const clearInteractivePark = () => {
+        if (interactiveParks.has(String(taskId))) {
+          interactiveParks.delete(String(taskId));
+          bumpActivity();
+        }
+      };
+
       const cleanup = () => {
         clearWaitTick();
+        // Teardown must clear parks — fail/stop/ACP_FALLBACK mid-permission
+        // otherwise leaves a stale entry that poisons the next prompt clock.
+        interactiveParks.delete(String(taskId));
         if (signal) signal.removeEventListener?.('abort', onAbort);
         const child = children.get(taskId);
         if (child && child.__acpClient) {
@@ -791,6 +874,21 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
         if (settled) return;
         settled = true;
         intentionalStops.delete(String(taskId));
+        // Stop accepting updates, then flush coalesced text so the last
+        // ~16ms of stream is not lost under agent:error.
+        try {
+          flushStreamIpc();
+          if (finalText) {
+            emitTextStream({ text: finalText, delta: '', partial: false }, true);
+          }
+        } catch {
+          /* ignore flush races during teardown */
+        }
+        logStreamSummary({
+          stopReason: 'error',
+          prepMs: prepMs || 0,
+          code: 1,
+        });
         cleanup();
         try {
           client?.kill?.();
@@ -914,26 +1012,29 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
             flushStreamIpc();
             bumpActivity();
             const info = pickToolInfo(update);
-            if (!openTools.has(info.id)) {
-              openTools.add(info.id);
+            if (info.name) lastToolName = String(info.name);
+            // noteOpenTool always merges path args (repeat tool_call frames)
+            if (noteOpenTool(info)) {
               toolDepth += 1;
               toolStarts += 1;
               if (textChunks === 0 && thoughtChunks === 0) noteFirstToken('tool');
+              const meta = openTools.get(info.id);
               emitT('agent:tool_start', {
                 id: info.id,
-                name: info.name,
-                args: slimToolArgs(info.args),
+                name: meta?.name || info.name,
+                args: meta?.args || slimToolArgs(info.args),
                 startedAt: Date.now(),
               });
-              setPhase('tool', `${info.name}…`);
+              setPhase('tool', `${meta?.name || info.name}…`);
               streamDebug(
-                `task=${taskId} acp tool_call name=${info.name} id=${info.id} depth=${toolDepth}`,
+                `task=${taskId} acp tool_call name=${meta?.name || info.name} id=${info.id} depth=${toolDepth}`,
                 { force: true }
               );
             }
           } else if (kind === 'tool_call_update') {
             bumpActivity();
             const info = pickToolInfo(update);
+            if (info.name) lastToolName = String(info.name);
             const status = String(update.status || '').toLowerCase();
             // in_progress / pending / running: keep tool card alive
             if (
@@ -941,38 +1042,43 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
               status === 'pending' ||
               status === 'running'
             ) {
+              // Parity with tool_call / ToolCallDelta: flush text before tool paint
+              flushStreamIpc();
               if (status === 'in_progress') toolInProgressFrames += 1;
-              if (!openTools.has(info.id)) {
-                openTools.add(info.id);
+              const isNew = noteOpenTool(info);
+              if (isNew) {
                 toolDepth += 1;
                 toolStarts += 1;
                 if (textChunks === 0 && thoughtChunks === 0) noteFirstToken('tool');
+                const meta = openTools.get(info.id);
                 emitT('agent:tool_start', {
                   id: info.id,
-                  name: info.name,
-                  args: slimToolArgs(info.args),
+                  name: meta?.name || info.name,
+                  args: meta?.args || slimToolArgs(info.args),
                   startedAt: Date.now(),
                   status,
                 });
               } else {
+                const meta = openTools.get(info.id);
                 const partial =
                   pickToolResultText(update) ||
                   pickChunkText(update.content || update.output || update) ||
                   '';
                 emitT('agent:tool_start', {
                   id: info.id,
-                  name: info.name,
-                  args: slimToolArgs(info.args),
+                  name: meta?.name || info.name,
+                  args: meta?.args || slimToolArgs(info.args),
                   status,
                   progress: true,
                   result: partial ? String(partial).slice(0, 4000) : undefined,
                 });
               }
+              const metaName = openTools.get(info.id)?.name || info.name;
               setPhase(
                 'tool',
                 status === 'in_progress'
-                  ? `${info.name} · 执行中…`
-                  : `${info.name}…`
+                  ? `${metaName} · 执行中…`
+                  : `${metaName}…`
               );
             } else if (
               !openTools.has(info.id) &&
@@ -980,28 +1086,30 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
               status !== 'failed' &&
               status !== 'cancelled'
             ) {
-              openTools.add(info.id);
+              noteOpenTool(info);
               toolDepth += 1;
               toolStarts += 1;
+              const meta = openTools.get(info.id);
               emitT('agent:tool_start', {
                 id: info.id,
-                name: info.name,
-                args: slimToolArgs(info.args),
+                name: meta?.name || info.name,
+                args: meta?.args || slimToolArgs(info.args),
                 startedAt: Date.now(),
               });
-              setPhase('tool', `${info.name}…`);
+              setPhase('tool', `${meta?.name || info.name}…`);
             }
             if (status === 'completed' || status === 'failed' || status === 'cancelled') {
-              if (openTools.has(info.id)) {
-                openTools.delete(info.id);
+              const prev = takeOpenTool(info.id);
+              if (prev) {
                 toolDepth = Math.max(0, toolDepth - 1);
               }
               toolEnds += 1;
               flushStreamIpc();
+              const endMeta = mergeToolMeta(prev, info);
               emitT('agent:tool_end', {
                 id: info.id,
-                name: info.name,
-                args: slimToolArgs(info.args),
+                name: endMeta.name,
+                args: endMeta.args,
                 result: pickToolResultText(update),
                 ok: status === 'completed',
                 endedAt: Date.now(),
@@ -1093,37 +1201,56 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
 
           if (kind === 'tool_call_delta_chunk' || kind === 'toolcalldeltachunk') {
             // Wire: first frame has id+name; later frames only tool_index+arguments_delta
+            // Flush pending text/thought first so tool cards never overtake last stream paint.
+            flushStreamIpc();
             const resolved = resolveToolCallDelta(update, toolDeltaState);
             toolDeltaState = resolved.state;
             const { id, name, idx, argFrag, hintArgs } = resolved;
             let deltaArgs = slimToolArgs(
-              update.rawInput || update.delta || update.args || update.partialArgs || {}
+              update.rawInput ||
+                update.raw_input ||
+                update.delta ||
+                update.args ||
+                update.partialArgs ||
+                {}
             );
             if (hintArgs && Object.keys(hintArgs).length) {
               deltaArgs = { ...deltaArgs, ...hintArgs };
             }
 
-            if (id && !openTools.has(id)) {
-              openTools.add(id);
-              toolDepth += 1;
-              if (textChunks === 0 && thoughtChunks === 0) noteFirstToken('tool');
-              emitT('agent:tool_start', {
-                id,
-                name: String(name),
-                args: deltaArgs,
-                startedAt: Date.now(),
-                status: 'in_progress',
-                fromDelta: true,
-              });
-            } else if (id) {
-              emitT('agent:tool_start', {
-                id,
-                name: String(name),
-                args: deltaArgs,
-                status: 'in_progress',
-                progress: true,
-                fromDelta: true,
-              });
+            if (name) lastToolName = String(name);
+            // Phase 2.1: surface arguments_delta / body fragment as mid-flight progress
+            const partialBody =
+              (argFrag && String(argFrag).slice(0, 2000)) ||
+              pickChunkText(update.content || update.output || update) ||
+              '';
+            if (id) {
+              const isNewDelta = noteOpenTool({ id, name: String(name), args: deltaArgs });
+              const meta = openTools.get(id);
+              if (isNewDelta) {
+                toolDepth += 1;
+                toolStarts += 1;
+                if (textChunks === 0 && thoughtChunks === 0) noteFirstToken('tool');
+                emitT('agent:tool_start', {
+                  id,
+                  name: meta?.name || String(name),
+                  args: meta?.args || deltaArgs,
+                  startedAt: Date.now(),
+                  status: 'in_progress',
+                  fromDelta: true,
+                  result: partialBody || undefined,
+                });
+              } else {
+                emitT('agent:tool_start', {
+                  id,
+                  name: meta?.name || String(name),
+                  args: meta?.args || deltaArgs,
+                  status: 'in_progress',
+                  progress: true,
+                  fromDelta: true,
+                  result: partialBody || undefined,
+                });
+              }
             }
             setPhase('tool', `${name}${id ? '' : ' (args)'}…`);
             streamDebug(
@@ -1190,6 +1317,12 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
               (update.status && String(update.status)) ||
               'retrying…';
             setPhase('retry', String(detail).slice(0, 160));
+            // 流式执行路线：durable step (not phase-only)
+            emitT('agent:route', {
+              kind: 'retry',
+              detail: String(detail).slice(0, 160),
+              title: 'retry',
+            });
             return;
           }
 
@@ -1198,14 +1331,18 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
             kind === 'memory_flush_started' ||
             kind === 'auto_recovery_started'
           ) {
-            setPhase(
-              'running',
-              kind.includes('compact')
-                ? '上下文压缩中…'
-                : kind.includes('recovery')
-                  ? '自动恢复中…'
-                  : 'Memory flush…'
-            );
+            const detail = kind.includes('compact')
+              ? '上下文压缩中…'
+              : kind.includes('recovery')
+                ? '自动恢复中…'
+                : 'Memory flush…';
+            setPhase('running', detail);
+            emitT('agent:route', {
+              kind: 'compact',
+              detail,
+              title: kind,
+              meta: { status: 'running', rawKind: kind },
+            });
             return;
           }
 
@@ -1216,12 +1353,17 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
             kind === 'memory_flush_completed' ||
             kind === 'auto_recovery_exhausted'
           ) {
-            setPhase(
-              kind.includes('fail') || kind.includes('exhaust') ? 'error' : 'running',
-              kind.includes('fail') || kind.includes('exhaust')
-                ? String(update.error || 'compact/recovery failed').slice(0, 120)
-                : '压缩/恢复完成，继续…'
-            );
+            const fail = kind.includes('fail') || kind.includes('exhaust');
+            const detail = fail
+              ? String(update.error || 'compact/recovery failed').slice(0, 120)
+              : '压缩/恢复完成，继续…';
+            setPhase(fail ? 'error' : 'running', detail);
+            emitT('agent:route', {
+              kind: 'compact',
+              detail,
+              title: kind,
+              meta: { status: fail ? 'fail' : 'ok', rawKind: kind },
+            });
             return;
           }
 
@@ -1229,7 +1371,16 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
             const title = update.title || update.goalTitle || 'goal';
             const progress =
               typeof update.progress === 'number' ? ` ${update.progress}%` : '';
-            setPhase('running', `目标${progress}: ${String(title).slice(0, 80)}`);
+            const detail = `目标${progress}: ${String(title).slice(0, 80)}`;
+            setPhase('running', detail);
+            emitT('agent:route', {
+              kind: 'goal',
+              detail,
+              title: String(title).slice(0, 80),
+              meta: {
+                progress: typeof update.progress === 'number' ? update.progress : undefined,
+              },
+            });
             return;
           }
 
@@ -1238,6 +1389,12 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
             if (update.usage) {
               emitT('agent:usage', { usage: plainUsage(update.usage) });
             }
+            emitT('agent:route', {
+              kind: 'signal',
+              detail: 'turn_completed',
+              title: 'turn',
+              meta: { rawKind: 'turn_completed' },
+            });
             return;
           }
 
@@ -1246,19 +1403,37 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
             kind === 'subagent_progress' ||
             kind === 'subagent_finished'
           ) {
-            setPhase(
-              'running',
+            const detail =
               kind === 'subagent_spawned'
-                ? `子代理启动…`
+                ? '子代理启动…'
                 : kind === 'subagent_finished'
                   ? '子代理完成'
-                  : '子代理运行中…'
-            );
+                  : '子代理运行中…';
+            setPhase('running', detail);
+            emitT('agent:route', {
+              kind: 'subagent',
+              detail,
+              title: kind,
+              meta: {
+                status:
+                  kind === 'subagent_finished'
+                    ? 'ok'
+                    : kind === 'subagent_spawned'
+                      ? 'running'
+                      : 'running',
+                rawKind: kind,
+              },
+            });
             return;
           }
 
           if (kind === 'task_completed') {
             setPhase('running', '后台任务完成');
+            emitT('agent:route', {
+              kind: 'signal',
+              detail: '后台任务完成',
+              title: 'task_completed',
+            });
             return;
           }
 
@@ -1302,7 +1477,14 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
             toolCallId: info.toolCallId || '',
           });
           if (info?.pending) {
+            setInteractivePark(
+              'permission',
+              '等待工具授权…',
+              info.toolName || info.toolTitle || ''
+            );
             setPhase('running', '等待工具授权…');
+          } else {
+            clearInteractivePark();
           }
         };
         // Upstream x.ai/exit_plan_mode — park until UI approve/revise/quit
@@ -1332,7 +1514,10 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
             selected: info.selected || null,
           });
           if (info?.pending) {
+            setInteractivePark('plan', '等待计划审批…');
             setPhase('running', '等待计划审批…');
+          } else {
+            clearInteractivePark();
           }
         };
         // Upstream x.ai/ask_user_question — park until UI answers
@@ -1351,7 +1536,10 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
             selected: info.selected || null,
           });
           if (info?.pending) {
+            setInteractivePark('ask', '等待用户回答…');
             setPhase('running', '等待用户回答…');
+          } else {
+            clearInteractivePark();
           }
         };
         client.onAgentRequest = (info) => {
@@ -1403,6 +1591,8 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
       );
       streamDebug(`task=${taskId} acp-args=${acpArgs.join(' ')}`, { force: true });
       setPhase('boot', reused ? 'ACP 热会话…' : 'ACP initialize…');
+      // Boot elapsed clock (Phase breakthrough) — replaced by prompt clock later
+      startActivityClock('boot');
 
       const onAbort = () => {
         intentionalStops.add(String(taskId));
@@ -1411,16 +1601,25 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
           .cancel(sid)
           .catch(() => {})
           .finally(() => {
+            // Main prompt path may already have settled via intentional stop
+            if (settled) return;
             flushStreamIpc();
             if (finalText) {
               emitTextStream({ text: finalText, delta: '', partial: false }, true);
             }
+            // Parity with headless onAbort + normal ACP stop paths
+            const streamSummary = logStreamSummary({
+              stopReason: 'user_stop_abort',
+              prepMs: prepMs || 0,
+              code: 0,
+            });
             emitT('agent:done', {
               text: finalText,
               sessionId: newSessionId,
               stopped: true,
               thought: thoughtText || undefined,
               usage,
+              streamSummary,
             });
             setPhase('stopped', '已停止');
             finish(
@@ -1432,6 +1631,7 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
                 usage,
                 thought: thoughtText || undefined,
                 transport: 'acp',
+                streamSummary,
               },
               { keepWarm: false }
             );
@@ -1559,19 +1759,19 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
           );
           // Keep ticking until prompt completes — covers first-token silence AND
           // multi-minute inter-stage gaps (tools / model planning).
-          startActivityClock();
+          startActivityClock('prompt');
 
           const result = await client.prompt(newSessionId, message);
           if (settled) return;
           clearWaitTick();
           mark('prompt_done');
 
-          // Close any tools that never got completed updates
-          for (const id of openTools) {
+          // Close any tools that never got completed updates (keep start path/name)
+          for (const [id, meta] of openTools) {
             emitT('agent:tool_end', {
               id,
-              name: 'tool',
-              args: {},
+              name: meta?.name || 'tool',
+              args: meta?.args || {},
               result: '',
               ok: true,
             });
@@ -1626,22 +1826,24 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
 
           const intentional = takeIntentionalStop(taskId) || Boolean(signal?.aborted);
           if (intentional) {
+            const streamSummary = logStreamSummary({
+              reused: reused ? 1 : 0,
+              stopReason: 'user_stop',
+              prepMs: prepMs || 0,
+              code: 0,
+            });
             emitT('agent:done', {
               text: finalText,
               sessionId: newSessionId,
               stopped: true,
               thought: thoughtText || undefined,
               usage,
+              streamSummary,
             });
             setPhase('stopped', '已停止');
-            logStreamSummary({
-              reused: reused ? 1 : 0,
-              stopReason: 'user_stop',
-              prepMs: prepMs || 0,
-              code: 0,
-            });
             finish(
               {
+                streamSummary,
                 text: finalText,
                 stopped: true,
                 sessionId: newSessionId,
@@ -1655,6 +1857,12 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
             return;
           }
 
+          const streamSummary = logStreamSummary({
+            reused: reused ? 1 : 0,
+            stopReason: stopReason || 'end',
+            prepMs: prepMs || 0,
+            code: 0,
+          });
           emitT('agent:done', {
             text: finalText,
             sessionId: newSessionId,
@@ -1662,18 +1870,13 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
             usage,
             stopReason,
             numTurns,
+            streamSummary,
           });
           setPhase('done', 'done');
           streamDebug(
             `=== RUN end task=${taskId} transport=acp reused=${reused ? 1 : 0} code=0 finalTextLen=${finalText.length} thoughtLen=${thoughtText.length} textChunks=${textChunks} thoughtChunks=${thoughtChunks} firstTokenMs=${firstTokenAt ? firstTokenAt - t0 : -1} totalMs=${Date.now() - t0} prepMs=${prepMs || 0}`,
             { force: true }
           );
-          logStreamSummary({
-            reused: reused ? 1 : 0,
-            stopReason: stopReason || 'end',
-            prepMs: prepMs || 0,
-            code: 0,
-          });
           finish({
             text: finalText,
             stopped: false,
@@ -1682,6 +1885,7 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
             taskId,
             usage,
             stopReason,
+            streamSummary,
             numTurns,
             transport: 'acp',
             acpReused: reused,
@@ -1691,16 +1895,17 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
           clearWaitTick();
           if (takeIntentionalStop(taskId) || signal?.aborted) {
             flushStreamIpc();
+            const streamSummary = logStreamSummary({
+              stopReason: 'user_stop_err_path',
+              prepMs: prepMs || 0,
+            });
             emitT('agent:done', {
               text: finalText,
               sessionId: newSessionId,
               stopped: true,
               thought: thoughtText || undefined,
               usage,
-            });
-            logStreamSummary({
-              stopReason: 'user_stop_err_path',
-              prepMs: prepMs || 0,
+              streamSummary,
             });
             finish(
               {
@@ -1711,6 +1916,7 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
                 usage,
                 thought: thoughtText || undefined,
                 transport: 'acp',
+                streamSummary,
               },
               { keepWarm: false }
             );
@@ -1774,6 +1980,34 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
         `=== RUN headless fallback task=${taskId} reason=${_fallbackReason || 'acp'}`,
         { force: true }
       );
+    }
+
+    // Phase 4.2: honest banner — headless has no tool stream (host paint only)
+    const transportMode = String(
+      process.env.GROKCODE_AGENT_TRANSPORT || cfg.agentTransport || 'auto'
+    ).toLowerCase();
+    if (_acpFallback || transportMode === 'headless') {
+      const reason = _fallbackReason || (transportMode === 'headless' ? 'headless' : 'acp');
+      emit('agent:phase', {
+        taskId,
+        phase: 'running',
+        detail:
+          reason === 'acp_build_403' || reason === 'acp_cold'
+            ? 'ACP 不可用 → headless（无工具流）'
+            : 'headless 传输（无工具卡片）',
+        transport: 'headless',
+        noToolStream: true,
+        fallbackReason: reason,
+      });
+      emit('agent:status', {
+        taskId,
+        status: 'running',
+        detail:
+          reason === 'acp_build_403' || reason === 'acp_cold'
+            ? 'ACP 不可用 → headless（无工具流）'
+            : 'headless 传输（无工具卡片）',
+        noToolStream: true,
+      });
     }
 
     // 同一 task 不允许并发叠跑；新请求先停旧的（标记 intentional，避免 4294967295 假错误）
@@ -1881,6 +2115,89 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
       let usage = null;
       let stopReason = null;
       let numTurns = 0;
+      const t0Headless = Date.now();
+      let firstTokenAtHl = 0;
+      let textChunksHl = 0;
+      let thoughtChunksHl = 0;
+      let toolStartsHl = 0;
+      let toolEndsHl = 0;
+      let toolInProgressHl = 0;
+      /** Headless has no activity clock; keep field for ACP-shaped streamSummary. */
+      let maxSilentSecHl = 0;
+      /** Assigned before stdout handlers; may be null if spawn fails early. */
+      let streamState = null;
+
+      const noteFirstTokenHl = () => {
+        if (!firstTokenAtHl) firstTokenAtHl = Date.now();
+      };
+
+      /** ACP-shaped summary object for agent:done + mission bar (transport=headless). */
+      const buildHeadlessStreamSummary = (extra = {}) => {
+        const totalMs = Date.now() - t0Headless;
+        const firstMs = firstTokenAtHl ? firstTokenAtHl - t0Headless : -1;
+        return {
+          transport: 'headless',
+          firstTokenMs: firstMs,
+          totalMs,
+          textChunks: textChunksHl,
+          thoughtChunks: thoughtChunksHl,
+          toolStarts: toolStartsHl,
+          toolEnds: toolEndsHl,
+          toolInProgress: toolInProgressHl,
+          maxSilentSec: maxSilentSecHl,
+          finalTextLen: finalText.length,
+          thoughtLen: thoughtText.length,
+          openTools: streamState?.openTools?.size || 0,
+          emptyToolsOnly: finalText.length === 0 && toolStartsHl > 0 ? 1 : 0,
+          ...extra,
+        };
+      };
+
+      const logHeadlessStreamSummary = (extra = {}) => {
+        const sum = buildHeadlessStreamSummary(extra);
+        const parts = [
+          `=== STREAM_SUMMARY task=${taskId}`,
+          `transport=${sum.transport}`,
+          `firstTokenMs=${sum.firstTokenMs}`,
+          `totalMs=${sum.totalMs}`,
+          `textChunks=${sum.textChunks}`,
+          `thoughtChunks=${sum.thoughtChunks}`,
+          `toolStarts=${sum.toolStarts}`,
+          `toolEnds=${sum.toolEnds}`,
+          `toolInProgress=${sum.toolInProgress}`,
+          `maxSilentSec=${sum.maxSilentSec}`,
+          `finalTextLen=${sum.finalTextLen}`,
+          `thoughtLen=${sum.thoughtLen}`,
+          `openTools=${sum.openTools}`,
+        ];
+        for (const [k, v] of Object.entries(extra)) {
+          if (v != null && v !== '') parts.push(`${k}=${v}`);
+        }
+        streamDebug(parts.join(' '), { force: true });
+        try {
+          if (typeof reportStreamTelemetry === 'function') {
+            const cfgNow = getConfig() || {};
+            if (cfgNow.telemetryEnabled) {
+              reportStreamTelemetry({
+                transport: 'headless',
+                firstTokenMs: sum.firstTokenMs,
+                toolStarts: toolStartsHl,
+                toolEnds: toolEndsHl,
+                maxSilentSec: maxSilentSecHl,
+                emptyToolsOnly: sum.emptyToolsOnly,
+                stopReason: extra.stopReason || 'unknown',
+                totalMs: sum.totalMs,
+                textChunks: textChunksHl,
+                thoughtChunks: thoughtChunksHl,
+                code: extra.code,
+              });
+            }
+          }
+        } catch {
+          /* ignore */
+        }
+        return sum;
+      };
 
       const cleanup = () => {
         try {
@@ -1902,76 +2219,19 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
       };
 
       /**
-       * Coalesce text/thought IPC to ~60fps.
-       * Sending full finalText on every CLI token floods Electron IPC; the
-       * renderer then processes a backlog in one turn and paints one huge dump.
+       * Coalesce text/thought IPC to ~60fps with enqueue-order flush.
+       * Same helper as ACP path — headless NDJSON can interleave thought/text.
        */
       const STREAM_IPC_MS = 16;
-      let pendingTextPayload = null;
-      let pendingThoughtPayload = null;
-      let textIpcTimer = null;
-      let thoughtIpcTimer = null;
-
-      const emitTextStream = (payload, immediate = false) => {
-        pendingTextPayload = payload;
-        if (immediate) {
-          if (textIpcTimer) {
-            clearTimeout(textIpcTimer);
-            textIpcTimer = null;
-          }
-          emitT('agent:text', pendingTextPayload);
-          pendingTextPayload = null;
-          return;
-        }
-        if (textIpcTimer) return;
-        textIpcTimer = setTimeout(() => {
-          textIpcTimer = null;
-          if (pendingTextPayload) {
-            emitT('agent:text', pendingTextPayload);
-            pendingTextPayload = null;
-          }
-        }, STREAM_IPC_MS);
-      };
-
-      const emitThoughtStream = (payload, immediate = false) => {
-        pendingThoughtPayload = payload;
-        if (immediate) {
-          if (thoughtIpcTimer) {
-            clearTimeout(thoughtIpcTimer);
-            thoughtIpcTimer = null;
-          }
-          emitT('agent:thought', pendingThoughtPayload);
-          pendingThoughtPayload = null;
-          return;
-        }
-        if (thoughtIpcTimer) return;
-        thoughtIpcTimer = setTimeout(() => {
-          thoughtIpcTimer = null;
-          if (pendingThoughtPayload) {
-            emitT('agent:thought', pendingThoughtPayload);
-            pendingThoughtPayload = null;
-          }
-        }, STREAM_IPC_MS);
-      };
-
-      const flushStreamIpc = () => {
-        if (textIpcTimer) {
-          clearTimeout(textIpcTimer);
-          textIpcTimer = null;
-        }
-        if (thoughtIpcTimer) {
-          clearTimeout(thoughtIpcTimer);
-          thoughtIpcTimer = null;
-        }
-        if (pendingTextPayload) {
-          emitT('agent:text', pendingTextPayload);
-          pendingTextPayload = null;
-        }
-        if (pendingThoughtPayload) {
-          emitT('agent:thought', pendingThoughtPayload);
-          pendingThoughtPayload = null;
-        }
-      };
+      const streamIpcHl = createStreamIpcCoalesce(
+        (channel, payload) => emitT(channel, payload),
+        { intervalMs: STREAM_IPC_MS }
+      );
+      const emitTextStream = (payload, immediate = false) =>
+        streamIpcHl.emitText(payload, immediate);
+      const emitThoughtStream = (payload, immediate = false) =>
+        streamIpcHl.emitThought(payload, immediate);
+      const flushStreamIpc = () => streamIpcHl.flush();
 
       const finish = (result) => {
         if (settled) return;
@@ -1985,6 +2245,19 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
         if (settled) return;
         settled = true;
         intentionalStops.delete(String(taskId));
+        try {
+          flushStreamIpc();
+          if (finalText) {
+            emitTextStream({ text: finalText, delta: '', partial: false }, true);
+          }
+        } catch {
+          /* ignore */
+        }
+        try {
+          logHeadlessStreamSummary({ stopReason: 'error', code: 1 });
+        } catch {
+          /* ignore */
+        }
         cleanup();
         const msg = err.message || String(err);
         if (isResumeError(msg)) {
@@ -2017,12 +2290,17 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
         if (finalText) {
           emitTextStream({ text: finalText, delta: '', partial: false }, true);
         }
+        const streamSummary = logHeadlessStreamSummary({
+          stopReason: 'user_stop',
+          code: 0,
+        });
         emitT('agent:done', {
           text: finalText,
           sessionId: newSessionId,
           stopped: true,
           thought: thoughtText || undefined,
           usage,
+          streamSummary,
         });
         setPhase('stopped', '已停止');
         finish({
@@ -2032,6 +2310,8 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
           taskId,
           usage,
           thought: thoughtText || undefined,
+          streamSummary,
+          transport: 'headless',
         });
       };
 
@@ -2078,7 +2358,7 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
       }
 
       /** Pure reducer state (agent-stream.js) — mirrors finalText/thoughtText locals. */
-      const streamState = createStreamState({ sessionId: newSessionId });
+      streamState = createStreamState({ sessionId: newSessionId });
 
       const applyStreamActions = (actions) => {
         for (const a of actions) {
@@ -2088,10 +2368,23 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
             setPhase(a.phase, a.detail);
           } else if (a.op === 'emit') {
             if (a.channel === 'agent:text') {
+              textChunksHl += 1;
+              noteFirstTokenHl();
               emitTextStream(a.payload, Boolean(a.immediate));
             } else if (a.channel === 'agent:thought') {
+              thoughtChunksHl += 1;
+              noteFirstTokenHl();
               emitThoughtStream(a.payload, Boolean(a.immediate));
             } else {
+              if (a.channel === 'agent:tool_start') {
+                if (a.payload?.progress) {
+                  toolInProgressHl += 1;
+                } else {
+                  toolStartsHl += 1;
+                  noteFirstTokenHl();
+                }
+              }
+              if (a.channel === 'agent:tool_end') toolEndsHl += 1;
               emitT(a.channel, a.payload);
             }
           }
@@ -2222,12 +2515,17 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
           if (finalText) {
             emitTextStream({ text: finalText, delta: '', partial: false }, true);
           }
+          const streamSummary = logHeadlessStreamSummary({
+            stopReason: 'user_stop',
+            code: 0,
+          });
           emitT('agent:done', {
             text: finalText,
             sessionId: newSessionId,
             stopped: true,
             thought: thoughtText || undefined,
             usage,
+            streamSummary,
           });
           setPhase('stopped', '已停止');
           finish({
@@ -2237,6 +2535,8 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
             taskId,
             usage,
             thought: thoughtText || undefined,
+            streamSummary,
+            transport: 'headless',
           });
           return;
         }
@@ -2296,6 +2596,10 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
           // Partial output after unexpected kill: treat as interrupted stop (keep text)
           if (isForcedKillExit(code)) {
             flushStreamIpc();
+            const streamSummary = logHeadlessStreamSummary({
+              stopReason: 'forced_kill',
+              code: exitCode,
+            });
             emitT('agent:done', {
               text: finalText,
               sessionId: newSessionId,
@@ -2303,6 +2607,7 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
               warning: errMsg,
               usage,
               thought: thoughtText || undefined,
+              streamSummary,
             });
             finish({
               text: finalText,
@@ -2313,31 +2618,42 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
               taskId,
               usage,
               thought: thoughtText || undefined,
+              streamSummary,
+              transport: 'headless',
             });
             return;
           }
           flushStreamIpc();
-          emitT('agent:done', {
-            text: finalText,
-            sessionId: newSessionId,
-            code: exitCode,
-            warning: errMsg,
-            usage,
-            stopReason,
-            numTurns,
-            thought: thoughtText || undefined,
-          });
-          finish({
-            text: finalText,
-            stopped: false,
-            sessionId: newSessionId,
-            code: exitCode,
-            warning: errMsg,
-            taskId,
-            usage,
-            stopReason,
-            numTurns,
-          });
+          {
+            const streamSummary = logHeadlessStreamSummary({
+              stopReason: stopReason || 'exit_nonzero',
+              code: exitCode,
+            });
+            emitT('agent:done', {
+              text: finalText,
+              sessionId: newSessionId,
+              code: exitCode,
+              warning: errMsg,
+              usage,
+              stopReason,
+              numTurns,
+              thought: thoughtText || undefined,
+              streamSummary,
+            });
+            finish({
+              text: finalText,
+              stopped: false,
+              sessionId: newSessionId,
+              code: exitCode,
+              warning: errMsg,
+              taskId,
+              usage,
+              stopReason,
+              numTurns,
+              streamSummary,
+              transport: 'headless',
+            });
+          }
           return;
         }
 
@@ -2345,24 +2661,33 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
         if (finalText) {
           emitTextStream({ text: finalText, delta: '', partial: false }, true);
         }
-        emitT('agent:done', {
-          text: finalText,
-          sessionId: newSessionId,
-          thought: thoughtText || undefined,
-          usage,
-          stopReason,
-          numTurns,
-        });
-        finish({
-          text: finalText,
-          stopped: false,
-          sessionId: newSessionId,
-          thought: thoughtText || undefined,
-          taskId,
-          usage,
-          stopReason,
-          numTurns,
-        });
+        {
+          const streamSummary = logHeadlessStreamSummary({
+            stopReason: stopReason || 'end',
+            code: 0,
+          });
+          emitT('agent:done', {
+            text: finalText,
+            sessionId: newSessionId,
+            thought: thoughtText || undefined,
+            usage,
+            stopReason,
+            numTurns,
+            streamSummary,
+          });
+          finish({
+            text: finalText,
+            stopped: false,
+            sessionId: newSessionId,
+            thought: thoughtText || undefined,
+            taskId,
+            usage,
+            stopReason,
+            numTurns,
+            streamSummary,
+            transport: 'headless',
+          });
+        }
       });
     });
   }
@@ -2555,6 +2880,7 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
     if (!c || typeof c.resolveInteractive !== 'function') {
       return { ok: false, error: 'no active ACP client for task' };
     }
+    interactiveParks.delete(String(taskId));
     const tier = String(body.execTier || body.exec_tier || '').toLowerCase();
     if (tier === 'yolo' || tier === 'auto') {
       c.autoApprove = true;
@@ -2588,6 +2914,7 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
     if (!c || typeof c.resolveInteractive !== 'function') {
       return { ok: false, error: 'no active ACP client for task' };
     }
+    interactiveParks.delete(String(taskId));
     const r = c.resolveInteractive(requestId, body || { cancelled: true });
     streamDebug(
       `task=${taskId} permission reply req=${requestId} outcome=${r.outcome || '?'} sel=${r.selected || '-'} remembered=${r.remembered ? 1 : 0} ok=${r.ok ? 1 : 0}`,
@@ -2610,6 +2937,7 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
     if (!c || typeof c.resolveInteractive !== 'function') {
       return { ok: false, error: 'no active ACP client for task' };
     }
+    interactiveParks.delete(String(taskId));
     const body =
       result && typeof result === 'object' ? { ...result } : { outcome: 'cancelled' };
     if (!body.outcome) body.outcome = 'cancelled';
@@ -2637,4 +2965,8 @@ function createAgent({ getConfig, workspaceRoot, emit }) {
   };
 }
 
-module.exports = { createAgent, humanizeAgentError };
+function getStreamDebugPath() {
+  return STREAM_DEBUG_PATH;
+}
+
+module.exports = { createAgent, humanizeAgentError, getStreamDebugPath, STREAM_DEBUG_PATH };

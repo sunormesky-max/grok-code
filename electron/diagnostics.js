@@ -456,6 +456,55 @@ function detectPatchedCli(bin, cfg = {}) {
 }
 
 /**
+ * Phase 4.1 — stronger honesty when transport is headless (no ACP tool cards).
+ */
+function checkHeadlessTransport(cfg = {}) {
+  const t = String(
+    process.env.GROKCODE_AGENT_TRANSPORT || cfg.agentTransport || 'auto'
+  ).toLowerCase();
+  if (t === 'headless' || t === 'streaming-json') {
+    return {
+      id: 'transport_tools',
+      name: '传输与工具流',
+      ok: true,
+      level: 'warn',
+      detail: [
+        `当前 agentTransport=${t}：headless NDJSON 路径，主进程不会收到 ACP tool_call。`,
+        '工具卡片 / ToolStorm / 授权弹窗均不可用 — 仅有文本流。',
+        '需要完整工具 UI 时：设置 → Agent transport 选 auto 或 acp。',
+        '若 auto 回退到 headless（Build 403），Live 会显示「无工具流」横幅。',
+      ].join('\n'),
+      transport: t,
+      noToolStream: true,
+      fix: '设置 agentTransport 为 auto 或 acp，并确认 grok agent stdio 可用',
+    };
+  }
+  if (t === 'acp') {
+    return {
+      id: 'transport_tools',
+      name: '传输与工具流',
+      ok: true,
+      level: 'ok',
+      detail: 'agentTransport=acp：强制 ACP stdio（有工具流；失败时不自动 headless 回退视 run 逻辑而定）',
+      transport: t,
+      noToolStream: false,
+      fix: null,
+    };
+  }
+  return {
+    id: 'transport_tools',
+    name: '传输与工具流',
+    ok: true,
+    level: 'ok',
+    detail:
+      'agentTransport=auto：优先 ACP（工具流），Build 门禁 403 / 冷启动失败时回退 headless（无工具卡片，有 Live 横幅）',
+    transport: t || 'auto',
+    noToolStream: false,
+    fix: null,
+  };
+}
+
+/**
  * Informational: stock CLI tools are Pending→Completed; mid-flight needs patch.
  * Becomes level=ok when detectPatchedCli says patched.
  */
@@ -581,6 +630,11 @@ function runDoctor(cfg = {}, opts = {}) {
   checks.push(checkAuth(bin, cfg.apiKey));
   checks.push(checkGrokAuthFile());
   checks.push(checkBuildGateLog());
+  checks.push(
+    checkHeadlessTransport({
+      agentTransport: cfg.agentTransport,
+    })
+  );
   const wantProbe =
     opts.probePrompt === true ||
     process.env.GROKCODE_DOCTOR_PROBE === '1' ||
@@ -701,6 +755,52 @@ function exportDiagnostics(cfg = {}, extra = {}) {
     /* ignore */
   }
 
+  // Phase 5.2 — attach stream log tail + last STREAM_SUMMARY lines
+  let streamLogMeta = { path: null, copied: false, summaries: 0 };
+  try {
+    let streamPath = null;
+    try {
+      streamPath = require('./agent').getStreamDebugPath();
+    } catch {
+      streamPath = path.join(os.tmpdir(), 'grokcode-stream.log');
+    }
+    streamLogMeta.path = streamPath;
+    if (streamPath && fs.existsSync(streamPath)) {
+      const raw = fs.readFileSync(streamPath, 'utf8');
+      const lines = raw.split(/\r?\n/);
+      const tail = lines.slice(-400).join('\n');
+      fs.writeFileSync(path.join(dir, 'stream-log-tail.txt'), tail, 'utf8');
+      const summaries = lines.filter((l) => /STREAM_SUMMARY/.test(l)).slice(-20);
+      fs.writeFileSync(
+        path.join(dir, 'stream-summaries.txt'),
+        summaries.length
+          ? summaries.join('\n') + '\n'
+          : '(no STREAM_SUMMARY lines yet — run an ACP turn first)\n',
+        'utf8'
+      );
+      streamLogMeta.copied = true;
+      streamLogMeta.summaries = summaries.length;
+      report.streamLog = streamLogMeta;
+      fs.writeFileSync(reportFile, JSON.stringify(report, null, 2), 'utf8');
+    } else {
+      fs.writeFileSync(
+        path.join(dir, 'stream-log-tail.txt'),
+        `(stream log missing)\nexpected: ${streamPath || '%TEMP%/grokcode-stream.log'}\n`,
+        'utf8'
+      );
+    }
+  } catch (err) {
+    try {
+      fs.writeFileSync(
+        path.join(dir, 'stream-log-tail.txt'),
+        `(failed to copy stream log: ${err.message || err})\n`,
+        'utf8'
+      );
+    } catch {
+      /* ignore */
+    }
+  }
+
   // 写 README
   fs.writeFileSync(
     path.join(dir, 'README.txt'),
@@ -711,10 +811,16 @@ function exportDiagnostics(cfg = {}, extra = {}) {
       doctor.summary,
       '',
       'Files:',
-      '  report.json          — full doctor + env (no secrets)',
-      '  sessions-index.json  — session index if present',
-      '  patch-README.md      — optional: how to apply InProgress CLI patch',
-      '  patch-FEEDBACK.md    — optional: paste into grok /feedback',
+      '  report.json           — full doctor + env (no secrets)',
+      '  sessions-index.json   — session index if present',
+      '  stream-log-tail.txt   — last ~400 lines of grokcode-stream.log',
+      '  stream-summaries.txt  — last STREAM_SUMMARY lines (triage host vs CLI)',
+      '  patch-README.md       — optional: how to apply InProgress CLI patch',
+      '  patch-FEEDBACK.md     — optional: paste into grok /feedback',
+      '',
+      'Streaming triage: see docs/STREAM-PLAN.md',
+      '  - STREAM_SUMMARY present, UI frozen → host paint',
+      '  - no session/update for minutes → CLI silence',
       '',
       'Long-tool mid-flight progress needs a custom grok binary +',
       'patches/grok-build/0001-tool-in-progress.patch (see patch-README.md).',
@@ -725,7 +831,7 @@ function exportDiagnostics(cfg = {}, extra = {}) {
     'utf8'
   );
 
-  return { ok: true, dir, file: reportFile };
+  return { ok: true, dir, file: reportFile, streamLog: streamLogMeta };
 }
 
 module.exports = {
@@ -735,5 +841,6 @@ module.exports = {
   resolvePatchesDir,
   getPatchHelp,
   checkToolInProgressPatch,
+  checkHeadlessTransport,
   detectPatchedCli,
 };

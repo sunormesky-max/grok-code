@@ -1,0 +1,23 @@
+{
+  "name": "inter-stage-silence-after-tool",
+  "transport": "headless",
+  "t0Ms": 0,
+  "timeline": [
+    { "atMs": 0, "op": "control", "control": "prompt" },
+    {
+      "atMs": 100,
+      "op": "event",
+      "event": { "type": "tool_start", "id": "a", "name": "grep", "args": { "q": "x" } }
+    },
+    {
+      "atMs": 200,
+      "op": "event",
+      "event": { "type": "tool_end", "id": "a", "name": "grep", "result": "0", "ok": true }
+    },
+    { "atMs": 1200, "op": "tick" },
+    { "atMs": 5200, "op": "tick" },
+    { "atMs": 10200, "op": "tick" },
+    { "atMs": 11000, "op": "event", "event": { "type": "text", "delta": "next" } },
+    { "atMs": 11100, "op": "event", "event": { "type": "end" } }
+  ]
+}

@@ -123,17 +123,73 @@
     };
   }
 
-  function toUnifiedHtml(ops, { context = 3, maxRows = 800, collapsed = null, blame = null } = {}) {
-    // 只展示有变更的上下文窗口
-    const show = new Array(ops.length).fill(false);
-    for (let i = 0; i < ops.length; i++) {
-      if (ops[i].type !== 'same') {
-        for (let k = Math.max(0, i - context); k <= Math.min(ops.length - 1, i + context); k++) {
+  /**
+   * Group ops into context-windowed change hunks (same boundaries as unified view).
+   * @returns {{ start: number, indices: number[] }[]}
+   */
+  function groupHunks(ops, context = 3) {
+    const list = Array.isArray(ops) ? ops : [];
+    const show = new Array(list.length).fill(false);
+    for (let i = 0; i < list.length; i++) {
+      if (list[i].type !== 'same') {
+        for (let k = Math.max(0, i - context); k <= Math.min(list.length - 1, i + context); k++) {
           show[k] = true;
         }
       }
     }
+    const hunks = [];
+    let cur = null;
+    for (let i = 0; i < list.length; i++) {
+      if (!show[i]) {
+        cur = null;
+        continue;
+      }
+      if (!cur) {
+        cur = { start: i, indices: [] };
+        hunks.push(cur);
+      }
+      cur.indices.push(i);
+    }
+    return hunks;
+  }
 
+  /**
+   * Reconstruct file text from line ops with per-hunk keep/reject.
+   * decisions[hi] = 'keep' | 'reject' (default keep). Disk already has "after";
+   * reject reverts that hunk's dels/adds toward before.
+   */
+  function applyHunkDecisions(ops, decisions, { context = 3 } = {}) {
+    const list = Array.isArray(ops) ? ops : [];
+    const hunks = groupHunks(list, context);
+    const opDecision = new Array(list.length).fill('keep');
+    for (let hi = 0; hi < hunks.length; hi++) {
+      const d = decisions && decisions[hi] === 'reject' ? 'reject' : 'keep';
+      for (const i of hunks[hi].indices) opDecision[i] = d;
+    }
+    const lines = [];
+    for (let i = 0; i < list.length; i++) {
+      const o = list[i];
+      if (o.type === 'same') lines.push(o.text);
+      else if (o.type === 'del') {
+        if (opDecision[i] === 'reject') lines.push(o.text);
+      } else if (o.type === 'add') {
+        if (opDecision[i] === 'keep') lines.push(o.text);
+      }
+    }
+    return lines.join('\n');
+  }
+
+  function toUnifiedHtml(
+    ops,
+    {
+      context = 3,
+      maxRows = 800,
+      collapsed = null,
+      blame = null,
+      hunkActions = false,
+      keptHunks = null,
+    } = {}
+  ) {
     // Pre-compute line numbers for each op index
     const lineAAt = new Array(ops.length);
     const lineBAt = new Array(ops.length);
@@ -157,20 +213,7 @@
       }
     }
 
-    // Group contiguous shown ops into hunks
-    const hunks = [];
-    let cur = null;
-    for (let i = 0; i < ops.length; i++) {
-      if (!show[i]) {
-        cur = null;
-        continue;
-      }
-      if (!cur) {
-        cur = { start: i, indices: [] };
-        hunks.push(cur);
-      }
-      cur.indices.push(i);
-    }
+    const hunks = groupHunks(ops, context);
 
     const collapsedSet =
       collapsed instanceof Set
@@ -198,21 +241,58 @@
       }
       const isCollapsed = collapsedSet.has(hi);
       const headLabel = `@@ -${firstA || 0} +${firstB || 0} @@  +${adds} −${dels}`;
-      html += `<div class="diff-hunk${isCollapsed ? ' collapsed' : ''}" data-hunk="${hi}">
-        <button type="button" class="diff-hunk-head" data-hunk="${hi}" aria-expanded="${isCollapsed ? 'false' : 'true'}">
-          <span class="dh-chev">${isCollapsed ? '▸' : '▾'}</span>
-          <span class="dh-label">${escapeHtml(headLabel)}</span>
-          <span class="dh-meta"><span class="a">+${adds}</span> <span class="d">−${dels}</span></span>
-        </button>
+      const keptSet =
+        keptHunks instanceof Set
+          ? keptHunks
+          : Array.isArray(keptHunks)
+            ? new Set(keptHunks)
+            : null;
+      const isKept = keptSet ? keptSet.has(hi) : false;
+      const act =
+        hunkActions && (adds > 0 || dels > 0)
+          ? `<span class="dh-actions" role="group" aria-label="hunk actions">
+              <button type="button" class="dh-act keep${isKept ? ' is-kept' : ''}" data-hunk-act="keep" data-hunk="${hi}" title="Keep hunk"${isKept ? ' aria-pressed="true"' : ''}>✓</button>
+              <button type="button" class="dh-act reject" data-hunk-act="reject" data-hunk="${hi}" title="Reject hunk">↩</button>
+            </span>`
+          : '';
+      html += `<div class="diff-hunk${isCollapsed ? ' collapsed' : ''}${isKept ? ' hunk-kept' : ''}" data-hunk="${hi}">
+        <div class="diff-hunk-head">
+          <button type="button" class="diff-hunk-toggle" data-hunk="${hi}" aria-expanded="${isCollapsed ? 'false' : 'true'}">
+            <span class="dh-chev">${isCollapsed ? '▸' : '▾'}</span>
+            <span class="dh-label">${escapeHtml(headLabel)}</span>
+            <span class="dh-meta"><span class="a">+${adds}</span> <span class="d">−${dels}</span></span>
+          </button>
+          ${act}
+        </div>
         <div class="diff-hunk-body"${isCollapsed ? ' hidden' : ''}>`;
 
       if (!isCollapsed) {
-        for (const i of h.indices) {
+        const idxs = h.indices;
+        for (let ii = 0; ii < idxs.length; ii++) {
           if (rows >= maxRows) {
             truncated = true;
             break;
           }
+          const i = idxs[ii];
           const o = ops[i];
+          // Intra-line word highlight when del is immediately followed by add
+          const nextI = idxs[ii + 1];
+          const nextO = nextI != null ? ops[nextI] : null;
+          if (o.type === 'del' && nextO && nextO.type === 'add') {
+            const wd = wordDiffHtml(o.text, nextO.text);
+            const bd = blameAttrs(blame, 'del');
+            const ba = blameAttrs(blame, 'add');
+            html += `<div class="diff-row del${bd.cls}"${bd.attrs}><span class="ln">${lineAAt[i]}</span><span class="sign">-</span><span class="tx">${wd.delHtml}</span></div>`;
+            rows++;
+            if (rows >= maxRows) {
+              truncated = true;
+              break;
+            }
+            html += `<div class="diff-row add${ba.cls}"${ba.attrs}><span class="ln">${lineBAt[nextI]}</span><span class="sign">+</span><span class="tx">${wd.addHtml}</span></div>`;
+            rows++;
+            ii += 1; // skip paired add
+            continue;
+          }
           const text = escapeHtml(o.text);
           if (o.type === 'same') {
             html += `<div class="diff-row same"><span class="ln">${lineAAt[i]}</span><span class="sign"> </span><span class="tx">${text}</span></div>`;
@@ -339,6 +419,87 @@
   function isReadTool(name) {
     const n = String(name || '').toLowerCase();
     return /read|cat|open|view/.test(n);
+  }
+
+  /**
+   * Heuristic: treat as binary / non-diffable for Diff capture.
+   * Null bytes in the first 8k → skip line-diff (host-only honesty).
+   */
+  function looksBinary(s) {
+    if (s == null) return false;
+    const sample = String(s).slice(0, 8192);
+    if (sample.includes('\u0000')) return true;
+    return false;
+  }
+
+  /**
+   * Word/char highlight for a del/add line pair (capped LCS).
+   * Returns { delHtml, addHtml } with <span class="diff-w-del|diff-w-add"> wrappers.
+   * Inputs must already be plain text (we escape).
+   */
+  function wordDiffHtml(delText, addText) {
+    const a = String(delText ?? '');
+    const b = String(addText ?? '');
+    const MAX = 400;
+    if (a.length > MAX || b.length > MAX || a === b) {
+      return { delHtml: escapeHtml(a), addHtml: escapeHtml(b) };
+    }
+    // Char LCS table (small)
+    const n = a.length;
+    const m = b.length;
+    const dp = Array.from({ length: n + 1 }, () => new Uint16Array(m + 1));
+    for (let i = 1; i <= n; i++) {
+      for (let j = 1; j <= m; j++) {
+        if (a[i - 1] === b[j - 1]) dp[i][j] = dp[i - 1][j - 1] + 1;
+        else dp[i][j] = Math.max(dp[i - 1][j], dp[i][j - 1]);
+      }
+    }
+    const delParts = [];
+    const addParts = [];
+    let i = n;
+    let j = m;
+    while (i > 0 || j > 0) {
+      if (i > 0 && j > 0 && a[i - 1] === b[j - 1]) {
+        delParts.push({ t: 'same', c: a[i - 1] });
+        addParts.push({ t: 'same', c: b[j - 1] });
+        i--;
+        j--;
+      } else if (j > 0 && (i === 0 || dp[i][j - 1] >= dp[i - 1][j])) {
+        addParts.push({ t: 'add', c: b[j - 1] });
+        j--;
+      } else {
+        delParts.push({ t: 'del', c: a[i - 1] });
+        i--;
+      }
+    }
+    delParts.reverse();
+    addParts.reverse();
+    const collapse = (parts, mark) => {
+      let out = '';
+      let buf = '';
+      let kind = null;
+      const flush = () => {
+        if (!buf) return;
+        const esc = escapeHtml(buf);
+        if (kind === mark) out += `<span class="diff-w-${mark}">${esc}</span>`;
+        else out += esc;
+        buf = '';
+      };
+      for (const p of parts) {
+        const k = p.t === mark ? mark : 'same';
+        if (kind !== k) {
+          flush();
+          kind = k;
+        }
+        buf += p.c;
+      }
+      flush();
+      return out;
+    };
+    return {
+      delHtml: collapse(delParts, 'del'),
+      addHtml: collapse(addParts, 'add'),
+    };
   }
 
   /**
@@ -565,6 +726,8 @@
 
   const api = {
     computeLineDiff,
+    groupHunks,
+    applyHunkDecisions,
     toUnifiedHtml,
     toSideBySideHtml,
     toUnifiedText,
@@ -574,8 +737,11 @@
     extractPathFromTool,
     isWriteTool,
     isReadTool,
+    looksBinary,
+    wordDiffHtml,
     splitLines,
     heatFromTs,
+    MAX_LCS_LINES,
   };
 
   global.DiffUtil = api;

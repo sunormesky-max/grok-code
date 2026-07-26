@@ -15,7 +15,8 @@
   const DEFAULTS = Object.freeze({
     ACTIVE_MS: 0,
     BG_MS: 100,
-    MAX_PAINT_PER_TICK: 4,
+    /** Raised 4→6 so 3–5 concurrent tasks clear a full dirty wave in ~1–2 frames */
+    MAX_PAINT_PER_TICK: 6,
   });
 
   /**
@@ -55,7 +56,13 @@
     const now = opts.now != null ? opts.now : 0;
     const ACTIVE_MS = opts.ACTIVE_MS != null ? opts.ACTIVE_MS : DEFAULTS.ACTIVE_MS;
     const BG_MS = opts.BG_MS != null ? opts.BG_MS : DEFAULTS.BG_MS;
-    const MAX = opts.MAX_PAINT_PER_TICK != null ? opts.MAX_PAINT_PER_TICK : DEFAULTS.MAX_PAINT_PER_TICK;
+    let MAX =
+      opts.MAX_PAINT_PER_TICK != null ? opts.MAX_PAINT_PER_TICK : DEFAULTS.MAX_PAINT_PER_TICK;
+    // Scale budget with dirty queue (cap 10) so 5+ concurrent tasks do not starve
+    if (opts.autoScale !== false) {
+      const dirtyN = entries.filter((e) => e.streamDirty || e.thoughtDirty).length;
+      if (dirtyN > MAX) MAX = Math.min(10, dirtyN);
+    }
 
     const ordered = sortFair(entries, activeId);
     const paint = [];
@@ -100,7 +107,7 @@
       }
     }
 
-    return { paint, needMore, drop };
+    return { paint, needMore, drop, maxUsed: MAX };
   }
 
   /**

@@ -5324,9 +5324,24 @@ const LiveBatcher = {
   },
 };
 
-function pushLiveEvent({ kind, title, sub, running = false, projectId = null, immediate = false }) {
+function pushLiveEvent({
+  kind,
+  title,
+  sub,
+  running = false,
+  projectId = null,
+  immediate = false,
+  path = null,
+}) {
   const proj = projectId ? window.ProjectStore.get(projectId) : P();
-  const ev = { kind, title, sub, ts: Date.now(), running: Boolean(running) };
+  const ev = {
+    kind,
+    title,
+    sub,
+    ts: Date.now(),
+    running: Boolean(running),
+    path: path || null,
+  };
   if (proj) {
     if (!Array.isArray(proj.activity)) proj.activity = [];
     proj.activity.push(ev);
@@ -5368,6 +5383,7 @@ function pushLiveEvent({ kind, title, sub, running = false, projectId = null, im
 }
 
 function setLivePhase(phase, detail) {
+  // Stable primary chip = coarse phase enum; clock/detail thrash stays in #liveDetail
   if ($('#livePhase')) $('#livePhase').textContent = phase;
   if ($('#liveDetail')) $('#liveDetail').textContent = detail || '';
   const p = P();
@@ -5379,6 +5395,104 @@ function setLivePhase(phase, detail) {
   $('#livePulse')?.classList.toggle('on', run);
   $('#liveBadge')?.classList.toggle('hidden', !run);
 }
+
+/** ── 流式执行路线 (append-only steps for current turn) ── */
+function ensureTaskRoute(task) {
+  if (!task) return [];
+  if (!Array.isArray(task.routeSteps)) task.routeSteps = [];
+  return task.routeSteps;
+}
+
+function appendExecRouteStep(task, step) {
+  if (!task || !step?.kind) return;
+  const steps = ensureTaskRoute(task);
+  const kind = String(step.kind);
+  const detail = step.detail != null ? String(step.detail) : '';
+  // Dedupe continuous phase labels
+  const last = steps[steps.length - 1];
+  const continuous = new Set(['boot', 'thinking', 'streaming', 'silence', 'park']);
+  if (
+    continuous.has(kind) &&
+    last &&
+    last.kind === kind &&
+    (last.detail || '') === detail
+  ) {
+    return;
+  }
+  if (
+    kind === 'tool_start' &&
+    step.progress &&
+    last &&
+    last.kind === 'tool_start' &&
+    last.progress &&
+    last.toolId === step.toolId
+  ) {
+    return;
+  }
+  steps.push({
+    kind,
+    detail: detail || undefined,
+    toolId: step.toolId,
+    toolName: step.toolName,
+    progress: step.progress,
+    t: Date.now(),
+    title: step.title,
+  });
+  if (steps.length > 80) task.routeSteps = steps.slice(-60);
+  if (isActiveTask(task)) paintExecRouteStrip(task);
+}
+
+function paintExecRouteStrip(task) {
+  const el = document.getElementById('execRouteStrip');
+  if (!el) return;
+  task = task || T();
+  const steps = task?.routeSteps || [];
+  if (!steps.length || !task?.running) {
+    // keep strip visible briefly after done if we have steps
+    if (!steps.length) {
+      el.classList.add('hidden');
+      el.innerHTML = '';
+      return;
+    }
+  }
+  el.classList.remove('hidden');
+  const en = localeIsEn();
+  const labels = [];
+  for (const s of steps) {
+    let lab = '';
+    if (s.kind === 'boot') lab = en ? 'boot' : '启动';
+    else if (s.kind === 'thinking') lab = en ? 'think' : '思考';
+    else if (s.kind === 'tool_start' && !s.progress)
+      lab = (s.toolName || (en ? 'tool' : '工具')).slice(0, 14);
+    else if (s.kind === 'streaming') lab = en ? 'text' : '输出';
+    else if (s.kind === 'silence') lab = en ? 'wait' : '等待';
+    else if (s.kind === 'park') lab = en ? 'park' : '授权';
+    else if (s.kind === 'goal') lab = en ? 'goal' : '目标';
+    else if (s.kind === 'compact') lab = en ? 'zip' : '压缩';
+    else if (s.kind === 'subagent') lab = en ? 'sub' : '子代理';
+    else if (s.kind === 'retry') lab = en ? 'retry' : '重试';
+    else if (s.kind === 'plan') lab = en ? 'plan' : '计划';
+    else if (s.kind === 'done') lab = en ? 'done' : '完成';
+    else if (s.kind === 'error') lab = en ? 'err' : '错误';
+    else if (s.kind === 'stopped') lab = en ? 'stop' : '停止';
+    else if (s.kind === 'signal') lab = (s.title || s.detail || '·').slice(0, 12);
+    else continue;
+    if (labels[labels.length - 1] !== lab) labels.push(lab);
+  }
+  const slim = labels.slice(-14);
+  const cur = slim.length - 1;
+  el.innerHTML = slim
+    .map(
+      (lab, i) =>
+        `<span class="exec-route-chip${i === cur ? ' is-current' : ''}" title="${esc(lab)}">${esc(lab)}</span>${
+          i < slim.length - 1 ? '<span class="exec-route-sep" aria-hidden="true">→</span>' : ''
+        }`
+    )
+    .join('');
+  el.setAttribute('aria-label', slim.join(' → '));
+}
+window.paintExecRouteStrip = paintExecRouteStrip;
+window.appendExecRouteStep = appendExecRouteStep;
 
 function updateLiveStats() {
   const tools = window.TaskStore.list().reduce((n, t) => n + (t.toolCount || 0), 0);
@@ -5442,43 +5556,193 @@ function renderLiveChanges() {
   });
 }
 
-async function cacheFileBefore(path) {
-  if (!path || contentCacheMap().has(path)) return;
-  try {
-    const exists = await window.grok.exists(pid(), path);
-    if (!exists) {
-      contentCacheMap().set(path, '');
-      return;
+/**
+ * Race-safe baseline cache (Live/Code/Diff breakthrough).
+ * Concurrent tool_start for same path share one read; truncated reads are flagged.
+ * Optional `projArg` — background tasks must pass their project (not only active P()).
+ */
+async function cacheFileBefore(path, projArg) {
+  if (!path) return null;
+  const proj = projArg || P();
+  if (!proj) return null;
+  if (proj.contentCache.has(path)) return proj.contentCache.get(path);
+  if (!proj.contentCachePending) proj.contentCachePending = new Map();
+  if (proj.contentCachePending.has(path)) {
+    try {
+      return await proj.contentCachePending.get(path);
+    } catch {
+      return null;
     }
-    const data = await window.grok.readFile(pid(), path);
-    if (!data.error) contentCacheMap().set(path, data.content);
-  } catch {
-    /* ignore */
   }
+  const job = (async () => {
+    try {
+      const exists = await window.grok.exists(proj.id, path);
+      if (!exists) {
+        proj.contentCache.set(path, '');
+        return '';
+      }
+      const data = await window.grok.readFile(proj.id, path);
+      if (data.error) return null;
+      if (data.truncated) {
+        if (!proj.truncatedFiles) proj.truncatedFiles = new Set();
+        proj.truncatedFiles.add(path);
+      } else {
+        proj.truncatedFiles?.delete?.(path);
+      }
+      proj.contentCache.set(path, data.content);
+      return data.content;
+    } catch {
+      return null;
+    } finally {
+      proj.contentCachePending?.delete(path);
+    }
+  })();
+  proj.contentCachePending.set(path, job);
+  return job;
 }
+
+/**
+ * Cache pre-write baseline for a tool_start frame.
+ * Always uses the task's project (active or background). Safe to call on every write
+ * tool_start — including ToolStorm batches that early-return before Live paint.
+ * Also baselines paths extracted from shell/run_terminal (fs:changed often follows).
+ */
+function cacheWriteBaselineFromTool(task, d) {
+  if (!task || !d) return null;
+  const name = String(d.name || '');
+  const write = window.DiffUtil?.isWriteTool?.(name);
+  const shellish = /run_command|run_terminal|bash|shell|execute/i.test(name);
+  if (!write && !shellish) return null;
+  const fpath = window.DiffUtil.extractPathFromTool?.(name, d.args || {});
+  if (!fpath) return null;
+  const cacheProj = task.projectId
+    ? window.ProjectStore.get(task.projectId) || P()
+    : P();
+  if (!cacheProj) return null;
+  cacheFileBefore(fpath, cacheProj);
+  return fpath;
+}
+window.cacheWriteBaselineFromTool = cacheWriteBaselineFromTool;
+
+/**
+ * Remember tool_start name/args/path by id so tool_end frames that omit args
+ * (ACP completed-only / force-close) still resolve write paths for Diff capture.
+ */
+function noteToolFrameMeta(task, d) {
+  if (!task || !d?.id || d.progress) return null;
+  if (!task._toolFrameMeta) task._toolFrameMeta = new Map();
+  const id = String(d.id);
+  const prev = task._toolFrameMeta.get(id) || {};
+  const args = d.args && typeof d.args === 'object' ? d.args : {};
+  const hasPathish =
+    args.path ||
+    args.file_path ||
+    args.target_file ||
+    args.file ||
+    args.filename ||
+    args.filepath ||
+    args.command;
+  const mergedArgs =
+    hasPathish || Object.keys(args).length
+      ? { ...(prev.args || {}), ...args }
+      : { ...(prev.args || {}) };
+  const name =
+    d.name && d.name !== 'tool' ? d.name : prev.name || d.name || 'tool';
+  const path =
+    window.DiffUtil?.extractPathFromTool?.(name, mergedArgs) || prev.path || null;
+  const meta = { name, args: mergedArgs, path };
+  task._toolFrameMeta.set(id, meta);
+  return meta;
+}
+
+/** Resolve name/args/path for tool_end, falling back to tool_start meta. */
+function resolveToolFrame(task, d) {
+  const id = d?.id != null ? String(d.id) : '';
+  const prev = task?._toolFrameMeta?.get?.(id) || null;
+  const argsIn = d?.args && typeof d.args === 'object' ? d.args : {};
+  const hasPathish =
+    argsIn.path ||
+    argsIn.file_path ||
+    argsIn.target_file ||
+    argsIn.file ||
+    argsIn.filename ||
+    argsIn.filepath ||
+    argsIn.command;
+  const args =
+    hasPathish || Object.keys(argsIn).length
+      ? { ...(prev?.args || {}), ...argsIn }
+      : { ...(prev?.args || {}) };
+  const name =
+    d?.name && d.name !== 'tool' ? d.name : prev?.name || d?.name || 'tool';
+  const path =
+    window.DiffUtil?.extractPathFromTool?.(name, args) || prev?.path || null;
+  if (task?._toolFrameMeta && id) task._toolFrameMeta.delete(id);
+  return { name, args, path };
+}
+window.noteToolFrameMeta = noteToolFrameMeta;
+window.resolveToolFrame = resolveToolFrame;
 
 async function recordFileChange(path, { reason = 'change' } = {}) {
   if (!path || !P()) return;
   try {
+    // Await *in-flight* tool_start baseline only. Never cacheFileBefore after the
+    // write when cache is empty — that would treat post-write as "before" and
+    // silently drop the Diff (shell writes / late fs:changed).
+    const proj = P();
+    if (!contentCacheMap().has(path) && proj?.contentCachePending?.has?.(path)) {
+      await cacheFileBefore(path, proj);
+    }
+    // Capture baseline truncation *before* after-read (after must not pollute)
+    const baselineTruncated = Boolean(proj?.truncatedFiles?.has?.(path));
     const exists = await window.grok.exists(pid(), path);
     let after = '';
+    let afterTruncated = false;
     if (exists) {
       const data = await window.grok.readFile(pid(), path);
       if (data.error) return;
       after = data.content;
+      afterTruncated = Boolean(data.truncated);
     }
+    // Binary: still track path for review bridge, skip line ops
+    const binary =
+      typeof window.DiffUtil?.looksBinary === 'function' &&
+      (window.DiffUtil.looksBinary(after) ||
+        window.DiffUtil.looksBinary(contentCacheMap().get(path) || ''));
     const cached = contentCacheMap().has(path) ? contentCacheMap().get(path) : null;
     const prev = changesMap().get(path);
-    // 连续修改保留最初 before；已还原则重新开基线
+    const baselineMiss = cached == null && !(prev && !prev.restored);
+    // 连续修改保留最初 before；已还原则重新开基线；miss → '' + beforeIncomplete
     const keepBefore =
-      prev && !prev.restored ? prev.before : cached != null ? cached : exists ? '' : '';
+      prev && !prev.restored ? prev.before : cached != null ? cached : '';
     if (keepBefore === after && prev && !prev.restored) {
       return; // 相对最初基线无变化
     }
     if (cached != null && cached === after && !prev) {
       return; // 相对缓存无变化
     }
-    const recomputed = window.DiffUtil.computeLineDiff(keepBefore, after);
+    // beforeIncomplete: truncated baseline OR never captured pre-write snapshot
+    const beforeIncomplete =
+      prev && !prev.restored
+        ? Boolean(prev.beforeIncomplete)
+        : Boolean(baselineTruncated || baselineMiss);
+    const incomplete = Boolean(beforeIncomplete || afterTruncated);
+    // Clear sticky truncate flag when both sides are complete (after may recover)
+    if (!beforeIncomplete && !afterTruncated) {
+      proj?.truncatedFiles?.delete?.(path);
+    }
+    // created only when we know before was empty (cached '') or file gone after miss
+    const created =
+      prev && !prev.restored
+        ? Boolean(prev.created)
+        : cached === '' || (baselineMiss && !exists);
+    const recomputed = binary
+      ? {
+          ops: [],
+          stats: { adds: 0, dels: 0, beforeLines: 0, afterLines: 0 },
+          created,
+          deleted: !exists,
+        }
+      : window.DiffUtil.computeLineDiff(keepBefore, after);
     const task = T();
     const turnMeta = {
       turnId: task?.turnId || null,
@@ -5496,7 +5760,7 @@ async function recordFileChange(path, { reason = 'change' } = {}) {
       after,
       stats: recomputed.stats,
       ops: recomputed.ops,
-      created: (prev && !prev.restored ? prev.created : false) || keepBefore === '',
+      created,
       ts: Date.now(),
       turnId: turnMeta.turnId,
       taskTitle: turnMeta.taskTitle,
@@ -5508,9 +5772,14 @@ async function recordFileChange(path, { reason = 'change' } = {}) {
       reviewed: prev && !prev.restored ? Boolean(prev.reviewed) : false,
       checkpoints: Array.isArray(prev?.checkpoints) ? prev.checkpoints.slice() : [],
       viewCheckpoint: prev?.viewCheckpoint ?? -1,
+      binary: Boolean(binary),
+      beforeIncomplete: Boolean(beforeIncomplete),
+      incomplete: Boolean(incomplete),
+      baselineMiss: Boolean(baselineMiss || (prev && !prev.restored && prev.baselineMiss)),
+      hunkKept: prev && !prev.restored && Array.isArray(prev.hunkKept) ? prev.hunkKept.slice() : [],
     };
     // store content snapshot for turn replay (cap size)
-    if (String(after).length <= 400_000) {
+    if (!binary && String(after).length <= 400_000) {
       pushFileCheckpoint(entry, {
         ...turnMeta,
         after,
@@ -5527,10 +5796,16 @@ async function recordFileChange(path, { reason = 'change' } = {}) {
     pushLiveEvent({
       kind: 'write',
       title: entry.created ? `创建 ${path}` : `修改 ${path}`,
-      sub: `+${recomputed.stats.adds}  -${recomputed.stats.dels}`,
+      sub: binary
+        ? localeIsEn()
+          ? 'binary · no line diff'
+          : '二进制 · 无线级 diff'
+        : `+${recomputed.stats.adds}  -${recomputed.stats.dels}`,
+      path,
+      projectId: P()?.id,
     });
     renderLiveChanges();
-    if (state.activeTab === 'diff') renderDiffPane();
+    scheduleDiffPaint();
     updateLiveStats();
     updateEditorChrome();
     updateReviewBridgeUi();
@@ -5551,6 +5826,24 @@ async function recordFileChange(path, { reason = 'change' } = {}) {
     console.warn('recordFileChange', path, err);
   }
 }
+
+/** Coalesce Diff tab re-paints under write storms; preserve scroll. */
+function scheduleDiffPaint() {
+  if (state.activeTab !== 'diff') return;
+  if (state._diffPaintRaf) return;
+  const sc =
+    document.querySelector('#diffContent .diff-body-scroll') || document.getElementById('diffContent');
+  state._diffPaintScroll = sc ? sc.scrollTop : 0;
+  state._diffPaintRaf = requestAnimationFrame(() => {
+    state._diffPaintRaf = 0;
+    renderDiffPane();
+    const sc2 =
+      document.querySelector('#diffContent .diff-body-scroll') ||
+      document.getElementById('diffContent');
+    if (sc2 && state._diffPaintScroll != null) sc2.scrollTop = state._diffPaintScroll;
+  });
+}
+window.scheduleDiffPaint = scheduleDiffPaint;
 
 function onFsChanged(payload) {
   const rel = payload?.path;
@@ -5577,7 +5870,7 @@ function onFsChanged(payload) {
   );
 }
 
-/** 向指定项目记录变更（后台项目也能记） */
+/** 向指定项目记录变更（后台项目也能记） — parity with recordFileChange */
 async function recordFileChangeForProject(proj, filePath, { reason = 'change' } = {}) {
   if (!proj || !filePath) return;
   const was = window.ProjectStore.activeId;
@@ -5585,22 +5878,53 @@ async function recordFileChangeForProject(proj, filePath, { reason = 'change' } 
   if (was === proj.id) {
     return recordFileChange(filePath, { reason });
   }
-  // 后台项目：直接操作其 maps
+  // 后台项目：直接操作其 maps（race-safe baseline + truncation honesty）
   try {
+    // Join in-flight baseline only — never invent before from post-write read
+    if (!proj.contentCache.has(filePath) && proj.contentCachePending?.has?.(filePath)) {
+      await cacheFileBefore(filePath, proj);
+    }
+    const baselineTruncated = Boolean(proj.truncatedFiles?.has?.(filePath));
     const exists = await window.grok.exists(proj.id, filePath);
     let after = '';
+    let afterTruncated = false;
     if (exists) {
       const data = await window.grok.readFile(proj.id, filePath);
       if (data.error) return;
       after = data.content;
+      afterTruncated = Boolean(data.truncated);
     }
+    const binary =
+      typeof window.DiffUtil?.looksBinary === 'function' &&
+      (window.DiffUtil.looksBinary(after) ||
+        window.DiffUtil.looksBinary(proj.contentCache.get(filePath) || ''));
     const cached = proj.contentCache.has(filePath) ? proj.contentCache.get(filePath) : null;
     const prev = proj.changes.get(filePath);
+    const baselineMiss = cached == null && !(prev && !prev.restored);
     const keepBefore =
-      prev && !prev.restored ? prev.before : cached != null ? cached : exists ? '' : '';
+      prev && !prev.restored ? prev.before : cached != null ? cached : '';
     if (keepBefore === after && prev && !prev.restored) return;
     if (cached != null && cached === after && !prev) return;
-    const recomputed = window.DiffUtil.computeLineDiff(keepBefore, after);
+    const beforeIncomplete =
+      prev && !prev.restored
+        ? Boolean(prev.beforeIncomplete)
+        : Boolean(baselineTruncated || baselineMiss);
+    const incomplete = Boolean(beforeIncomplete || afterTruncated);
+    if (!beforeIncomplete && !afterTruncated) {
+      proj.truncatedFiles?.delete?.(filePath);
+    }
+    const created =
+      prev && !prev.restored
+        ? Boolean(prev.created)
+        : cached === '' || (baselineMiss && !exists);
+    const recomputed = binary
+      ? {
+          ops: [],
+          stats: { adds: 0, dels: 0, beforeLines: 0, afterLines: 0 },
+          created,
+          deleted: !exists,
+        }
+      : window.DiffUtil.computeLineDiff(keepBefore, after);
     const runningTask = (proj.tasks || []).find((t) => t.running) || null;
     const turnMeta = {
       turnId: runningTask?.turnId || null,
@@ -5618,7 +5942,7 @@ async function recordFileChangeForProject(proj, filePath, { reason = 'change' } 
       after,
       stats: recomputed.stats,
       ops: recomputed.ops,
-      created: (prev && !prev.restored ? prev.created : false) || keepBefore === '',
+      created,
       ts: Date.now(),
       turnId: turnMeta.turnId,
       taskTitle: turnMeta.taskTitle,
@@ -5630,16 +5954,29 @@ async function recordFileChangeForProject(proj, filePath, { reason = 'change' } 
       reviewed: prev && !prev.restored ? Boolean(prev.reviewed) : false,
       checkpoints: Array.isArray(prev?.checkpoints) ? prev.checkpoints.slice() : [],
       viewCheckpoint: prev?.viewCheckpoint ?? -1,
+      binary: Boolean(binary),
+      beforeIncomplete: Boolean(beforeIncomplete),
+      incomplete: Boolean(incomplete),
+      baselineMiss: Boolean(baselineMiss || (prev && !prev.restored && prev.baselineMiss)),
+      hunkKept: prev && !prev.restored && Array.isArray(prev.hunkKept) ? prev.hunkKept.slice() : [],
     };
-    if (String(after).length <= 400_000) {
+    if (!binary && String(after).length <= 400_000) {
       pushFileCheckpoint(entry, { ...turnMeta, after });
     }
     proj.changes.set(filePath, entry);
     proj.contentCache.set(filePath, after);
+    // Title must use entry.created (not keepBefore === '') — baselineMiss on an
+    // existing file has empty before but is still a 修改, not Agent 创建.
     pushLiveEvent({
       kind: 'write',
-      title: `[${proj.name}] ${keepBefore === '' ? '创建' : '修改'} ${filePath}`,
-      sub: `+${recomputed.stats.adds}  -${recomputed.stats.dels}`,
+      title: `[${proj.name}] ${entry.created ? '创建' : '修改'} ${filePath}`,
+      sub: binary
+        ? localeIsEn()
+          ? 'binary · no line diff'
+          : '二进制 · 无线级 diff'
+        : `+${recomputed.stats.adds}  -${recomputed.stats.dels}`,
+      path: filePath,
+      projectId: proj.id,
     });
     renderProjectTabs();
   } catch (e) {
@@ -7856,8 +8193,8 @@ window.selectDiffPendingAll = selectDiffPendingAll;
 function navigateDiffHunk(delta) {
   const content = document.querySelector('#diffContent, .diff-content, #diffPane .diff-body');
   const heads = content
-    ? [...content.querySelectorAll('.diff-hunk-head')]
-    : [...document.querySelectorAll('.diff-hunk-head')];
+    ? [...content.querySelectorAll('.diff-hunk-toggle, .diff-hunk-head')]
+    : [...document.querySelectorAll('.diff-hunk-toggle, .diff-hunk-head')];
   if (!heads.length) return false;
   const active = document.activeElement;
   let idx = heads.indexOf(active);
@@ -7908,7 +8245,25 @@ function markDiffReviewed(path, reviewed = true) {
         : '已取消审阅',
     'ok'
   );
+  // Accept-and-next: after marking reviewed, jump to next pending
+  if (reviewed) navigateNextPendingDiff(path);
 }
+
+/** Jump to next non-restored, non-reviewed file after accept/review */
+function navigateNextPendingDiff(fromPath) {
+  const items = sortedDiffItems();
+  if (!items.length) return;
+  let start = items.findIndex(([p]) => p === fromPath);
+  if (start < 0) start = -1;
+  for (let i = 1; i <= items.length; i++) {
+    const [p, c] = items[(start + i) % items.length];
+    if (!c.restored && !c.reviewed) {
+      selectDiffFile(p);
+      return;
+    }
+  }
+}
+window.navigateNextPendingDiff = navigateNextPendingDiff;
 
 function getDiffSelectedPaths() {
   // prune stale
@@ -7921,6 +8276,7 @@ function getDiffSelectedPaths() {
 function dismissDiffPaths(paths) {
   const list = paths?.length ? paths : [(P() && P().selectedDiffPath)].filter(Boolean);
   if (!list.length) return 0;
+  const last = list[list.length - 1];
   let n = 0;
   for (const path of list) {
     if (!changesMap().has(path)) continue;
@@ -7929,12 +8285,17 @@ function dismissDiffPaths(paths) {
     n += 1;
   }
   if (P() && !changesMap().has(P().selectedDiffPath)) {
-    const next = changesMap().keys().next();
-    requireProject().selectedDiffPath = next.done ? null : next.value;
+    // Prefer next pending after the last dismissed path
+    navigateNextPendingDiff(last);
+    if (!P().selectedDiffPath) {
+      const next = changesMap().keys().next();
+      requireProject().selectedDiffPath = next.done ? null : next.value;
+    }
   }
   renderLiveChanges();
   renderDiffPane();
   updateEditorChrome();
+  updateReviewBridgeUi();
   return n;
 }
 
@@ -7963,7 +8324,10 @@ async function restoreDiffPaths(paths) {
   for (const path of list) {
     try {
       const entry = changesMap().get(path);
-      if (!entry || entry.restored) continue;
+      if (!entry || entry.restored || entry.beforeIncomplete || entry.baselineMiss) {
+        if (entry?.beforeIncomplete || entry?.baselineMiss) failed += 1;
+        continue;
+      }
       requireProject().selectedDiffPath = path;
       const isCreate = entry.created || entry.before === '';
       if (isCreate) {
@@ -8029,39 +8393,84 @@ function renderDiffPane() {
     if (!changesMap().has(p)) state.diffSelected.delete(p);
   }
 
-  const pending = items.filter(([, c]) => !c.restored);
+  // Hide restore-all when nothing is *safely* restorable (truncated/missing baselines)
+  const pending = items.filter(
+    ([, c]) => !c.restored && !c.beforeIncomplete && !c.baselineMiss
+  );
   restoreAllBtn?.classList.toggle('hidden', pending.length === 0);
   multiBar?.classList.remove('hidden');
   updateDiffMultiBar();
 
   const scrubTurn = state.diffScrubTurn;
-  body.innerHTML = items
-    .map(([p, c]) => {
-      const active = p === (P() && P().selectedDiffPath) ? ' active' : '';
-      const restored = c.restored ? ' restored' : '';
-      const reviewed = c.reviewed && !c.restored ? ' reviewed' : '';
-      const checked = state.diffSelected.has(p) ? ' checked' : '';
-      const inScrub = scrubTurn ? fileHasTurn(p, scrubTurn) : true;
-      const dim = scrubTurn && !inScrub ? ' dim' : '';
-      const name = p.split('/').pop();
-      const meta = c.restored
-        ? '已还原'
-        : c.reviewed
-          ? '已审阅'
-          : `<span class="a">+${c.stats?.adds ?? 0}</span> <span class="d">-${c.stats?.dels ?? 0}</span>`;
-      return `<div class="diff-file${active}${restored}${reviewed}${dim}" data-path="${esc(p)}">
+  const filterQ = String(state.diffListFilter || '')
+    .trim()
+    .toLowerCase();
+  const filtered = filterQ
+    ? items.filter(([p, c]) => {
+        const base = p.toLowerCase();
+        if (base.includes(filterQ)) return true;
+        if (filterQ === 'pending' && !c.restored && !c.reviewed) return true;
+        if (filterQ === 'reviewed' && c.reviewed && !c.restored) return true;
+        if (filterQ === 'restored' && c.restored) return true;
+        if (filterQ === 'binary' && c.binary) return true;
+        return false;
+      })
+    : items;
+  const filterBar = `<div class="diff-list-filter">
+    <input type="search" id="diffListFilter" class="diff-list-filter-input" placeholder="${
+      localeIsEn() ? 'Filter path · pending · reviewed…' : '过滤路径 · pending · reviewed…'
+    }" value="${esc(state.diffListFilter || '')}" autocomplete="off" />
+    <span class="muted diff-list-filter-count">${filtered.length}/${items.length}</span>
+  </div>`;
+  body.innerHTML =
+    filterBar +
+    filtered
+      .map(([p, c]) => {
+        const active = p === (P() && P().selectedDiffPath) ? ' active' : '';
+        const restored = c.restored ? ' restored' : '';
+        const reviewed = c.reviewed && !c.restored ? ' reviewed' : '';
+        const checked = state.diffSelected.has(p) ? ' checked' : '';
+        const inScrub = scrubTurn ? fileHasTurn(p, scrubTurn) : true;
+        const dim = scrubTurn && !inScrub ? ' dim' : '';
+        const name = p.split('/').pop();
+        const meta = c.restored
+          ? '已还原'
+          : c.reviewed
+            ? '已审阅'
+            : c.binary
+              ? 'BIN'
+              : `<span class="a">+${c.stats?.adds ?? 0}</span> <span class="d">-${c.stats?.dels ?? 0}</span>`;
+        return `<div class="diff-file${active}${restored}${reviewed}${dim}" data-path="${esc(p)}">
         <label class="df-check" title="多选">
           <input type="checkbox" data-path="${esc(p)}"${checked} />
         </label>
         <button type="button" class="df-main" data-path="${esc(p)}" title="${esc(p)}">
           <span class="df-path">${esc(name)}${c.reviewed && !c.restored ? ' <em class="df-badge">OK</em>' : ''}${
             inScrub && scrubTurn ? ' <em class="df-badge turn">T</em>' : ''
-          }</span>
+          }${c.binary ? ' <em class="df-badge">BIN</em>' : ''}</span>
           <span class="df-meta">${meta}</span>
         </button>
       </div>`;
-    })
-    .join('');
+      })
+      .join('');
+
+  const filterInp = body.querySelector('#diffListFilter');
+  if (filterInp) {
+    filterInp.oninput = () => {
+      state.diffListFilter = filterInp.value;
+      renderDiffPane();
+      const el = document.getElementById('diffListFilter');
+      if (el) {
+        el.focus();
+        try {
+          const len = el.value.length;
+          el.setSelectionRange(len, len);
+        } catch {
+          /* ignore */
+        }
+      }
+    };
+  }
 
   body.querySelectorAll('.df-main').forEach((btn) => {
     btn.onclick = () => selectDiffFile(btn.dataset.path);
@@ -8090,7 +8499,10 @@ function renderDiffPane() {
   $('#diffStats').innerHTML = bits.join(' ');
 
   setDiffActionsEnabled(true);
-  $('#btnRestoreFile').disabled = Boolean(cur.restored);
+  // Restore unsafe when baseline missing/truncated — not after-only incomplete
+  $('#btnRestoreFile').disabled = Boolean(
+    cur.restored || cur.beforeIncomplete || cur.baselineMiss
+  );
   $('#btnRestoreFile').textContent = cur.created && !cur.restored ? '删除此文件' : '还原此文件';
   const reviewBtn = $('#btnReviewDiff');
   if (reviewBtn) {
@@ -8105,6 +8517,32 @@ function renderDiffPane() {
     banner = `<div class="diff-banner">✓ 已标记审阅 · 磁盘未改 · 可继续忽略或还原</div>`;
   } else if (cur.created) {
     banner = `<div class="diff-banner warn">此文件为 Agent 新建 · 还原 = 从磁盘删除</div>`;
+  }
+  if (cur.binary) {
+    banner += `<div class="diff-banner warn">${
+      localeIsEn()
+        ? 'Binary / non-text · line diff skipped · restore may still use before snapshot'
+        : '二进制 / 非文本 · 已跳过行级 diff · 还原仍可用 before 快照'
+    }</div>`;
+  }
+  if (cur.incomplete || cur.beforeIncomplete || cur.baselineMiss) {
+    const miss = Boolean(cur.baselineMiss);
+    const beforeBad = Boolean(cur.beforeIncomplete || miss);
+    banner += `<div class="diff-banner warn">${
+      localeIsEn()
+        ? miss
+          ? 'No pre-write baseline (e.g. shell write) · restore disabled · diff may be incomplete'
+          : beforeBad
+            ? 'Baseline snapshot truncated · restore disabled for safety'
+            : 'After snapshot was truncated · line diff may be incomplete · restore still uses before'
+        : miss
+          ? '缺少改前基线（如 shell 写入）· 已禁用还原 · diff 可能不完整'
+          : beforeBad
+            ? '改前快照被截断 · 已禁用还原以防损坏'
+            : '改后快照曾被截断 · 行级 diff 可能不完整 · 还原仍可用 before'
+    }</div>`;
+    // Restore only unsafe when *before* is truncated or missing
+    if (beforeBad && $('#btnRestoreFile')) $('#btnRestoreFile').disabled = true;
   }
 
   // Reset hunk collapse when switching files
@@ -8225,6 +8663,17 @@ function renderDiffPane() {
     </div>`;
   } else {
     const viewOps = snap?.ops || cur.ops || [];
+    const allowHunkAct =
+      viewMode === 'unified' &&
+      !snap?.importText &&
+      !cur.restored &&
+      !cur.binary &&
+      !cur.incomplete &&
+      !cur.beforeIncomplete &&
+      !cur.baselineMiss &&
+      !cmpOn &&
+      (snap?.index == null || snap.index < 0) &&
+      typeof window.DiffUtil?.applyHunkDecisions === 'function';
     bodyHtml =
       viewMode === 'split'
         ? window.DiffUtil.toSideBySideHtml(viewOps, { context: 3, blame })
@@ -8232,6 +8681,8 @@ function renderDiffPane() {
             context: 3,
             collapsed: state.diffHunkCollapsed,
             blame,
+            hunkActions: allowHunkAct,
+            keptHunks: Array.isArray(cur.hunkKept) ? cur.hunkKept : null,
           });
   }
 
@@ -8486,12 +8937,23 @@ function renderDiffPane() {
     saveJson('grokcode-diff-view', 'split');
     renderDiffPane();
   });
-  content.querySelectorAll('.diff-hunk-head').forEach((btn) => {
+  content.querySelectorAll('.diff-hunk-toggle, .diff-hunk-head[data-hunk]').forEach((btn) => {
     btn.onclick = () => {
       const hi = Number(btn.dataset.hunk);
+      if (Number.isNaN(hi)) return;
       if (state.diffHunkCollapsed.has(hi)) state.diffHunkCollapsed.delete(hi);
       else state.diffHunkCollapsed.add(hi);
       renderDiffPane();
+    };
+  });
+  content.querySelectorAll('[data-hunk-act]').forEach((btn) => {
+    btn.onclick = (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const hi = Number(btn.dataset.hunk);
+      const act = btn.dataset.hunkAct;
+      if (Number.isNaN(hi) || !act) return;
+      applyDiffHunkAction(act, hi);
     };
   });
   content.querySelector('[data-diff-act="expand"]')?.addEventListener('click', () => {
@@ -8499,11 +8961,168 @@ function renderDiffPane() {
     renderDiffPane();
   });
   content.querySelector('[data-diff-act="collapse"]')?.addEventListener('click', () => {
-    const heads = content.querySelectorAll('.diff-hunk-head');
+    const heads = content.querySelectorAll('.diff-hunk-toggle, .diff-hunk-head[data-hunk]');
     state.diffHunkCollapsed = new Set([...heads].map((h) => Number(h.dataset.hunk)));
     renderDiffPane();
   });
 }
+
+/**
+ * Hunk-level keep/reject (Cursor-shaped, host-only).
+ * Disk already has "after"; reject rewrites that hunk toward before and re-snaps Diff entry.
+ */
+async function applyDiffHunkAction(act, hunkIndex) {
+  const path = P() && P().selectedDiffPath;
+  if (!path || !changesMap().has(path)) return;
+  const entry = changesMap().get(path);
+  // Hunk ops untrustworthy when incomplete; restore-unsafe when before truncated/miss
+  if (
+    !entry ||
+    entry.restored ||
+    entry.binary ||
+    entry.incomplete ||
+    entry.beforeIncomplete ||
+    entry.baselineMiss
+  ) {
+    toast(
+      localeIsEn()
+        ? 'Hunk actions disabled for this file'
+        : '此文件不可做 hunk 操作',
+      'err'
+    );
+    return;
+  }
+  if (entry.viewCheckpoint != null && entry.viewCheckpoint >= 0) {
+    toast(localeIsEn() ? 'Switch to Live view first' : '请先回到 Live 视图', 'err');
+    return;
+  }
+  if (entry.compareA != null && entry.compareB != null) {
+    toast(localeIsEn() ? 'Clear compare mode first' : '请先清除对比模式', 'err');
+    return;
+  }
+  const ops = entry.ops || [];
+  const hunks =
+    typeof window.DiffUtil.groupHunks === 'function'
+      ? window.DiffUtil.groupHunks(ops, 3)
+      : [];
+  if (!hunks.length || hunkIndex < 0 || hunkIndex >= hunks.length) return;
+
+  if (act === 'keep') {
+    if (!Array.isArray(entry.hunkKept)) entry.hunkKept = [];
+    if (!entry.hunkKept.includes(hunkIndex)) entry.hunkKept.push(hunkIndex);
+    // If every change hunk marked kept → file reviewed
+    if (entry.hunkKept.length >= hunks.length) {
+      entry.reviewed = true;
+      toast(localeIsEn() ? 'All hunks kept · marked reviewed' : '全部 hunk 已保留 · 已标记审阅', 'ok');
+      navigateNextPendingDiff(path);
+    } else {
+      toast(
+        localeIsEn()
+          ? `Kept hunk ${hunkIndex + 1}/${hunks.length}`
+          : `已保留 hunk ${hunkIndex + 1}/${hunks.length}`,
+        'ok'
+      );
+    }
+    changesMap().set(path, entry);
+    renderDiffPane();
+    updateReviewBridgeUi();
+    return;
+  }
+
+  if (act !== 'reject') return;
+
+  const decisions = hunks.map((_, i) => (i === hunkIndex ? 'reject' : 'keep'));
+  const next =
+    typeof window.DiffUtil.applyHunkDecisions === 'function'
+      ? window.DiffUtil.applyHunkDecisions(ops, decisions, { context: 3 })
+      : null;
+  if (next == null) return;
+
+  try {
+    state._restoring = true;
+    const isCreate = entry.created || entry.before === '';
+    const emptyAfter = next === '';
+    if (isCreate && emptyAfter) {
+      await window.grok.deleteFile(pid(), path);
+      contentCacheMap().set(path, '');
+    } else {
+      await window.grok.writeFile(pid(), path, next);
+      contentCacheMap().set(path, next);
+    }
+
+    const fullyRestored = next === (entry.before ?? '');
+    if (fullyRestored) {
+      entry.restored = true;
+      entry.restoredAt = Date.now();
+      entry.after = entry.before ?? '';
+      entry.ops = [];
+      entry.stats = { adds: 0, dels: 0, beforeLines: 0, afterLines: 0 };
+      entry.hunkKept = [];
+    } else {
+      const recomputed = window.DiffUtil.computeLineDiff(entry.before ?? '', next);
+      entry.after = next;
+      entry.ops = recomputed.ops;
+      entry.stats = recomputed.stats;
+      entry.restored = false;
+      entry.reviewed = false;
+      entry.hunkKept = [];
+      entry.ts = Date.now();
+    }
+    entry.viewCheckpoint = -1;
+    entry.compareA = null;
+    entry.compareB = null;
+    changesMap().set(path, entry);
+
+    if (requireProject().currentFile === path) {
+      if (isCreate && emptyAfter) {
+        requireProject().currentFile = null;
+        $('#editor').value = '';
+        $('#currentPath').textContent = '—';
+        requireProject().dirty = false;
+      } else {
+        $('#editor').value = next;
+        requireProject().dirty = false;
+        syncGutter();
+      }
+      updateEditorChrome();
+    }
+
+    pushLiveEvent({
+      kind: 'status',
+      title: fullyRestored
+        ? localeIsEn()
+          ? `Restored ${path}`
+          : `已还原 ${path}`
+        : localeIsEn()
+          ? `Rejected hunk ${hunkIndex + 1} · ${path}`
+          : `已拒绝 hunk ${hunkIndex + 1} · ${path}`,
+      sub: localeIsEn() ? 'hunk-level review' : 'hunk 级审阅',
+      path,
+      projectId: P()?.id,
+    });
+    renderLiveChanges();
+    renderDiffPane();
+    await loadTree();
+    toast(
+      fullyRestored
+        ? localeIsEn()
+          ? 'All remaining changes rejected · file restored'
+          : '剩余变更已全部拒绝 · 文件已还原'
+        : localeIsEn()
+          ? `Rejected hunk ${hunkIndex + 1}`
+          : `已拒绝 hunk ${hunkIndex + 1}`,
+      'ok'
+    );
+    if (fullyRestored) navigateNextPendingDiff(path);
+  } catch (err) {
+    toast(err?.message || (localeIsEn() ? 'Hunk reject failed' : '拒绝 hunk 失败'), 'err');
+  } finally {
+    setTimeout(() => {
+      state._restoring = false;
+    }, 500);
+  }
+}
+window.applyDiffHunkAction = applyDiffHunkAction;
 
 /** Apply one file checkpoint to disk + entry maps */
 async function applyCheckpointToFile(path, entry, afterContent) {
@@ -8774,6 +9393,15 @@ async function restoreSelectedFile() {
     toast('该文件已还原过');
     return;
   }
+  if (entry.beforeIncomplete || entry.baselineMiss) {
+    toast(
+      localeIsEn()
+        ? 'No safe baseline · restore disabled'
+        : '无安全改前基线 · 无法还原',
+      'err'
+    );
+    return;
+  }
 
   const isCreate = entry.created || entry.before === '';
   const ok = confirm(
@@ -8833,9 +9461,22 @@ async function restoreSelectedFile() {
 
 /** 批量还原所有尚未还原的变更 */
 async function restoreAllFiles() {
-  const pending = [...changesMap().entries()].filter(([, c]) => !c.restored);
+  const pending = [...changesMap().entries()].filter(
+    ([, c]) => !c.restored && !c.beforeIncomplete && !c.baselineMiss
+  );
+  const skippedTrunc = [...changesMap().values()].filter(
+    (c) => !c.restored && (c.beforeIncomplete || c.baselineMiss)
+  ).length;
   if (!pending.length) {
-    toast('没有可还原的变更');
+    toast(
+      skippedTrunc
+        ? localeIsEn()
+          ? 'No safe restores (baseline truncated)'
+          : '没有可安全还原的变更（改前快照被截断）'
+        : localeIsEn()
+          ? 'Nothing to restore'
+          : '没有可还原的变更'
+    );
     return;
   }
   const ok = confirm(
@@ -8848,6 +9489,10 @@ async function restoreAllFiles() {
   state._restoring = true;
   for (const [path, entry] of pending) {
     try {
+      if (entry.beforeIncomplete || entry.baselineMiss) {
+        failed += 1;
+        continue;
+      }
       requireProject().selectedDiffPath = path;
       const isCreate = entry.created || entry.before === '';
       if (isCreate) {
@@ -8869,8 +9514,8 @@ async function restoreAllFiles() {
 
   pushLiveEvent({
     kind: 'status',
-    title: `批量还原完成`,
-    sub: `成功 ${done}${failed ? ` · 失败 ${failed}` : ''}`,
+    title: localeIsEn() ? 'Restore-all done' : '批量还原完成',
+    sub: `${done}${failed ? ` · fail ${failed}` : ''}${skippedTrunc ? ` · skip trunc ${skippedTrunc}` : ''}`,
   });
   renderLiveChanges();
   renderDiffPane();
@@ -8888,7 +9533,12 @@ async function restoreAllFiles() {
     updateEditorChrome();
     syncGutter();
   }
-  toast(`已还原 ${done} 个文件${failed ? `，失败 ${failed}` : ''}`, failed ? 'err' : 'ok');
+  toast(
+    localeIsEn()
+      ? `Restored ${done}${failed ? `, failed ${failed}` : ''}${skippedTrunc ? `, skipped truncated ${skippedTrunc}` : ''}`
+      : `已还原 ${done} 个文件${failed ? `，失败 ${failed}` : ''}${skippedTrunc ? `，跳过截断基线 ${skippedTrunc}` : ''}`,
+    failed ? 'err' : 'ok'
+  );
 }
 
 /** 仅从列表移除，不改磁盘 */
@@ -9016,7 +9666,7 @@ const StreamFair = {
   LIVE_BG_MS: 400,
   /** Live mirror ~30fps is enough; chat body still paints every frame via markStream */
   LIVE_MIRROR_MS: 32,
-  MAX_PAINT_PER_TICK: 4,
+  MAX_PAINT_PER_TICK: 6,
   /** @type {Map<string, { task: object, streamDirty: boolean, thoughtDirty: boolean, lastStream: number, lastThought: number }>} */
   q: new Map(),
   raf: 0,
@@ -9291,7 +9941,25 @@ function setTaskPhase(task, phase, detail) {
   // Keep "Grok · stream" role in sync with real phase — otherwise long tool
   // stretches look frozen under a stuck "stream" label (log: only tool_delta).
   paintLiveAssistantRole(task);
-  // Discrete path breadcrumbs (active only). Skip streaming spam + tool
+  // 流式执行路线: discrete stage enter (skip clock thrash / tool spam)
+  if (task.running && prev !== next) {
+    if (next === 'boot') appendExecRouteStep(task, { kind: 'boot', detail: det });
+    else if (next === 'thinking') appendExecRouteStep(task, { kind: 'thinking', detail: det });
+    else if (next === 'streaming') appendExecRouteStep(task, { kind: 'streaming', detail: det });
+    else if (next === 'error') appendExecRouteStep(task, { kind: 'error', detail: det });
+    else if (next === 'stopped') appendExecRouteStep(task, { kind: 'stopped', detail: det });
+    else if (next === 'retry') appendExecRouteStep(task, { kind: 'retry', detail: det });
+    else if (next === 'done') appendExecRouteStep(task, { kind: 'done', detail: det });
+    else if (
+      next === 'running' &&
+      /等待模型继续|等待模型首包|silent|Waiting/i.test(det)
+    ) {
+      appendExecRouteStep(task, { kind: 'silence', detail: det });
+    } else if (next === 'running' && /等待(工具授权|计划|用户)/.test(det)) {
+      appendExecRouteStep(task, { kind: 'park', detail: det });
+    }
+  }
+  // Discrete Live breadcrumbs (active only). Skip streaming spam + tool
   // (tool_start already records name/path). Skip boot duplicate if same turn.
   if (
     isActiveTask(task) &&
@@ -9524,13 +10192,8 @@ const ToolStorm = {
     // often arrive in waves of 3–20 over a few hundred ms).
     if (this.isOpen(task)) {
       trackToolInStorm(task, d);
-      if (window.DiffUtil?.isWriteTool?.(d.name)) {
-        task.writeCount = (task.writeCount || 0) + 1;
-      }
-      const fpath = window.DiffUtil?.extractPathFromTool?.(d.name, d.args || {});
-      if (fpath && isActiveTask(task) && window.DiffUtil?.isWriteTool?.(d.name)) {
-        cacheFileBefore(fpath);
-      }
+      // writeCount + baseline: agent:tool_start already handles both
+      cacheWriteBaselineFromTool(task, d);
       return;
     }
     let bag = this.pending.get(task.id);
@@ -9568,13 +10231,8 @@ const ToolStorm = {
         startedAt: Number(d.startedAt) || Date.now(),
         result: '',
       });
-      const fpath = window.DiffUtil?.extractPathFromTool?.(d.name, d.args || {});
-      if (fpath && isActiveTask(task) && window.DiffUtil?.isWriteTool?.(d.name)) {
-        cacheFileBefore(fpath);
-      }
-      if (window.DiffUtil?.isWriteTool?.(d.name)) {
-        task.writeCount = (task.writeCount || 0) + 1;
-      }
+      // writeCount counted on agent:tool_start; baseline there too (belt+suspenders here)
+      cacheWriteBaselineFromTool(task, d);
     }
     paintToolStorm(task);
     if (isActiveTask(task)) {
@@ -9712,9 +10370,25 @@ function bindAgentEvents() {
       const task = taskFromEvent(d);
       if (!task?.running) return;
       setTaskPhase(task, d.phase || d.status, d.detail || '');
+      // Phase 4.2: one-shot Live honesty when ACP fell back / headless (no tool stream)
+      if (d?.noToolStream && !task._headlessBannerShown) {
+        task._headlessBannerShown = true;
+        pushLiveEvent({
+          kind: 'signal',
+          title: localeIsEn()
+            ? `${task.title} · headless (no tools)`
+            : `${task.title} · headless（无工具流）`,
+          sub: String(d.detail || d.fallbackReason || 'headless'),
+          projectId: task.projectId,
+        });
+      }
       if (isActiveTask(task)) {
-        setAgentStatus(d.detail || d.phase || 'running', true);
-        setLivePhase(d.detail || d.phase || 'running', `${task.title} · ${d.phase || 'run'}`);
+        const detail = d.detail || d.phase || 'running';
+        // Activity-clock ticks change every 500ms — skip SR spam; announce ≥5s silence only
+        const isClock = isActivityClockDetail(detail);
+        setAgentStatus(detail, true, false, { skipAnnounce: isClock });
+        setLivePhase(detail, `${task.title} · ${d.phase || 'run'}`);
+        if (isClock) maybeAnnouncePhaseSilence(task, detail);
       }
     }),
     window.grok.on('agent:status', (d) => {
@@ -9723,8 +10397,11 @@ function bindAgentEvents() {
       // Prefer agent:phase when present; keep status as fallback
       if (d.status && !d.phase) setTaskPhase(task, d.status, d.detail || '');
       if (isActiveTask(task)) {
-        setAgentStatus(d.detail || d.status, true);
-        setLivePhase(d.detail || d.status || 'running', `${task.title} · CLI`);
+        const detail = d.detail || d.status || 'running';
+        const isClock = isActivityClockDetail(detail);
+        setAgentStatus(detail, true, false, { skipAnnounce: isClock });
+        setLivePhase(detail, `${task.title} · CLI`);
+        if (isClock) maybeAnnouncePhaseSilence(task, detail);
       }
     }),
     window.grok.on('agent:text', (d) => {
@@ -9732,9 +10409,14 @@ function bindAgentEvents() {
       if (!task) return;
       const prevLen = (task.streamBuf || '').length;
       // Prefer full text snapshot (main coalesces ~60fps); delta only as fallback
+      // Single source of truth: streamBuf → StreamFair paints chat; Live mirror rides same tick
       if (typeof d.text === 'string') task.streamBuf = d.text;
       else if (d.delta) task.streamBuf = (task.streamBuf || '') + d.delta;
       if (task.running) setTaskPhase(task, 'streaming', 'speaking…');
+      if (task.running && !task._routeFirstText && task.streamBuf) {
+        task._routeFirstText = true;
+        appendExecRouteStep(task, { kind: 'streaming', detail: 'speaking…' });
+      }
       // Active: paint every frame with latest buf (true stream). Never wait for done.
       scheduleStreamPaint(task);
       if (isActiveTask(task) && task.running) {
@@ -9742,13 +10424,12 @@ function bindAgentEvents() {
           StreamFair.flushTask(task);
           setLivePhase('streaming…', `${task.title} · ${task.streamBuf.length} 字`);
         } else {
-          // Throttle status label only — body paints via StreamFair/rAF
+          // Throttle status label only — chat + Live mirror both via StreamFair.tick
           const now = performance.now();
           if (!task._lastStreamPhaseAt || now - task._lastStreamPhaseAt > 100) {
             task._lastStreamPhaseAt = now;
             setLivePhase('streaming…', `${task.title} · ${(task.streamBuf || '').length} 字`);
           }
-          StreamFair.scheduleLiveMirror(task);
         }
       }
     }),
@@ -9759,6 +10440,10 @@ function bindAgentEvents() {
       if (typeof d.text === 'string') task.thoughtBuf = d.text;
       else if (d.delta) task.thoughtBuf = (task.thoughtBuf || '') + d.delta;
       if (task.running) setTaskPhase(task, 'thinking', 'thinking…');
+      if (task.running && !task._routeFirstThought && task.thoughtBuf) {
+        task._routeFirstThought = true;
+        appendExecRouteStep(task, { kind: 'thinking', detail: 'thinking…' });
+      }
       scheduleThoughtPaint(task);
       if (isActiveTask(task) && task.running) {
         const now = performance.now();
@@ -9766,8 +10451,8 @@ function bindAgentEvents() {
           task._lastThoughtPhaseAt = now;
           setLivePhase('thinking…', `${task.title} · ${(task.thoughtBuf || '').length} 字`);
         }
+        // First thought flushes immediately; later frames ride StreamFair only (no dual Live path)
         if (prevLen === 0 && task.thoughtBuf) StreamFair.flushTask(task);
-        else StreamFair.scheduleLiveMirror(task);
       }
     }),
     window.grok.on('agent:tool_start', (d) => {
@@ -9782,12 +10467,26 @@ function bindAgentEvents() {
       }
       const active = isActiveTask(task);
       if (active) StreamFair.flushTask(task);
+      // Remember path/name for empty tool_end frames; baseline before storm early-return
+      noteToolFrameMeta(task, d);
+      const fpathEarly = cacheWriteBaselineFromTool(task, d);
+      if (window.DiffUtil.isWriteTool(d.name)) {
+        task.writeCount = (task.writeCount || 0) + 1;
+      }
       appendToolStart(d, task);
       task.toolCount += 1;
       task._hasToolThisTurn = true;
       // Re-gate stream: short narration may flip hold → quiet once tools start
       if (task.streamBuf) scheduleStreamPaint(task);
       setTaskPhase(task, 'tool', `${d.name || 'tool'}…`);
+      if (!d?.progress) {
+        appendExecRouteStep(task, {
+          kind: 'tool_start',
+          toolId: d.id,
+          toolName: d.name || 'tool',
+          detail: d.name || 'tool',
+        });
+      }
       // Live noise for single tools only (storm path emits one summary)
       const pending = ToolStorm.pending.get(task.id);
       if (pending && pending.starts.length >= 2) {
@@ -9798,10 +10497,9 @@ function bindAgentEvents() {
         StreamFair.scheduleTabs();
         return;
       }
-      const fpath = window.DiffUtil.extractPathFromTool(d.name, d.args || {});
+      const fpath =
+        fpathEarly || window.DiffUtil.extractPathFromTool(d.name, d.args || {});
       const write = window.DiffUtil.isWriteTool(d.name);
-      if (write) task.writeCount = (task.writeCount || 0) + 1;
-      if (fpath && active) cacheFileBefore(fpath);
       task._hasToolThisTurn = true;
       const human = humanToolTitle(d.name, d.args || {});
       const liveTitle = `[${task.title}] ${human}`;
@@ -9813,6 +10511,7 @@ function bindAgentEvents() {
           sub: liveSub,
           running: true,
           projectId: task.projectId,
+          path: fpath || null,
         });
         setLivePhase(write ? 'writing…' : human, fpath || task.title);
         if (fpath && state.followAgent) {
@@ -9829,12 +10528,14 @@ function bindAgentEvents() {
       const task = taskFromEvent(d);
       appendToolEnd(d, task);
       const active = isActiveTask(task);
-      const fpath = window.DiffUtil.extractPathFromTool(d.name, d.args || {});
+      const frame = resolveToolFrame(task, d);
+      const fpath = frame.path;
+      const toolName = frame.name;
       const proj = task ? window.ProjectStore.get(task.projectId) : null;
       const inStorm = task?._toolStorm?.has(String(d.id));
-      if (fpath && window.DiffUtil.isWriteTool(d.name) && proj) {
+      if (fpath && window.DiffUtil.isWriteTool(toolName) && proj) {
         recordFileChangeForProject(proj, fpath, { reason: 'write' });
-      } else if (fpath && window.DiffUtil.isReadTool(d.name) && !inStorm) {
+      } else if (fpath && window.DiffUtil.isReadTool(toolName) && !inStorm) {
         if (active) {
           cacheFileBefore(fpath).then(() => {
             if (state.followAgent) openFile(fpath, { fromAgent: true, switchToCode: false });
@@ -9844,28 +10545,28 @@ function bindAgentEvents() {
           pushLiveEvent({
             kind: 'tool',
             title: `已读 ${fpath}`,
-            sub: task ? task.title : d.name,
+            sub: task ? task.title : toolName,
             projectId: task?.projectId,
           });
         } else {
-          StreamFair.pushLiveBg('tool', `已读 ${fpath}`, task?.title || d.name, task?.projectId);
+          StreamFair.pushLiveBg('tool', `已读 ${fpath}`, task?.title || toolName, task?.projectId);
         }
       } else if (active && !inStorm) {
         pushLiveEvent({
           kind: 'tool',
-          title: `${d.name || 'tool'} 完成`,
+          title: `${toolName || 'tool'} 完成`,
           sub: fpath || (d.ok === false ? '可能失败' : 'ok'),
           projectId: task?.projectId,
         });
       } else if (!active && !inStorm) {
         StreamFair.pushLiveBg(
           'tool',
-          `${d.name || 'tool'} 完成`,
+          `${toolName || 'tool'} 完成`,
           fpath || (d.ok === false ? '可能失败' : 'ok'),
           task?.projectId
         );
       }
-      if (active && window.DiffUtil.isWriteTool(d.name)) scheduleTreeRefresh();
+      if (active && window.DiffUtil.isWriteTool(toolName)) scheduleTreeRefresh();
     }),
     window.grok.on('agent:plan', (d) => {
       const task = taskFromEvent(d);
@@ -10149,10 +10850,37 @@ function bindAgentEvents() {
         setAgentStatus('出错', false, true);
       }
     }),
+    window.grok.on('agent:route', (d) => {
+      const task = taskFromEvent(d);
+      if (!task?.running) return;
+      appendExecRouteStep(task, {
+        kind: d.kind || 'signal',
+        detail: d.detail || d.title || d.kind,
+        title: d.title,
+        toolId: d.toolId,
+        toolName: d.toolName,
+        meta: d.meta,
+      });
+      // Light Live breadcrumb for lifecycle (goal/compact/subagent)
+      if (isActiveTask(task) && d.kind && d.kind !== 'signal') {
+        pushLiveEvent({
+          kind: 'status',
+          title: d.title || d.kind,
+          sub: d.detail || task.title,
+          projectId: task.projectId,
+        });
+      }
+    }),
     window.grok.on('agent:done', (d) => {
       const task = taskFromEvent(d);
       if (!task) return;
       const proj = window.ProjectStore.get(task.projectId);
+      if (d?.streamSummary) task.streamSummary = d.streamSummary;
+      appendExecRouteStep(task, {
+        kind: d?.stopped ? 'stopped' : 'done',
+        detail: d?.stopped ? 'stopped' : 'done',
+      });
+      if (isActiveTask(task)) paintExecRouteStrip(task);
       if (d?.text && d.text.length > (task.streamBuf || '').length) {
         task.streamBuf = d.text;
       }
@@ -10389,11 +11117,22 @@ async function runTaskPrompt(task, text, opts = {}) {
   task.lastUsage = null;
   task.liveAssistantEl = null;
   task.liveThoughtEl = null;
+  // Drop stale tool_start path meta so reused tool ids cannot poison Diff capture
+  if (task._toolFrameMeta) task._toolFrameMeta.clear();
   task.toolCount = 0;
   task.writeCount = 0;
   task._hasToolThisTurn = false;
+  task._headlessBannerShown = false;
+  task._lastPhaseSrAt = 0;
+  task._lastPhaseSrSec = 0;
+  task.routeSteps = [];
+  task.streamSummary = null;
+  task._routeFirstText = false;
+  task._routeFirstThought = false;
   task.turnMode = modeUsed;
   task.lastError = null;
+  appendExecRouteStep(task, { kind: 'boot', detail: 'booting CLI…' });
+  if (isActiveTask(task)) paintExecRouteStrip(task);
   if (!Array.isArray(task.turns)) task.turns = [];
   task.turns.push({
     id: task.turnId,
@@ -10516,15 +11255,49 @@ async function runTaskPrompt(task, text, opts = {}) {
       if (!Array.isArray(task.messages)) task.messages = [];
       task.messages.push({ role: 'assistant', content: finalText, ts: Date.now() });
     } else {
-      upsertAssistant('（无文本输出 — 可能只做了工具操作，请看资源管理器 / Diff）', true, task);
+      // Tools-only / empty turn: honest placeholder + Live signal (Phase 1.5)
+      const nTools = Number(task.toolCount) || 0;
+      const en = localeIsEn();
+      const placeholder =
+        nTools > 0
+          ? en
+            ? `(No text reply — ${nTools} tool call(s) completed. Check Diff / Explorer / Live.)`
+            : `（本回合完成 ${nTools} 次工具调用，无文本回复 — 请看 Diff / 资源管理器 / Live）`
+          : en
+            ? '(No text output)'
+            : '（无文本输出）';
+      upsertAssistant(placeholder, true, task);
+      if (nTools > 0) {
+        pushLiveEvent({
+          kind: 'signal',
+          title: en ? `${task.title} · tools only` : `${task.title} · 仅工具`,
+          sub: en
+            ? `${nTools} tools · no assistant text`
+            : `${nTools} 次工具 · 无助手文本`,
+          projectId: task.projectId,
+        });
+        if (isActiveTask(task)) {
+          setLivePhase(
+            en ? `tools ×${nTools}` : `工具 ×${nTools}`,
+            en ? 'no text reply' : '无文本回复'
+          );
+        }
+      }
     }
     finalizeLiveMessages(task);
     clearLiveStreamMirrors();
+    if (result?.streamSummary) task.streamSummary = result.streamSummary;
     markTurnEnded(task, {
       stopped: false,
       tools: task.toolCount || 0,
       usage: result?.usage || task.lastUsage,
     });
+    // Stamp route on turn record for later scrub / storyboard
+    const lastTurn = task.turns?.[task.turns.length - 1];
+    if (lastTurn && lastTurn.id === task.turnId) {
+      lastTurn.route = (task.routeSteps || []).map((s) => s.kind);
+      lastTurn.streamSummary = task.streamSummary || null;
+    }
     // Plan：模式标志 或 回复像可执行方案 → 一键执行条（执行语本身不再弹条）
     const wasExec = isPlanExecutePhrase(text) || opts.fromPlanExecute || opts.forceCraft;
     if (
@@ -10635,17 +11408,44 @@ async function runTaskPrompt(task, text, opts = {}) {
   }
 }
 
-/** CLI 回合后：任务简报（工具 / 写入 / Diff 文件） */
+/** CLI 回合后：任务简报（工具 / 写入 / Diff 文件）+ 执行路线摘要 */
 function appendCraftMissionBar(task, stats = {}) {
   if (!task?.pane) return;
   const tools = Number(stats.tools) || 0;
   const writes = Number(stats.writes) || 0;
   const files = Number(stats.files) || 0;
-  if (tools === 0 && writes === 0 && files === 0) return;
+  const route = task.routeSteps || [];
+  const sum = task.streamSummary || stats.streamSummary || null;
+  if (tools === 0 && writes === 0 && files === 0 && !route.length && !sum) return;
   task.pane.querySelectorAll('.craft-mission-bar').forEach((el) => el.remove());
   const bar = document.createElement('div');
   bar.className = 'craft-mission-bar' + (stats.fromPlan ? ' from-plan' : '');
   const en = localeIsEn();
+  // Compact route labels
+  const routeBits = [];
+  for (const s of route) {
+    if (s.kind === 'tool_start' && !s.progress)
+      routeBits.push((s.toolName || 'tool').slice(0, 12));
+    else if (s.kind === 'thinking') routeBits.push(en ? 'think' : '思考');
+    else if (s.kind === 'streaming') routeBits.push(en ? 'text' : '输出');
+    else if (s.kind === 'boot') routeBits.push(en ? 'boot' : '启动');
+    else if (s.kind === 'silence') routeBits.push(en ? 'wait' : '等待');
+    else if (s.kind === 'goal') routeBits.push(en ? 'goal' : '目标');
+    else if (s.kind === 'compact') routeBits.push(en ? 'zip' : '压缩');
+    else if (s.kind === 'subagent') routeBits.push(en ? 'sub' : '子代理');
+  }
+  const routeCollapsed = [];
+  for (const b of routeBits) {
+    if (routeCollapsed[routeCollapsed.length - 1] !== b) routeCollapsed.push(b);
+  }
+  const routeText = routeCollapsed.slice(-10).join(' → ');
+  const sumBits = [];
+  if (sum) {
+    if (sum.firstTokenMs >= 0) sumBits.push(`TTFT ${sum.firstTokenMs}ms`);
+    if (sum.toolStarts) sumBits.push(`${sum.toolStarts} tools`);
+    if (sum.maxSilentSec) sumBits.push(`silent≤${sum.maxSilentSec}s`);
+    if (sum.transport) sumBits.push(sum.transport);
+  }
   bar.innerHTML = `
     <span class="craft-mission-label">${stats.fromPlan ? 'PLAN→EXEC' : 'MISSION'}</span>
     <span class="craft-mission-stats">
@@ -10653,6 +11453,18 @@ function appendCraftMissionBar(task, stats = {}) {
       <span class="cms">${writes} ${en ? 'writes' : '写入'}</span>
       <span class="cms">${files} ${en ? 'files in Diff' : 'Diff 文件'}</span>
     </span>
+    ${
+      routeText
+        ? `<div class="craft-mission-route" title="${esc(routeText)}">${esc(
+            en ? 'Route: ' : '路线: '
+          )}${esc(routeText)}</div>`
+        : ''
+    }
+    ${
+      sumBits.length
+        ? `<div class="craft-mission-metrics muted">${esc(sumBits.join(' · '))}</div>`
+        : ''
+    }
     <div class="retry-actions">
       <button type="button" class="btn small ghost" data-act="diff">${en ? 'Open Diff' : '打开 Diff'}</button>
       <button type="button" class="btn small ghost" data-act="dismiss">OK</button>
@@ -11832,7 +12644,49 @@ function setRunningUi(on) {
   }
 }
 
-function setAgentStatus(text, busy, isError) {
+/**
+ * Activity-clock copy from main (agent.js startActivityClock) — changes every 500ms.
+ * Must not hammer screen readers every tick.
+ */
+function isActivityClockDetail(detail) {
+  const s = String(detail || '');
+  return (
+    /已静默\s*\d+\s*s/.test(s) ||
+    /等待模型(首包|继续)/.test(s) ||
+    /工具执行中\s*×/.test(s) ||
+    /CLI\s*段间静默/.test(s) ||
+    /Waiting for (first token|model)/i.test(s) ||
+    /silent\s*\d+\s*s/i.test(s)
+  );
+}
+
+/** Phase 1.4: polite SR only when silence ≥ 5s, throttled ≥ 8s between announces */
+function maybeAnnouncePhaseSilence(task, detail) {
+  if (!task || !window.GrokA11y?.announce) return;
+  const s = String(detail || '');
+  let silentSec = null;
+  let m = s.match(/已静默\s*(\d+)\s*s/);
+  if (m) silentSec = Number(m[1]);
+  if (silentSec == null) {
+    m = s.match(/(?:首包…|继续…)\s*(\d+)\s*s/);
+    if (m) silentSec = Number(m[1]);
+  }
+  if (silentSec == null) {
+    m = s.match(/silent\s*(\d+)\s*s/i);
+    if (m) silentSec = Number(m[1]);
+  }
+  if (silentSec == null || !Number.isFinite(silentSec) || silentSec < 5) return;
+  const now = Date.now();
+  if (task._lastPhaseSrAt && now - task._lastPhaseSrAt < 8000) return;
+  task._lastPhaseSrAt = now;
+  task._lastPhaseSrSec = silentSec;
+  const msg = localeIsEn()
+    ? `Still waiting · ${silentSec}s silent · ${task.title || 'task'}`
+    : `仍在等待 · 已静默 ${silentSec}s · ${task.title || '任务'}`;
+  window.GrokA11y.announce(msg, { assertive: false, force: true });
+}
+
+function setAgentStatus(text, busy, isError, opts = {}) {
   const chip = $('#agentStatus');
   const label = $('#agentStatusText');
   label.textContent = text;
@@ -11841,8 +12695,8 @@ function setAgentStatus(text, busy, isError) {
   chip.title = text;
   chip.setAttribute('aria-busy', busy ? 'true' : 'false');
   $('#sbAgent').textContent = text;
-  // Announce errors always; phase updates throttled polite in GrokA11y
-  if (text) {
+  // Announce errors always; activity-clock ticks use maybeAnnouncePhaseSilence instead
+  if (text && !opts.skipAnnounce) {
     window.GrokA11y?.announce?.(text, {
       assertive: Boolean(isError),
       force: Boolean(isError),

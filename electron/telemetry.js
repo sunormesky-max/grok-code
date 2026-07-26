@@ -124,4 +124,110 @@ function listCrashLogs(limit = 20) {
   }
 }
 
-module.exports = { reportCrash, listCrashLogs, logDir };
+/** @returns {string} histogram label for firstTokenMs */
+function bucketFirstTokenMs(ms) {
+  if (ms == null || ms < 0 || !Number.isFinite(Number(ms))) return 'none';
+  const n = Number(ms);
+  const edges = [250, 500, 1000, 2000, 5000, 10000, 30000, 60000];
+  let prev = 0;
+  for (const e of edges) {
+    if (n < e) return prev === 0 ? `lt_${e}` : `${prev}_${e}`;
+    prev = e;
+  }
+  return 'ge_60s';
+}
+
+function clampInt(v, min, max) {
+  const n = Number(v);
+  if (!Number.isFinite(n)) return min;
+  return Math.max(min, Math.min(max, Math.floor(n)));
+}
+
+function sanitizeStopReason(r) {
+  const s = String(r || 'unknown').slice(0, 64);
+  const allowed = new Set([
+    'end',
+    'error',
+    'user_stop',
+    'user_stop_err_path',
+    'max_turns',
+    'cancelled',
+    'unknown',
+    'other',
+  ]);
+  if (allowed.has(s)) return s;
+  if (/^[a-z0-9_.-]{1,64}$/i.test(s)) return 'other';
+  return 'other';
+}
+
+/**
+ * Phase 5.3 — opt-in stream health counters (OFF by default).
+ * Allowlisted metrics only; never prompts, paths, tool args, or API keys.
+ *
+ * @param {object} metrics
+ * @param {{ enabled?: boolean, endpoint?: string }} opts
+ */
+function reportStreamSummary(metrics, opts = {}) {
+  if (!opts.enabled) {
+    return { ok: false, skipped: true, reason: 'telemetry_disabled' };
+  }
+
+  let appVersion = 'unknown';
+  try {
+    appVersion = app.getVersion();
+  } catch {
+    /* ignore */
+  }
+
+  const m = metrics && typeof metrics === 'object' ? metrics : {};
+  const firstTokenMs = clampInt(m.firstTokenMs, -1, 3_600_000);
+  const transport =
+    m.transport === 'headless' || m.transport === 'acp' ? m.transport : 'unknown';
+
+  const payload = {
+    type: 'stream_summary',
+    ts: new Date().toISOString(),
+    platform: process.platform,
+    arch: process.arch,
+    electron: process.versions.electron,
+    appVersion,
+    transport,
+    firstTokenMs,
+    firstTokenBucket: String(m.firstTokenBucket || bucketFirstTokenMs(firstTokenMs)).slice(
+      0,
+      32
+    ),
+    toolStarts: clampInt(m.toolStarts, 0, 100_000),
+    toolEnds: clampInt(m.toolEnds, 0, 100_000),
+    maxSilentSec: clampInt(m.maxSilentSec, 0, 86_400),
+    emptyToolsOnly: m.emptyToolsOnly ? 1 : 0,
+    stopReason: sanitizeStopReason(m.stopReason),
+    totalMs: clampInt(m.totalMs, 0, 86_400_000),
+    textChunks: clampInt(m.textChunks, 0, 1_000_000),
+    thoughtChunks: clampInt(m.thoughtChunks, 0, 1_000_000),
+    code: m.code == null ? undefined : clampInt(m.code, 0, 255),
+  };
+
+  const text = redact(payload);
+  const file = path.join(logDir(), `stream-${Date.now()}.json`);
+  try {
+    fs.writeFileSync(file, text, 'utf8');
+  } catch (e) {
+    return { ok: false, error: e.message };
+  }
+
+  const endpoint = String(opts.endpoint || '').trim();
+  if (!endpoint) {
+    return { ok: true, file, uploaded: false };
+  }
+  uploadJson(endpoint, text).catch(() => {});
+  return { ok: true, file, uploaded: true, endpoint };
+}
+
+module.exports = {
+  reportCrash,
+  reportStreamSummary,
+  bucketFirstTokenMs,
+  listCrashLogs,
+  logDir,
+};

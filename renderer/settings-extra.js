@@ -235,6 +235,24 @@
     }
   }
 
+  async function openStreamLog() {
+    try {
+      const r = await window.grok.doctorOpenStreamLog?.();
+      if (r?.ok) {
+        window.toast?.(
+          window.GrokI18n?.getLocale?.() === 'en'
+            ? `Stream log: ${r.path}`
+            : `流式日志：${r.path}`,
+          'ok'
+        );
+      } else {
+        window.toast?.(r?.error || '无法打开流式日志', 'err');
+      }
+    } catch (err) {
+      window.toast?.(err.message || String(err), 'err');
+    }
+  }
+
   function renderUpdateStatus(st) {
     const el = $('#updateStatusText');
     if (!el || !st) return;
@@ -393,6 +411,7 @@
   function bind() {
     $('#btnRunDoctor')?.addEventListener('click', () => runDoctorUi());
     $('#btnExportDiag')?.addEventListener('click', () => exportDiag());
+    $('#btnOpenStreamLog')?.addEventListener('click', () => openStreamLog());
     $('#btnOpenPatches')?.addEventListener('click', () => openPatchesFolder());
     $('#btnCopyFeedback')?.addEventListener('click', () => copyUpstreamFeedback());
     $('#btnCheckUpdate')?.addEventListener('click', () => checkUpdate());

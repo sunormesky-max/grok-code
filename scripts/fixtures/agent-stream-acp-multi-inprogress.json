@@ -1,0 +1,47 @@
+[
+  {
+    "sessionUpdate": "tool_call",
+    "toolCallId": "a",
+    "title": "read_file",
+    "rawInput": { "path": "1" }
+  },
+  {
+    "sessionUpdate": "tool_call",
+    "toolCallId": "b",
+    "title": "grep",
+    "rawInput": { "q": "x" }
+  },
+  {
+    "sessionUpdate": "tool_call_update",
+    "toolCallId": "a",
+    "status": "in_progress",
+    "rawOutput": "…partial…"
+  },
+  {
+    "sessionUpdate": "tool_call_update",
+    "toolCallId": "b",
+    "status": "pending"
+  },
+  {
+    "sessionUpdate": "tool_call_update",
+    "toolCallId": "a",
+    "status": "in_progress",
+    "rawOutput": "more"
+  },
+  {
+    "sessionUpdate": "tool_call_update",
+    "toolCallId": "b",
+    "status": "completed",
+    "rawOutput": "hits"
+  },
+  {
+    "sessionUpdate": "tool_call_update",
+    "toolCallId": "a",
+    "status": "completed",
+    "rawOutput": "done"
+  },
+  {
+    "sessionUpdate": "agent_message_chunk",
+    "content": { "text": "found it" }
+  }
+]

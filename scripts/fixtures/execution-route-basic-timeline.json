@@ -1,0 +1,46 @@
+{
+  "name": "basic-headless-boot-think-tool-stream-done",
+  "transport": "headless",
+  "t0Ms": 0,
+  "taskId": "route-basic",
+  "timeline": [
+    { "atMs": 0, "op": "control", "control": "boot", "detail": "starting" },
+    { "atMs": 500, "op": "tick" },
+    { "atMs": 1000, "op": "control", "control": "prompt" },
+    { "atMs": 1200, "op": "event", "event": { "type": "thought", "delta": "分析 bug…" } },
+    { "atMs": 1400, "op": "event", "event": { "type": "text", "delta": "我会先" } },
+    {
+      "atMs": 1600,
+      "op": "event",
+      "event": {
+        "type": "tool_start",
+        "id": "t1",
+        "name": "read_file",
+        "args": { "path": "renderer/app.js" }
+      }
+    },
+    {
+      "atMs": 3000,
+      "op": "event",
+      "event": {
+        "type": "tool_end",
+        "id": "t1",
+        "name": "read_file",
+        "result": "ok",
+        "ok": true
+      }
+    },
+    { "atMs": 4500, "op": "tick" },
+    { "atMs": 5000, "op": "event", "event": { "type": "text", "delta": "文件。" } },
+    {
+      "atMs": 5100,
+      "op": "event",
+      "event": {
+        "type": "end",
+        "sessionId": "sess-abc",
+        "usage": { "input_tokens": 10, "output_tokens": 20 },
+        "numTurns": 1
+      }
+    }
+  ]
+}
