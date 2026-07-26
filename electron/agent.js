@@ -200,11 +200,74 @@ function createAgent({ getConfig, workspaceRoot, emit, reportStreamTelemetry } =
   /**
    * After ACP agent-stdio 403/auth fails, skip ACP for a while on auto transport
    * so every send does not burn ~2s cold ACP only to fall back again.
-   * Cleared when user forces agentTransport=acp or after stickyMs.
+   * Cleared when user forces agentTransport=acp, clearStickyHeadless(), or stickyMs.
    * @type {number} Date.now() until which auto prefers headless
    */
   let stickyHeadlessUntil = 0;
+  /** @type {string} acp_stdio_403 | acp_auth | acp_cold | '' */
+  let stickyHeadlessReason = '';
   const STICKY_HEADLESS_MS = 30 * 60 * 1000;
+
+  function stickyReasonLabel(reason) {
+    const r = String(reason || '');
+    if (r === 'acp_stdio_403' || r === 'acp_build_403') {
+      return 'ACP agent 路径 403（服务端文案可能仍写 coming soon；≠ Build 未开通）';
+    }
+    if (r === 'acp_auth') {
+      return 'ACP AuthorizationRequired（需 grok login / 会话令牌）';
+    }
+    if (r === 'acp_cold') return 'ACP 冷启动失败';
+    if (r === 'acp_sticky') return '沿用上次 ACP 失败（sticky headless）';
+    return r || 'ACP 不可用';
+  }
+
+  function getTransportState() {
+    const now = Date.now();
+    const sticky = stickyHeadlessUntil > now;
+    return {
+      stickyHeadless: sticky,
+      stickyUntil: sticky ? stickyHeadlessUntil : 0,
+      stickyRemainingMs: sticky ? Math.max(0, stickyHeadlessUntil - now) : 0,
+      stickyReason: sticky ? stickyHeadlessReason : '',
+      stickyReasonLabel: sticky ? stickyReasonLabel(stickyHeadlessReason) : '',
+      stickyMinutes: sticky
+        ? Math.max(1, Math.ceil((stickyHeadlessUntil - now) / 60000))
+        : 0,
+    };
+  }
+
+  function emitTransportState(extra = {}) {
+    try {
+      if (typeof emit === 'function') {
+        emit('agent:transport', {
+          taskId: 'global',
+          ...getTransportState(),
+          ...extra,
+        });
+      }
+    } catch {
+      /* ignore */
+    }
+  }
+
+  function clearStickyHeadless(opts = {}) {
+    const had = stickyHeadlessUntil > Date.now() || stickyHeadlessReason;
+    stickyHeadlessUntil = 0;
+    stickyHeadlessReason = '';
+    streamDebug('sticky headless cleared', { force: true });
+    emitTransportState({ cleared: true, by: opts.by || 'user' });
+    return { ok: true, cleared: Boolean(had) };
+  }
+
+  function armStickyHeadless(reason) {
+    stickyHeadlessReason = String(reason || 'acp_stdio_403');
+    stickyHeadlessUntil = Date.now() + STICKY_HEADLESS_MS;
+    streamDebug(
+      `sticky headless armed reason=${stickyHeadlessReason} until=${new Date(stickyHeadlessUntil).toISOString()}`,
+      { force: true }
+    );
+    emitTransportState({ armed: true });
+  }
   /**
    * taskIds we intentionally stopped (user stop / replace / external cleanup).
    * Without this, Windows taskkill surfaces exit 4294967295 and UI shows a fake hard error.
@@ -439,7 +502,9 @@ function createAgent({ getConfig, workspaceRoot, emit, reportStreamTelemetry } =
     try {
       const result = await runAcp(opts);
       // ACP path worked — stop sticky headless so tool stream returns next turn
-      stickyHeadlessUntil = 0;
+      if (stickyHeadlessUntil || stickyHeadlessReason) {
+        clearStickyHeadless({ by: 'acp_ok' });
+      }
       return result;
     } catch (err) {
       const msg = err?.message || String(err);
@@ -469,7 +534,7 @@ function createAgent({ getConfig, workspaceRoot, emit, reportStreamTelemetry } =
             ? 'acp_auth'
             : 'acp_cold';
         if (acpStdio403 || authRequired) {
-          stickyHeadlessUntil = Date.now() + STICKY_HEADLESS_MS;
+          armStickyHeadless(fallbackReason);
         }
         streamDebug(
           `ACP → headless fallback (${fallbackReason}): ${msg.slice(0, 200)}`,
@@ -2071,8 +2136,9 @@ function createAgent({ getConfig, workspaceRoot, emit, reportStreamTelemetry } =
         reason === 'acp_sticky' ||
         reason === 'acp_cold';
       const headlessDetail = fromAcpPath
-        ? 'headless 流式（无工具卡片 · Live 有文本镜像 · Diff 靠磁盘）'
+        ? `已降级 headless · ${stickyReasonLabel(reason)} · 无 tool 流`
         : 'headless 传输（无工具卡片）';
+      const st = getTransportState();
       emit('agent:phase', {
         taskId,
         phase: 'running',
@@ -2080,13 +2146,22 @@ function createAgent({ getConfig, workspaceRoot, emit, reportStreamTelemetry } =
         transport: 'headless',
         noToolStream: true,
         fallbackReason: reason,
+        degrade: true,
+        stickyHeadless: st.stickyHeadless,
+        stickyReason: st.stickyReason || reason,
+        stickyReasonLabel: stickyReasonLabel(st.stickyReason || reason),
+        stickyMinutes: st.stickyMinutes,
       });
       emit('agent:status', {
         taskId,
         status: 'running',
         detail: headlessDetail,
         noToolStream: true,
+        transport: 'headless',
+        degrade: true,
+        fallbackReason: reason,
       });
+      emitTransportState({ taskId, activeRun: true, fallbackReason: reason });
     }
 
     // 同一 task 不允许并发叠跑；新请求先停旧的（标记 intentional，避免 4294967295 假错误）
@@ -3160,6 +3235,9 @@ function createAgent({ getConfig, workspaceRoot, emit, reportStreamTelemetry } =
     setSessionMode,
     setSessionModel,
     invalidateWarmSessions,
+    getTransportState,
+    clearStickyHeadless,
+    armStickyHeadless,
   };
 }
 

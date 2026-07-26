@@ -565,6 +565,18 @@ function testAgentExports() {
     ),
     'auth required mapped'
   );
+  // sticky transport state API on agent
+  assert.equal(typeof agent.getTransportState, 'function');
+  assert.equal(typeof agent.clearStickyHeadless, 'function');
+  const ts0 = agent.getTransportState();
+  assert.equal(ts0.stickyHeadless, false);
+  agent.armStickyHeadless('acp_stdio_403');
+  const ts1 = agent.getTransportState();
+  assert.equal(ts1.stickyHeadless, true);
+  assert.ok(/403|ACP/i.test(ts1.stickyReasonLabel || ''));
+  const clr = agent.clearStickyHeadless({ by: 'test' });
+  assert.equal(clr.ok, true);
+  assert.equal(agent.getTransportState().stickyHeadless, false);
   const dual = humanizeAgentError(
     'Transport channel closed, when Auth(AuthorizationRequired)\n' +
       'API error (status 403 Forbidden): Grok Build is coming soon. You don\'t have access now.'
@@ -1301,6 +1313,7 @@ function testIpcChannelContract() {
   assert.ok(AGENT_EVENT_CHANNELS.includes('agent:plan_approval'));
   assert.ok(AGENT_EVENT_CHANNELS.includes('agent:user_question'));
   assert.ok(AGENT_EVENT_CHANNELS.includes('agent:ext'));
+  assert.ok(AGENT_EVENT_CHANNELS.includes('agent:transport'));
   assert.ok(isAllowedRendererChannel('agent:phase'));
   assert.ok(isAllowedRendererChannel('agent:plan'));
   assert.ok(isAllowedRendererChannel('agent:plan_approval'));
@@ -1687,6 +1700,7 @@ function testExecutionRouteLedger() {
   // IPC allowlist
   const { AGENT_EVENT_CHANNELS } = require(path.join(root, 'electron', 'ipc-channels'));
   assert.ok(AGENT_EVENT_CHANNELS.includes('agent:route'), 'agent:route channel');
+  assert.ok(AGENT_EVENT_CHANNELS.includes('agent:transport'), 'agent:transport channel');
 
   console.log('ok  execution-route ledger + silence/park goldens');
 }

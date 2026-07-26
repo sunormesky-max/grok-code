@@ -228,6 +228,7 @@ async function init() {
   bindResizers();
   bindShortcuts();
   bindAgentEvents();
+  bindTransportDegradeUi();
   bindWindowControls();
   await refreshConfigUi();
 
@@ -10389,9 +10390,159 @@ function updateToolStormCard(task, d) {
   return true;
 }
 
+/** ACP→headless degrade honesty (sticky + per-run) */
+let _degradeDismissedUntil = 0;
+let _lastTransportState = null;
+
+function formatStickyDetail(st) {
+  if (!st) return '';
+  const en = localeIsEn();
+  const reason = st.stickyReasonLabel || st.stickyReason || st.fallbackReason || '';
+  const mins = st.stickyMinutes || 0;
+  if (en) {
+    return [
+      reason || 'ACP path failed',
+      mins ? `sticky ~${mins}m` : '',
+      'Chat/Live text only · no tool cards · Diff needs disk/fs or ACP',
+    ]
+      .filter(Boolean)
+      .join(' · ');
+  }
+  return [
+    reason || 'ACP 路径失败',
+    mins ? `sticky 约 ${mins} 分钟` : '',
+    '仅文本流 · 无工具卡片 · Diff 需磁盘或 ACP',
+  ]
+    .filter(Boolean)
+    .join(' · ');
+}
+
+function showTransportDegrade(st) {
+  _lastTransportState = st || _lastTransportState;
+  const bar = document.getElementById('transportDegradeBar');
+  const title = document.getElementById('transportDegradeTitle');
+  const detail = document.getElementById('transportDegradeDetail');
+  const sb = document.getElementById('sbTransport');
+  const cfgBox = document.getElementById('cfgTransportSticky');
+  const cfgDet = document.getElementById('cfgTransportStickyDetail');
+  const active =
+    st &&
+    (st.stickyHeadless || st.degrade || st.noToolStream || st.fallbackReason);
+  if (!active) {
+    if (bar) {
+      bar.classList.add('hidden');
+      bar.hidden = true;
+    }
+    if (sb) {
+      sb.classList.add('hidden');
+      sb.hidden = true;
+      sb.textContent = '—';
+    }
+    if (cfgBox) {
+      cfgBox.classList.add('hidden');
+      cfgBox.hidden = true;
+    }
+    return;
+  }
+  const en = localeIsEn();
+  const tit = en ? 'Degraded to headless' : '已降级 headless';
+  const det = formatStickyDetail(st);
+  const dismissed = Date.now() < _degradeDismissedUntil;
+  if (bar && !dismissed) {
+    bar.classList.remove('hidden');
+    bar.hidden = false;
+    if (title) title.textContent = tit;
+    if (detail) detail.textContent = det;
+  }
+  if (sb) {
+    sb.classList.remove('hidden');
+    sb.hidden = false;
+    sb.textContent = en ? 'headless↓' : 'headless 降级';
+    sb.title = det;
+  }
+  if (cfgBox && st.stickyHeadless) {
+    cfgBox.classList.remove('hidden');
+    cfgBox.hidden = false;
+    if (cfgDet) cfgDet.textContent = det;
+  } else if (cfgBox && !st.stickyHeadless) {
+    cfgBox.classList.add('hidden');
+    cfgBox.hidden = true;
+  }
+}
+
+async function refreshTransportStateUi() {
+  try {
+    if (typeof window.grok.getTransportState !== 'function') return;
+    const st = await window.grok.getTransportState({ projectId: pid() });
+    showTransportDegrade(st);
+  } catch {
+    /* ignore */
+  }
+}
+
+async function clearStickyAndRetryAcp() {
+  try {
+    await window.grok.clearStickyHeadless({ projectId: pid(), by: 'user' });
+    _degradeDismissedUntil = 0;
+    toast(
+      localeIsEn()
+        ? 'Sticky cleared — next send will try ACP again'
+        : '已清除 sticky — 下次发送将再试 ACP',
+      'ok'
+    );
+    await refreshTransportStateUi();
+  } catch (err) {
+    toast(err?.message || String(err), 'err');
+  }
+}
+
+function bindTransportDegradeUi() {
+  document.getElementById('btnDegradeRetryAcp')?.addEventListener('click', () => {
+    clearStickyAndRetryAcp();
+  });
+  document.getElementById('btnClearStickyHeadless')?.addEventListener('click', () => {
+    clearStickyAndRetryAcp();
+  });
+  document.getElementById('btnDegradeDismiss')?.addEventListener('click', () => {
+    _degradeDismissedUntil = Date.now() + 10 * 60 * 1000;
+    const bar = document.getElementById('transportDegradeBar');
+    if (bar) {
+      bar.classList.add('hidden');
+      bar.hidden = true;
+    }
+  });
+  document.getElementById('btnDegradeOpenLog')?.addEventListener('click', async () => {
+    try {
+      await window.grok.doctorOpenStreamLog?.();
+    } catch {
+      toast(localeIsEn() ? 'Cannot open stream log' : '无法打开流式日志', 'err');
+    }
+  });
+  document.getElementById('sbTransport')?.addEventListener('click', () => {
+    const bar = document.getElementById('transportDegradeBar');
+    if (bar?.hidden || bar?.classList.contains('hidden')) {
+      _degradeDismissedUntil = 0;
+      showTransportDegrade(_lastTransportState || { stickyHeadless: true, degrade: true });
+      refreshTransportStateUi();
+    } else {
+      openSettings?.();
+    }
+  });
+}
+
 function bindAgentEvents() {
   state.unsubs.forEach((u) => u());
   state.unsubs = [
+    window.grok.on('agent:transport', (d) => {
+      showTransportDegrade({
+        stickyHeadless: Boolean(d?.stickyHeadless),
+        stickyMinutes: d?.stickyMinutes || 0,
+        stickyReason: d?.stickyReason || '',
+        stickyReasonLabel: d?.stickyReasonLabel || '',
+        fallbackReason: d?.fallbackReason || '',
+        degrade: Boolean(d?.stickyHeadless || d?.activeRun),
+      });
+    }),
     window.grok.on('agent:phase', (d) => {
       const task = taskFromEvent(d);
       if (!task?.running) return;
@@ -10399,15 +10550,29 @@ function bindAgentEvents() {
       // Phase 4.2: one-shot Live honesty when ACP fell back / headless (no tool stream)
       if (d?.noToolStream && !task._headlessBannerShown) {
         task._headlessBannerShown = true;
+        const reason =
+          d.stickyReasonLabel ||
+          d.stickyReason ||
+          d.fallbackReason ||
+          'headless';
         pushLiveEvent({
           kind: 'signal',
           title: localeIsEn()
-            ? `${task.title} · headless stream`
-            : `${task.title} · headless 流式`,
+            ? `${task.title} · DEGRADED headless`
+            : `${task.title} · 已降级 headless`,
           sub: localeIsEn()
-            ? 'Chat+Live text stream on. Tool cards / write→Diff need ACP. Disk fs still fills Diff.'
-            : '对话框+Live 文本流可用。工具卡片/写文件→Diff 需 ACP。磁盘变更仍进 Diff。',
+            ? `${reason} · text stream only · tools/Diff write need ACP`
+            : `${reason} · 仅文本流 · 工具/写文件 Diff 需 ACP`,
           projectId: task.projectId,
+        });
+        showTransportDegrade({
+          stickyHeadless: Boolean(d.stickyHeadless),
+          stickyMinutes: d.stickyMinutes || 0,
+          stickyReason: d.stickyReason || d.fallbackReason || '',
+          stickyReasonLabel: d.stickyReasonLabel || '',
+          fallbackReason: d.fallbackReason || '',
+          degrade: true,
+          noToolStream: true,
         });
       }
       if (isActiveTask(task)) {
@@ -13217,6 +13382,7 @@ async function refreshConfigUi() {
       ? cfg.agentTransport
       : 'auto';
   }
+  await refreshTransportStateUi();
 
   state.model = cfg.model || '';
   saveJson(MODEL_KEY, state.model);

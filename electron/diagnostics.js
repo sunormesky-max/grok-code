@@ -475,7 +475,7 @@ function checkHeadlessTransport(cfg = {}) {
         `当前 agentTransport=${t}：headless NDJSON 路径，主进程不会收到 ACP tool_call。`,
         '工具卡片 / ToolStorm / 授权弹窗均不可用 — 仅有文本流。',
         '需要完整工具 UI 时：设置 → Agent transport 选 auto 或 acp。',
-        '若 auto 回退到 headless（Build 403），Live 会显示「无工具流」横幅。',
+        'auto 若 sticky 到 headless：界面会显示「已降级 headless」并可「重试 ACP」。',
       ].join('\n'),
       transport: t,
       noToolStream: true,
@@ -500,7 +500,7 @@ function checkHeadlessTransport(cfg = {}) {
     ok: true,
     level: 'ok',
     detail:
-      'agentTransport=auto：优先 ACP（工具流）；ACP 403/鉴权/冷启动失败时回退 headless（≠ Build 未开通；无工具卡片，有 Live 横幅）',
+      'agentTransport=auto：优先 ACP；失败 sticky headless 30 分钟（≠ Build 未开通）。界面「已降级 headless」+ 重试 ACP。',
     transport: t || 'auto',
     noToolStream: false,
     fix: null,

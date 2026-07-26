@@ -14,6 +14,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Optional: worker for multi-MB LCS; SBS hunk actions
 - Optional: wire `execution-route.reduceRouteTick` from ACP activity clock (ledger dual-bookkeep)
 
+## [1.47.8] — 2026-07-26
+
+### Fix — 诚实「已降级 headless」（根因 UI）
+
+Root cause was never missing paint alone: ACP 403/auth → sticky headless
+(toolStarts=0, firstToken ~90s). UI now surfaces that path:
+
+- Persistent **已降级 headless** bar + status chip `headless 降级`
+- Reason labels: `acp_stdio_403` vs `acp_auth` vs sticky
+- **重试 ACP** clears sticky (next send tries agent stdio again)
+- Settings sticky box; `agent:transport` IPC; doctor/settings copy
+
 ## [1.47.7] — 2026-07-26
 
 ### Fix — “等待首包 → 整段弹出” (true mid-turn break)

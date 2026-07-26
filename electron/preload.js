@@ -69,6 +69,11 @@ contextBridge.exposeInMainWorld('grok', {
   stopAgent: (payload) => ipcRenderer.invoke('agent:stop', payload || {}),
   clearSession: (payload) => ipcRenderer.invoke('agent:clearSession', payload || {}),
   listRunningAgents: () => ipcRenderer.invoke('agent:running'),
+  /** sticky headless / ACP degrade honesty */
+  getTransportState: (payload) =>
+    ipcRenderer.invoke('agent:transportState', payload || {}),
+  clearStickyHeadless: (payload) =>
+    ipcRenderer.invoke('agent:clearStickyHeadless', payload || {}),
   /** Reply to x.ai/exit_plan_mode (approve | abandoned | cancelled + feedback + execTier) */
   replyPlanApproval: (payload) => ipcRenderer.invoke('agent:plan_reply', payload || {}),
   /** Reply to x.ai/ask_user_question (accepted | cancelled | chat_about_this | skip_interview) */

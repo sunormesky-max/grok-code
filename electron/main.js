@@ -653,10 +653,18 @@ ipcMain.handle('config:set', (_e, partial) => {
   if (p.autoUpdate !== undefined) store.set('autoUpdate', Boolean(p.autoUpdate));
   if (p.agentTransport !== undefined) {
     const t = String(p.agentTransport || 'auto').toLowerCase();
-    store.set(
-      'agentTransport',
-      ['auto', 'acp', 'headless'].includes(t) ? t : 'auto'
-    );
+    const next = ['auto', 'acp', 'headless'].includes(t) ? t : 'auto';
+    store.set('agentTransport', next);
+    // Force ACP / explicit headless: drop sticky so auto doesn't keep ghost state
+    if (next === 'acp' || next === 'headless') {
+      for (const proj of projects.values()) {
+        try {
+          proj.agent?.clearStickyHeadless?.({ by: `transport_${next}` });
+        } catch {
+          /* ignore */
+        }
+      }
+    }
   }
   if (p.locale !== undefined) {
     store.set('locale', String(p.locale) === 'en' ? 'en' : 'zh');
@@ -1488,6 +1496,44 @@ ipcMain.handle('agent:running', () => {
     }
   }
   return out;
+});
+
+/** sticky headless / ACP degrade state for active project agent */
+ipcMain.handle('agent:transportState', (_e, payload = {}) => {
+  const projectId = payload.projectId || [...projects.keys()][0];
+  const p = projectId ? projects.get(projectId) : null;
+  if (!p?.agent?.getTransportState) {
+    return {
+      stickyHeadless: false,
+      stickyUntil: 0,
+      stickyRemainingMs: 0,
+      stickyReason: '',
+      stickyReasonLabel: '',
+      stickyMinutes: 0,
+    };
+  }
+  return p.agent.getTransportState();
+});
+
+/** Clear sticky headless so auto will try ACP again next send */
+ipcMain.handle('agent:clearStickyHeadless', (_e, payload = {}) => {
+  const projectId = payload.projectId;
+  const clearOne = (agent) => {
+    if (typeof agent?.clearStickyHeadless === 'function') {
+      return agent.clearStickyHeadless({ by: payload.by || 'user' });
+    }
+    return { ok: false };
+  };
+  if (projectId && projects.has(projectId)) {
+    return clearOne(projects.get(projectId).agent);
+  }
+  // Clear all project agents (settings “重试 ACP”)
+  let n = 0;
+  for (const p of projects.values()) {
+    const r = clearOne(p.agent);
+    if (r?.cleared || r?.ok) n += 1;
+  }
+  return { ok: true, clearedAgents: n };
 });
 
 ipcMain.handle('shell:openExternal', async (_e, url) => {

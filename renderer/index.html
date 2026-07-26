@@ -416,6 +416,22 @@
         <div class="messages-host" id="messagesHost">
           <!-- 每个任务一个 .messages 面板，由 JS 创建 -->
         </div>
+        <!-- ACP → headless 降级诚实条（sticky / 本轮 fallback） -->
+        <div id="transportDegradeBar" class="transport-degrade-bar hidden" hidden role="status">
+          <div class="transport-degrade-main">
+            <strong id="transportDegradeTitle">已降级 headless</strong>
+            <span id="transportDegradeDetail" class="transport-degrade-detail"></span>
+          </div>
+          <div class="transport-degrade-actions">
+            <button type="button" class="btn small ghost" id="btnDegradeRetryAcp" title="清除 sticky，下次发送再试 ACP">
+              重试 ACP
+            </button>
+            <button type="button" class="btn small ghost" id="btnDegradeOpenLog" title="打开流式日志">
+              日志
+            </button>
+            <button type="button" class="icon-btn" id="btnDegradeDismiss" title="暂时隐藏">×</button>
+          </div>
+        </div>
         <div class="composer">
           <div class="mode-bar" id="modeBar" role="group" aria-label="Work mode">
             <button type="button" class="mode-chip active" data-mode="cli" title="模式由本机 Grok CLI 控制：TUI 里 /plan · Shift+Tab · YOLO" aria-pressed="true">CLI</button>
@@ -464,6 +480,8 @@
       <span id="sbCli">CLI —</span>
       <span class="sep">·</span>
       <span id="sbAgent">待命</span>
+      <span class="sep">·</span>
+      <button type="button" id="sbTransport" class="sb-transport hidden" hidden title="传输路径">—</button>
       <span class="ml-auto" id="sbHint">CLI host · /plan /ask · Ctrl+K · Ctrl+B · ?</span>
     </footer>
   </div>
@@ -623,7 +641,17 @@
               <option value="acp">acp · 仅 grok agent stdio（完整工具流）</option>
               <option value="headless">headless · 同 grok -p streaming-json</option>
             </select>
-            <small>GrokCode 是 CLI 宿主。agent stdio 被 403 门控时用 headless/auto。</small>
+            <small>
+              GrokCode 是 CLI 宿主。ACP 403/鉴权失败时 auto 会 sticky 到 headless（文本流有、工具流无）。
+              不等于 Build 未开通。
+            </small>
+            <div id="cfgTransportSticky" class="transport-sticky-box hidden" hidden>
+              <div class="transport-sticky-title">已降级 headless（sticky）</div>
+              <div class="transport-sticky-detail" id="cfgTransportStickyDetail"></div>
+              <button type="button" class="btn small" id="btnClearStickyHeadless">
+                清除 sticky · 下次重试 ACP
+              </button>
+            </div>
           </label>
 
           <label class="field">

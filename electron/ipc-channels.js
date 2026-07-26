@@ -24,6 +24,8 @@ const AGENT_EVENT_CHANNELS = Object.freeze([
   'agent:user_question',
   'agent:ext',
   'agent:route',
+  /** sticky headless / transport degrade (host honesty) */
+  'agent:transport',
 ]);
 
 const RENDERER_EVENT_CHANNELS = Object.freeze([
