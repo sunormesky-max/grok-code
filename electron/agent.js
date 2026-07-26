@@ -2370,11 +2370,16 @@ function createAgent({ getConfig, workspaceRoot, emit, reportStreamTelemetry } =
             if (a.channel === 'agent:text') {
               textChunksHl += 1;
               noteFirstTokenHl();
-              emitTextStream(a.payload, Boolean(a.immediate));
+              // First headless text/thought flush immediately so chat paints
+              // without waiting STREAM_IPC_MS coalesce (true stream feel).
+              emitTextStream(a.payload, Boolean(a.immediate) || textChunksHl === 1);
             } else if (a.channel === 'agent:thought') {
               thoughtChunksHl += 1;
               noteFirstTokenHl();
-              emitThoughtStream(a.payload, Boolean(a.immediate));
+              emitThoughtStream(
+                a.payload,
+                Boolean(a.immediate) || thoughtChunksHl === 1
+              );
             } else {
               if (a.channel === 'agent:tool_start') {
                 if (a.payload?.progress) {

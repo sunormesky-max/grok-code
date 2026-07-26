@@ -14,6 +14,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Optional: worker for multi-MB LCS; SBS hunk actions
 - Optional: wire `execution-route.reduceRouteTick` from ACP activity clock (ledger dual-bookkeep)
 
+## [1.47.4] — 2026-07-26
+
+### Fix — chat live stream paint (user-visible)
+
+Chat bubble often looked “not streaming” even when host received chunks:
+
+- **Active-task chat paints synchronously** on every `agent:text` / `agent:thought`
+  (no longer waits StreamFair rAF for the focused task)
+- **stream-gate fail-open** — any non-empty live text is full `answer` (no more
+  italic `进行中…` quiet line that hid progressive tokens)
+- **Headless first text/thought** flushes IPC immediately (same as ACP first chunk)
+
+Background tasks still use StreamFair fairness.
+
 ## [1.47.3] — 2026-07-26
 
 ### ACP abort-signal streamSummary

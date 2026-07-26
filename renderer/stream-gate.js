@@ -43,24 +43,16 @@
    * @param {{ running?: boolean, toolCount?: number, phase?: string, hasToolThisTurn?: boolean }} ctx
    * @returns {'none'|'quiet'|'answer'}
    *
-   * Note: `hold` is intentionally not used (kept only as alias → quiet for
-   * older callers). Blank hold was an OpenWorker-style footgun.
+   * Fail-open (2026-07-26): **any non-empty stream text is full answer**.
+   * Quiet one-liner hid live tokens and made chat feel “not streaming”.
+   * `hold` remains alias → answer (never blank). Thresholds kept for tests /
+   * optional callers of streamUnits only.
    */
   function streamMode(streaming, ctx) {
     const text = String(streaming || '');
     if (!text.trim()) return 'none';
-    const running = Boolean(ctx && ctx.running);
-    const units = streamUnits(text);
-    const chars = text.trim().length;
-    if (
-      units >= STREAM_PROMOTE_WORDS ||
-      chars >= STREAM_PROMOTE_CHARS ||
-      !running
-    ) {
-      return 'answer';
-    }
-    // Short while running — always show a quiet line (never blank hold)
-    return 'quiet';
+    // Always paint full live text in the chat bubble.
+    return 'answer';
   }
 
   /**

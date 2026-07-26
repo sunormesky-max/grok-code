@@ -10409,7 +10409,6 @@ function bindAgentEvents() {
       if (!task) return;
       const prevLen = (task.streamBuf || '').length;
       // Prefer full text snapshot (main coalesces ~60fps); delta only as fallback
-      // Single source of truth: streamBuf → StreamFair paints chat; Live mirror rides same tick
       if (typeof d.text === 'string') task.streamBuf = d.text;
       else if (d.delta) task.streamBuf = (task.streamBuf || '') + d.delta;
       if (task.running) setTaskPhase(task, 'streaming', 'speaking…');
@@ -10417,20 +10416,23 @@ function bindAgentEvents() {
         task._routeFirstText = true;
         appendExecRouteStep(task, { kind: 'streaming', detail: 'speaking…' });
       }
-      // Active: paint every frame with latest buf (true stream). Never wait for done.
-      scheduleStreamPaint(task);
-      if (isActiveTask(task) && task.running) {
-        if (prevLen === 0 && task.streamBuf) {
-          StreamFair.flushTask(task);
-          setLivePhase('streaming…', `${task.title} · ${task.streamBuf.length} 字`);
-        } else {
-          // Throttle status label only — chat + Live mirror both via StreamFair.tick
+      // Active task: paint chat **now** (sync). StreamFair rAF alone felt like
+      // "no streaming" when tools/phase work crowded the frame or gate was quiet.
+      if (isActiveTask(task)) {
+        upsertAssistant(task.streamBuf || '', true, task);
+        StreamFair.scheduleLiveMirror(task);
+        if (task.running) {
           const now = performance.now();
-          if (!task._lastStreamPhaseAt || now - task._lastStreamPhaseAt > 100) {
+          if (prevLen === 0 || !task._lastStreamPhaseAt || now - task._lastStreamPhaseAt > 100) {
             task._lastStreamPhaseAt = now;
-            setLivePhase('streaming…', `${task.title} · ${(task.streamBuf || '').length} 字`);
+            setLivePhase(
+              'streaming…',
+              `${task.title} · ${(task.streamBuf || '').length} 字`
+            );
           }
         }
+      } else {
+        scheduleStreamPaint(task);
       }
     }),
     window.grok.on('agent:thought', (d) => {
@@ -10444,15 +10446,21 @@ function bindAgentEvents() {
         task._routeFirstThought = true;
         appendExecRouteStep(task, { kind: 'thinking', detail: 'thinking…' });
       }
-      scheduleThoughtPaint(task);
-      if (isActiveTask(task) && task.running) {
-        const now = performance.now();
-        if (!task._lastThoughtPhaseAt || now - task._lastThoughtPhaseAt > 100) {
-          task._lastThoughtPhaseAt = now;
-          setLivePhase('thinking…', `${task.title} · ${(task.thoughtBuf || '').length} 字`);
+      if (isActiveTask(task)) {
+        upsertThought(task.thoughtBuf || '', true, task);
+        StreamFair.scheduleLiveMirror(task);
+        if (task.running) {
+          const now = performance.now();
+          if (prevLen === 0 || !task._lastThoughtPhaseAt || now - task._lastThoughtPhaseAt > 100) {
+            task._lastThoughtPhaseAt = now;
+            setLivePhase(
+              'thinking…',
+              `${task.title} · ${(task.thoughtBuf || '').length} 字`
+            );
+          }
         }
-        // First thought flushes immediately; later frames ride StreamFair only (no dual Live path)
-        if (prevLen === 0 && task.thoughtBuf) StreamFair.flushTask(task);
+      } else {
+        scheduleThoughtPaint(task);
       }
     }),
     window.grok.on('agent:tool_start', (d) => {

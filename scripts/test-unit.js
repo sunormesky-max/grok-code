@@ -2009,28 +2009,36 @@ function testA11yRovingKeyboard() {
 function testStreamGate() {
   const g = require(path.join(root, 'renderer', 'stream-gate.js'));
   assert.equal(g.streamMode('', { running: true }), 'none');
-  // Fail-open: short text is quiet (never blank hold)
-  assert.equal(g.streamMode('hi', { running: true, toolCount: 0 }), 'quiet');
+  // Fail-open: any non-empty live text is full answer (chat must stream)
+  assert.equal(
+    g.streamMode('短', { running: true, toolCount: 0 }),
+    'answer',
+    'short live text must be answer not quiet'
+  );
+  assert.equal(
+    g.streamMode('hello world', { running: true, hasToolThisTurn: true }),
+    'answer'
+  );
+  // Fail-open: short + mid-tool still full answer (chat streams live tokens)
+  assert.equal(g.streamMode('hi', { running: true, toolCount: 0 }), 'answer');
   assert.equal(
     g.streamMode('short mid', { running: true, toolCount: 2 }),
-    'quiet'
+    'answer'
   );
   const long = Array(g.STREAM_PROMOTE_WORDS + 2)
     .fill('word')
     .join(' ');
   assert.equal(g.streamMode(long, { running: true, toolCount: 0 }), 'answer');
-  // CJK promote by char threshold
   const cjk = '中'.repeat(g.STREAM_PROMOTE_CHARS);
   assert.equal(g.streamMode(cjk, { running: true, toolCount: 0 }), 'answer');
-  // Done turn always answer
   assert.equal(g.streamMode('short', { running: false }), 'answer');
-  // hold alias still shows text (not blank)
+  // hold/quiet display helpers still non-blank for compat
   assert.ok(g.displayForMode('abc', 'hold', { en: true }).includes('abc'));
   assert.ok(g.displayForMode('hello world', 'quiet', { en: true }).includes('Working'));
   assert.equal(g.displayForMode('full text', 'answer'), 'full text');
   assert.equal(
     g.modeForTask({ streamBuf: 'x', running: true, toolCount: 0 }),
-    'quiet'
+    'answer'
   );
   console.log('ok  stream-gate quiet/answer fail-open');
 }
