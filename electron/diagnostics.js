@@ -502,23 +502,30 @@ function checkHeadlessTransport(cfg = {}) {
       fix: null,
     };
   }
+  const allowFb = Boolean(cfg.allowHeadlessFallback);
   return {
     id: 'transport_tools',
     name: '传输与工具流',
     ok: true,
-    level: 'ok',
+    level: allowFb ? 'warn' : 'ok',
     detail: [
-      `agentTransport=auto：优先 ACP；失败 sticky headless ${stickyMin} 分钟（≠ Build 未开通）。`,
-      preferHl
-        ? '已开「ACP 失败后保持 headless」：到期不自动再冷试 ACP，需点重试 ACP。'
-        : 'sticky 到期后下次发送会自动再试 ACP。',
-      '界面「已降级 headless」+ 重试 ACP；Doctor 可勾选「探测 ACP」。',
-    ].join('\n'),
+      'GrokCode = Grok Build 前端。正常态：grok agent stdio（工具 + Live/Code/Diff）。',
+      `agentTransport=${t || 'auto'} · sticky ${stickyMin}m · 允许-p降级=${allowFb ? '是' : '否（默认）'}`,
+      allowFb
+        ? '已允许 -p 逃生：ACP 失败可黑盒文本/工具，但无 tool 事件（非 TUI 能力）。'
+        : '默认 ACP 失败硬失败，不静默变成聊天框。Doctor 可「探测 ACP」。',
+      preferHl ? '降级后保持 -p（需已允许降级）。' : '',
+    ]
+      .filter(Boolean)
+      .join('\n'),
     transport: t || 'auto',
     noToolStream: false,
     stickyHeadlessMinutes: stickyMin,
     preferHeadlessOnAcpFail: preferHl,
-    fix: null,
+    allowHeadlessFallback: allowFb,
+    fix: allowFb
+      ? '生产使用请关闭「允许 -p 降级」，坚持 Build 主路径'
+      : null,
   };
 }
 

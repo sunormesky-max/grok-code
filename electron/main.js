@@ -136,6 +136,12 @@ const store = new Store({
      */
     preferHeadlessOnAcpFail: false,
     /**
+     * OPT-IN only. When false (default), ACP 403/auth hard-fails — GrokCode is
+     * Grok Build frontend and must not silently become tool-less -p chat.
+     * When true, auto may fall back to grok -p (no tool_call UI).
+     */
+    allowHeadlessFallback: false,
+    /**
      * User asserts custom grok binary includes tool InProgress patch
      * (patches/grok-build/0001). Also: GROKCODE_PATCHED_CLI=1 or marker file.
      */
@@ -201,6 +207,7 @@ function getConfig() {
       return 30;
     })(),
     preferHeadlessOnAcpFail: Boolean(store.get('preferHeadlessOnAcpFail')),
+    allowHeadlessFallback: Boolean(store.get('allowHeadlessFallback')),
   };
 }
 
@@ -604,6 +611,7 @@ ipcMain.handle('config:get', () => {
     agentTransport: getConfig().agentTransport || 'auto',
     stickyHeadlessMinutes: getConfig().stickyHeadlessMinutes || 30,
     preferHeadlessOnAcpFail: Boolean(getConfig().preferHeadlessOnAcpFail),
+    allowHeadlessFallback: Boolean(getConfig().allowHeadlessFallback),
     modes: modes.listModes(),
     styles: modes.listStyles(),
   };
@@ -621,6 +629,7 @@ const ACP_WARM_INVALIDATE_KEYS = new Set([
   'agentTransport',
   'stickyHeadlessMinutes',
   'preferHeadlessOnAcpFail',
+  'allowHeadlessFallback',
   'grokPatched',
   'patchedCli',
 ]);
@@ -701,6 +710,19 @@ ipcMain.handle('config:set', (_e, partial) => {
   }
   if (p.preferHeadlessOnAcpFail !== undefined) {
     store.set('preferHeadlessOnAcpFail', Boolean(p.preferHeadlessOnAcpFail));
+  }
+  if (p.allowHeadlessFallback !== undefined) {
+    store.set('allowHeadlessFallback', Boolean(p.allowHeadlessFallback));
+    // Turning off degraded mode: clear sticky so next send retries Build path
+    if (!p.allowHeadlessFallback) {
+      for (const proj of projects.values()) {
+        try {
+          proj.agent?.clearStickyHeadless?.({ by: 'allow_fallback_off' });
+        } catch {
+          /* ignore */
+        }
+      }
+    }
   }
   if (p.locale !== undefined) {
     store.set('locale', String(p.locale) === 'en' ? 'en' : 'zh');

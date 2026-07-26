@@ -11,8 +11,9 @@ GrokCode is a thin **desktop host** over the local open-source **Grok Build CLI*
    `enter_plan_mode` / `exit_plan_mode`). Host injects only user + project rules.
 4. **Local-first** — sessions under `~/.grok-code/`, CLI auth under `~/.grok/auth.json`.
 5. **Stream first** — paint tokens/tools live; activity clock for inter-stage silence.
-6. **Transport honesty** — prefer ACP (`grok agent stdio`); fall back to headless
-   (`streaming-json`, same family as `grok -p`) when Build agent API is 403-gated.
+6. **Transport honesty** — GrokCode is the **Grok Build frontend**. Normal path is
+   only ACP (`grok agent stdio`). `grok -p` is an **opt-in escape hatch**
+   (`allowHeadlessFallback`), not product-normal (no tool_call UI / not TUI-class).
 
 ## Process model
 

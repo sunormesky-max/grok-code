@@ -80,26 +80,27 @@ function humanizeAgentError(raw) {
   // Combined: common in stream logs — Auth(AuthorizationRequired) then 403 body
   if (authReq && stdio403) {
     return (
-      'ACP agent 路径鉴权/代理失败（AuthorizationRequired + 403）。\n' +
-      '这不等于 Build 未开通：终端 grok -p / headless 往往仍可用，GrokCode 在 auto 下会自动回退。\n' +
-      '处理：终端执行 grok login 后重启 GrokCode；或设置 → Agent transport 选 headless。\n' +
-      '这不是 GrokCode 崩溃。'
+      '【Build 主路径失败】grok agent stdio 鉴权/代理错误（AuthorizationRequired + 403）。\n' +
+      'GrokCode 是 Grok Build 前端，正常态必须走 agent stdio（工具/Live/Code/Diff）。\n' +
+      '本机探测：同一 CLI 的 grok -p 可能仍可用，但那不是 TUI 级 agent 甲板。\n' +
+      '处理：1) 终端 grok login  2) 设置→探测 ACP  3) 仅临时需要时可勾选「允许 -p 降级」。\n' +
+      '默认不再静默降级成无工具聊天。'
     );
   }
   if (authReq) {
     return (
-      'Grok CLI 需要重新登录（AuthorizationRequired）。\n' +
+      '【Build 主路径失败】Grok CLI 需要重新登录（AuthorizationRequired）。\n' +
       '请在终端运行：grok login\n' +
-      '完成后重启 GrokCode 再试。Build 已开通时通常仍可用 headless。'
+      '完成后点「重试 ACP」。GrokCode 默认不自动降级到无工具的 -p。'
     );
   }
   if (stdio403) {
     return (
-      'ACP agent 路径返回 403（服务端文案可能仍写 “Grok Build is coming soon”）。\n' +
-      '这不等于账号没有 Build——同一账号的 headless / TUI 可能正常。\n' +
-      'GrokCode 在 auto 模式下会改用 headless（无工具卡片，仍有流式回复）。\n' +
-      '若 headless 也失败：终端 grok login，或在设置中填写 XAI_API_KEY。\n' +
-      '这不是 GrokCode 崩溃。'
+      '【Build 主路径失败】grok agent stdio 返回 403（文案可能仍写 coming soon）。\n' +
+      'GrokCode 作为 Build 前端，此时不应假装正常工作。\n' +
+      '对照：本机 grok -p 往往仍能黑盒调工具，但无 tool 事件 → 无 TUI 级 Live/Diff。\n' +
+      '处理：终端 grok login；设置→探测 ACP；临时逃生请显式勾选「允许 -p 降级」。\n' +
+      '这不是界面卡死，是 agent 主路径被拒。'
     );
   }
   if (/401|unauthorized/i.test(msg) && /api|auth|token|key/i.test(msg)) {
@@ -488,26 +489,44 @@ function createAgent({ getConfig, workspaceRoot, emit, reportStreamTelemetry } =
   }
 
   /**
-   * Primary path: ACP (`grok agent stdio`) — streams thought + text + tool_call.
-   * Headless streaming-json is text/thought/end only (no tool progress).
+   * Primary path: ACP (`grok agent stdio`) — Grok Build frontend contract.
+   * Full tool stream + Live/Code/Diff. This is the only “normal” mode.
    *
-   * Some installs can use `grok -p` / headless (Build works) while agent stdio
-   * still returns 403 with a stale “coming soon” body, or Auth(AuthorizationRequired).
-   * That is an ACP path failure — not proof Build is closed. Fall back to headless.
+   * `grok -p` streaming-json is an explicit escape hatch (allowHeadlessFallback),
+   * NOT product-normal: tools may run black-box but no tool_call events.
+   *
    * Override: GROKCODE_AGENT_TRANSPORT=headless|acp|streaming-json
-   * Disable fallback: GROKCODE_ACP_NO_FALLBACK=1
+   * Force no -p: GROKCODE_ACP_NO_FALLBACK=1 (default product stance when
+   * allowHeadlessFallback is false).
    */
+  function allowHeadlessFallbackNow(cfg) {
+    if (
+      process.env.GROKCODE_ACP_NO_FALLBACK === '1' ||
+      process.env.GROKCODE_ACP_NO_FALLBACK === 'true'
+    ) {
+      return false;
+    }
+    if (
+      process.env.GROKCODE_ALLOW_HEADLESS_FALLBACK === '1' ||
+      process.env.GROKCODE_ALLOW_HEADLESS_FALLBACK === 'true'
+    ) {
+      return true;
+    }
+    // Default false: GrokCode is Build frontend — do not silently become chat-only
+    return Boolean(cfg?.allowHeadlessFallback);
+  }
+
   async function run(opts) {
     const cfg0 = getConfig();
     const transport = String(
       process.env.GROKCODE_AGENT_TRANSPORT || cfg0.agentTransport || 'auto'
     ).toLowerCase();
-    // headless | streaming-json: force -p style path (matches open-source grok -p)
+    const allowHl = allowHeadlessFallbackNow(cfg0);
+    // headless | streaming-json: force -p style path (explicit user choice)
     if (transport === 'headless' || transport === 'streaming-json') {
       return runHeadless(opts);
     }
-    // auto + recent ACP stdio failure: go headless first (still stream chat/Live text)
-    // sticky expired → fall through to ACP (auto-retry) unless pinned prefer-headless
+    // auto + sticky: only skip to -p when user opted into degraded fallback
     if (
       transport === 'auto' &&
       stickyHeadlessReason &&
@@ -521,7 +540,6 @@ function createAgent({ getConfig, workspaceRoot, emit, reportStreamTelemetry } =
         { force: true }
       );
       stickyHeadlessUntil = 0;
-      // keep reason only for log; clear so getTransportState is clean if ACP ok
       const prev = stickyHeadlessReason;
       stickyHeadlessReason = '';
       try {
@@ -536,6 +554,7 @@ function createAgent({ getConfig, workspaceRoot, emit, reportStreamTelemetry } =
       emitTransportState({ expiredRetry: true, previousReason: prev });
     }
     if (
+      allowHl &&
       transport === 'auto' &&
       (stickyHeadlessUntil > Date.now() || stickyPinned) &&
       stickyHeadlessReason &&
@@ -543,16 +562,14 @@ function createAgent({ getConfig, workspaceRoot, emit, reportStreamTelemetry } =
       process.env.GROKCODE_FORCE_ACP !== '1'
     ) {
       streamDebug(
-        `sticky headless (ACP recently failed; pinned=${stickyPinned ? 1 : 0} until=${new Date(stickyHeadlessUntil).toISOString()})`,
+        `sticky headless (opt-in fallback; pinned=${stickyPinned ? 1 : 0})`,
         { force: true }
       );
       try {
         opts?.emit?.('agent:phase', {
           taskId: opts.taskId || 'default',
           phase: 'boot',
-          detail: stickyPinned
-            ? '跳过 ACP（已固定 headless，点「重试 ACP」可恢复）…'
-            : '跳过 ACP（上次 agent 路径失败），直接 headless 流式…',
+          detail: '已选择 -p 降级（非 Build 主路径）…',
         });
       } catch {
         /* ignore */
@@ -564,11 +581,10 @@ function createAgent({ getConfig, workspaceRoot, emit, reportStreamTelemetry } =
         _fallbackReason: 'acp_sticky',
       });
     }
-    // acp: never fall back unless env allows (default acp still falls back on 403 via auto)
-    const forceAcpOnly = transport === 'acp';
+    // transport=acp or auto without sticky/opt-in → ACP only
+    const forceAcpOnly = transport === 'acp' || !allowHl;
     try {
       const result = await runAcp(opts);
-      // ACP path worked — stop sticky headless so tool stream returns next turn
       if (stickyHeadlessUntil || stickyHeadlessReason) {
         clearStickyHeadless({ by: 'acp_ok' });
       }
@@ -586,56 +602,55 @@ function createAgent({ getConfig, workspaceRoot, emit, reportStreamTelemetry } =
         forceAcpOnly ||
         process.env.GROKCODE_ACP_NO_FALLBACK === '1' ||
         process.env.GROKCODE_ACP_NO_FALLBACK === 'true' ||
-        opts?._noHeadlessFallback;
-      // Cold start / transport failures
+        opts?._noHeadlessFallback ||
+        !allowHl;
       const coldFail =
         err?.code === 'ACP_FALLBACK' ||
         /ENOENT|spawn |initialize|not writable|找不到 Grok/i.test(msg);
-      // Agent stdio 403 / auth — not “Build product closed”
       const acpStdio403 = isAcpStdio403Blob(blob, err);
       const authRequired = isAuthRequiredBlob(blob);
+      const fallbackReason = acpStdio403
+        ? 'acp_stdio_403'
+        : authRequired
+          ? 'acp_auth'
+          : coldFail
+            ? 'acp_cold'
+            : 'acp_error';
+
+      // Always record last ACP failure for UI / Doctor (even when not falling back)
+      if (acpStdio403 || authRequired) {
+        armStickyHeadless(fallbackReason);
+      }
+
+      streamDebug(
+        [
+          `=== STREAM_SUMMARY task=${opts.taskId || 'default'}`,
+          `transport=acp`,
+          `stopReason=${noFallback ? 'ACP_PATH_FAILED' : 'ACP_FALLBACK'}`,
+          `fallback=${fallbackReason}`,
+          `allowHeadlessFallback=${allowHl ? 1 : 0}`,
+          `note=${noFallback ? 'no_silent_degrade' : 'retry_headless'}`,
+          `firstTokenMs=-1`,
+          `err=${String(msg).slice(0, 120).replace(/\s+/g, ' ')}`,
+        ].join(' '),
+        { force: true }
+      );
+
       if (!noFallback && (coldFail || acpStdio403 || authRequired)) {
-        const fallbackReason = acpStdio403
-          ? 'acp_stdio_403'
-          : authRequired
-            ? 'acp_auth'
-            : 'acp_cold';
-        if (acpStdio403 || authRequired) {
-          armStickyHeadless(fallbackReason);
-        }
         streamDebug(
-          `ACP → headless fallback (${fallbackReason}): ${msg.slice(0, 200)}`,
-          { force: true }
-        );
-        // STREAM_SUMMARY for the failed ACP attempt so triage sees fallback
-        // before the headless retry summary (no inventing tokens).
-        streamDebug(
-          [
-            `=== STREAM_SUMMARY task=${opts.taskId || 'default'}`,
-            `transport=acp`,
-            `stopReason=ACP_FALLBACK`,
-            `fallback=${fallbackReason}`,
-            `note=retry_headless`,
-            `firstTokenMs=-1`,
-            `err=${String(msg).slice(0, 120).replace(/\s+/g, ' ')}`,
-          ].join(' '),
+          `ACP → headless fallback OPT-IN (${fallbackReason}): ${msg.slice(0, 200)}`,
           { force: true }
         );
         try {
-          const reason =
-            acpStdio403 || authRequired
-              ? 'ACP 路径失败（≠ Build 未开通），改用 headless（与 grok -p 同路）…'
-              : 'ACP 不可用，改用 headless…';
           opts?.emit?.('agent:phase', {
             taskId: opts.taskId || 'default',
             phase: 'boot',
-            detail: reason,
+            detail:
+              'ACP 失败 · 用户已允许 -p 降级（无工具 UI，非 Build 主路径）…',
           });
-          // emit via createAgent emit is not on opts — use stream only; headless will set phase
         } catch {
           /* ignore */
         }
-        // Fresh headless session — ACP session id is not valid for -p path
         return runHeadless({
           ...opts,
           sessionId: null,
@@ -643,7 +658,38 @@ function createAgent({ getConfig, workspaceRoot, emit, reportStreamTelemetry } =
           _fallbackReason: fallbackReason,
         });
       }
-      throw err;
+
+      // Product-normal: hard fail — do not pretend we are still a Build flight deck
+      const friendly = humanizeAgentError(err);
+      const e = new Error(friendly);
+      e.code = 'ACP_PATH_FAILED';
+      e.fallbackReason = fallbackReason;
+      e.allowHeadlessFallback = false;
+      e.cause = err;
+      try {
+        if (typeof emit === 'function') {
+          emit('agent:error', {
+            taskId: opts.taskId || 'default',
+            error: friendly,
+            code: 'ACP_PATH_FAILED',
+            fallbackReason,
+            buildPathFailed: true,
+          });
+          emit('agent:phase', {
+            taskId: opts.taskId || 'default',
+            phase: 'error',
+            detail: 'Build 主路径失败（agent stdio）',
+          });
+          emitTransportState({
+            taskId: opts.taskId || 'default',
+            buildPathFailed: true,
+            fallbackReason,
+          });
+        }
+      } catch {
+        /* ignore */
+      }
+      throw e;
     }
   }
 

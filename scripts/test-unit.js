@@ -577,14 +577,19 @@ function testAgentExports() {
   const mapped403 = humanizeAgentError(
     'Internal error: {"message":"API error (status 403 Forbidden): Grok Build is coming soon. You don\'t have access now."}'
   );
-  assert.ok(/403|coming soon|ACP|headless/i.test(mapped403), '403 access mapped');
+  assert.ok(/403|coming soon|ACP|主路径|Build/i.test(mapped403), '403 access mapped');
   // Must not claim the product/account has no Build
   assert.ok(
     !/无权使用 Grok Build|Build 未开通|账号无权/i.test(mapped403),
     '403 must not claim Build closed'
   );
+  // Product stance: hard-fail messaging, not silent -p as normal
   assert.ok(
-    /登录|Authorization|headless/i.test(
+    /主路径失败|不.*静默|不自动降级|允许.*降级/i.test(mapped403),
+    '403 must state Build path failed / no silent degrade'
+  );
+  assert.ok(
+    /登录|Authorization|主路径/i.test(
       humanizeAgentError('Transport channel closed, when Auth(AuthorizationRequired)')
     ),
     'auth required mapped'
@@ -618,8 +623,15 @@ function testAgentExports() {
     'Transport channel closed, when Auth(AuthorizationRequired)\n' +
       'API error (status 403 Forbidden): Grok Build is coming soon. You don\'t have access now.'
   );
-  assert.ok(/不等于.*Build|headless|自动回退/i.test(dual), 'dual auth+403 soft message');
+  assert.ok(/主路径失败|Build 前端|降级/i.test(dual), 'dual auth+403 product message');
   assert.ok(!/无权使用 Grok Build/i.test(dual), 'dual must not claim no Build');
+  // allowHeadlessFallback default false via empty config
+  const agentNoFb = createAgent({
+    getConfig: () => ({ allowHeadlessFallback: false, agentTransport: 'auto' }),
+    workspaceRoot: root,
+    emit: () => {},
+  });
+  assert.equal(typeof agentNoFb.run, 'function');
   return Promise.resolve(agent.setSessionMode('missing-task', 'plan'))
     .then((r) => {
       assert.equal(r.ok, false);

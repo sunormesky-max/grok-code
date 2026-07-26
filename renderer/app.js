@@ -10514,19 +10514,22 @@ function formatStickyDetail(st) {
   const reason = st.stickyReasonLabel || st.stickyReason || st.fallbackReason || '';
   const mins = st.stickyMinutes || 0;
   const pinned = Boolean(st.stickyPinned);
+  const failed = Boolean(st.buildPathFailed || st.stickyHeadless || st.degrade);
   if (en) {
     return [
-      reason || 'ACP path failed',
-      pinned ? 'pinned headless (Retry ACP to clear)' : mins ? `sticky ~${mins}m` : '',
-      'Text streams · no tool cards · Diff write needs ACP',
+      reason || 'Build agent path failed',
+      failed ? 'NOT normal GrokCode mode' : '',
+      pinned ? 'pinned -p' : mins ? `sticky ~${mins}m` : '',
+      'Retry ACP · or opt-in -p fallback in Settings',
     ]
       .filter(Boolean)
       .join(' · ');
   }
   return [
-    reason || 'ACP 路径失败',
-    pinned ? '已固定 headless（点重试 ACP 清除）' : mins ? `sticky 约 ${mins} 分钟` : '',
-    '文本可流 · 无工具卡片 · Diff 写流需 ACP',
+    reason || 'Build 主路径（agent stdio）失败',
+    failed ? '当前不是 GrokCode 正常态' : '',
+    pinned ? '已固定 -p' : mins ? `记录约 ${mins} 分钟` : '',
+    '请重试 ACP · 或设置中显式允许 -p 降级',
   ]
     .filter(Boolean)
     .join(' · ');
@@ -10561,8 +10564,8 @@ function showTransportDegrade(st) {
   }
   const en = localeIsEn();
   const tit = en
-    ? 'Degraded headless · text OK · tools/Diff write off'
-    : '已降级 headless · 文本可流 · 工具/Diff 写流不可用';
+    ? 'Build path failed · not TUI-class agent'
+    : 'Build 主路径失败 · 非 TUI 级 agent 能力';
   const det = formatStickyDetail(st);
   const dismissed = Date.now() < _degradeDismissedUntil;
   if (bar && !dismissed) {
@@ -13519,6 +13522,8 @@ async function refreshConfigUi() {
   }
   const preferHl = document.getElementById('cfgPreferHeadlessOnAcpFail');
   if (preferHl) preferHl.checked = Boolean(cfg.preferHeadlessOnAcpFail);
+  const allowHl = document.getElementById('cfgAllowHeadlessFallback');
+  if (allowHl) allowHl.checked = Boolean(cfg.allowHeadlessFallback);
   await refreshTransportStateUi();
 
   state.model = cfg.model || '';
@@ -13552,6 +13557,9 @@ async function saveSettings() {
     ),
     preferHeadlessOnAcpFail: Boolean(
       document.getElementById('cfgPreferHeadlessOnAcpFail')?.checked
+    ),
+    allowHeadlessFallback: Boolean(
+      document.getElementById('cfgAllowHeadlessFallback')?.checked
     ),
     rules: $('#cfgRules').value,
     ...(window.GrokSettingsExtra?.collectPartial?.() || {}),

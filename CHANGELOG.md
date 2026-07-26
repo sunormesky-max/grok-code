@@ -14,6 +14,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Optional: worker for multi-MB LCS; SBS hunk actions
 - Optional: wire `execution-route.reduceRouteTick` from ACP activity clock (ledger dual-bookkeep)
 
+## [1.48.0] — 2026-07-26
+
+### Breaking (product) — GrokCode is Grok Build frontend
+
+Verified on user machine: `grok -p` can run tools black-box; `grok agent stdio`
+returns **403 coming soon**. OpenCode works because it **owns** tools in-process;
+GrokCode must not pretend -p chat is TUI-class Build.
+
+- **Default: no silent -p fallback** (`allowHeadlessFallback: false`)
+- ACP 403/auth → **hard fail** `ACP_PATH_FAILED` + honest copy（主路径失败）
+- Opt-in Settings: **允许 -p 降级（逃生舱）** — only then auto may use streaming-json
+- Transport UI copy: Build 主路径 vs 非 TUI 能力
+- humanize errors no longer say “auto 会改用 headless” as normal
+
 ## [1.47.11] — 2026-07-26
 
 ### Fix — 「76s 无活动」文案撒谎
