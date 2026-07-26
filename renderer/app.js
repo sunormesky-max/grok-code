@@ -10074,17 +10074,31 @@ function paintWaitShell(task, detailOverride) {
     /headless|无工具|no tool|degrad/i.test(hostDet) ||
     Boolean(task._headlessBannerShown) ||
     Boolean(_lastTransportState?.stickyHeadless || _lastTransportState?.noToolStream);
+  const effort = String(state.reasoningEffort || '').trim() || 'default';
+  // Honest: log proves ~90s with ZERO stdout NDJSON under xhigh, then thought+text burst.
+  // Not "model idle" — server-side reasoning; CLI simply has not pushed a chunk yet.
   let line;
-  if (hostDet && /等待模型|首包|silent|Waiting|无工具|headless/i.test(hostDet)) {
-    line = hostDet;
-  } else if (en) {
+  if (en) {
     line = headless
-      ? `Waiting for first token… ${sec}s · no tools · headless (often ~60–90s)`
-      : `Waiting for first token… ${sec}s`;
+      ? `CLI silent ${sec}s · model likely reasoning (${effort}) · no NDJSON yet · headless`
+      : `CLI silent ${sec}s · waiting first chunk (${effort})`;
+    if (sec >= 45 && /xhigh|high/i.test(effort)) {
+      line += ' · tip: lower effort for faster first token';
+    }
   } else {
     line = headless
-      ? `等待模型首包… ${sec}s · 无工具事件 · headless（常见 60–90s）`
-      : `等待模型首包… ${sec}s`;
+      ? `CLI 静默 ${sec}s · 模型多半在服务端推理（effort=${effort}）· 尚未推送任何 chunk · headless`
+      : `CLI 静默 ${sec}s · 等待首包 chunk（effort=${effort}）`;
+    if (sec >= 45 && /xhigh|high/i.test(effort)) {
+      line += ' · 可把思考强度降到 medium 换更快首包';
+    }
+  }
+  // Prefer host detail only when it already carries the honest "推理/静默" framing
+  if (
+    hostDet &&
+    /服务端推理|CLI 静默|reasoning|NDJSON|silent.*chunk/i.test(hostDet)
+  ) {
+    line = hostDet;
   }
   ensureLiveAssistant(task);
   const el = task.liveAssistantEl;
@@ -10096,7 +10110,7 @@ function paintWaitShell(task, detailOverride) {
       if (body.textContent !== line) body.textContent = line;
     }
     if (role) {
-      const short = line.length > 42 ? line.slice(0, 40) + '…' : line;
+      const short = line.length > 48 ? line.slice(0, 46) + '…' : line;
       const nextRole = `Grok · ${short}`;
       if (role.textContent !== nextRole) role.textContent = nextRole;
     }
@@ -10105,6 +10119,13 @@ function paintWaitShell(task, detailOverride) {
   if (waitRow && isActiveTask(task)) {
     const title = waitRow.querySelector('.title');
     if (title && title.textContent !== line) title.textContent = line;
+    const sub = waitRow.querySelector('.sub');
+    if (sub && sec >= 20) {
+      const tip = en
+        ? `Not frozen UI: stream log shows 0 lines until ~90s on xhigh, then thought/text burst. Lower effort or wait.`
+        : `不是界面卡死：日志里 xhigh 常 0 行 NDJSON 直到 ~90s，随后 thought/text 爆发。可降 effort 或继续等。`;
+      if (sub.textContent !== tip) sub.textContent = tip;
+    }
   }
   if (isActiveTask(task)) {
     setLivePhase(line, `${task.title} · wait`);

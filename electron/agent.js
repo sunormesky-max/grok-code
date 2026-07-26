@@ -995,7 +995,11 @@ function createAgent({ getConfig, workspaceRoot, emit, reportStreamTelemetry } =
           const totalSec = Math.max(0, Math.floor((Date.now() - promptSentAt) / 1000));
           const tok = tokenBrief();
           if (!firstTokenAt) {
-            setPhase('running', `等待模型首包… ${silentSec}s${tok}`);
+            const eff = String(cfg.reasoningEffort || '').trim() || 'default';
+            setPhase(
+              'running',
+              `CLI 静默 ${silentSec}s · 模型多半在服务端推理（effort=${eff}）· 尚未推送 chunk${tok}`
+            );
           } else if (toolDepth > 0) {
             const who = lastToolName ? ` · ${lastToolName}` : '';
             setPhase(
@@ -2382,9 +2386,11 @@ function createAgent({ getConfig, workspaceRoot, emit, reportStreamTelemetry } =
           if (silentSec > maxSilentSecHl) maxSilentSecHl = silentSec;
           const totalSec = Math.max(0, Math.floor((Date.now() - t0Headless) / 1000));
           if (!firstTokenAtHl) {
+            // Honest: often 60–90s of ZERO stdout under xhigh before thought/text burst
+            const eff = String(cfg.reasoningEffort || '').trim() || 'default';
             setPhase(
               'running',
-              `等待模型首包… ${silentSec}s · 无工具事件 · headless · 总 ${totalSec}s`
+              `CLI 静默 ${silentSec}s · 模型多半在服务端推理（effort=${eff}）· 尚未推送 NDJSON · headless · 总 ${totalSec}s`
             );
           } else if (toolDepth > 0) {
             setPhase(
@@ -2394,7 +2400,7 @@ function createAgent({ getConfig, workspaceRoot, emit, reportStreamTelemetry } =
           } else if (silentSec >= 2) {
             setPhase(
               'running',
-              `等待模型继续… ${silentSec}s · 无工具事件 · headless · 总 ${totalSec}s`
+              `CLI 段间静默 ${silentSec}s · 等待下一 chunk · headless · 总 ${totalSec}s`
             );
           }
         }, 500);
@@ -2624,12 +2630,15 @@ function createAgent({ getConfig, workspaceRoot, emit, reportStreamTelemetry } =
       streamDebug(`task=${taskId} listening stdout/stderr log=${STREAM_DEBUG_PATH}`, {
         force: true,
       });
-      setPhase(
-        'running',
-        _acpFallback
-          ? 'headless 已启动，等待模型首包…'
-          : 'CLI 已启动，等待模型首包…'
-      );
+      {
+        const eff = String(cfg.reasoningEffort || '').trim() || 'default';
+        setPhase(
+          'running',
+          _acpFallback
+            ? `headless 已启动 · CLI 尚未推送 NDJSON（effort=${eff}，xhigh 常见 60–90s 静默后爆发）…`
+            : `CLI 已启动 · 等待首包 NDJSON（effort=${eff}）…`
+        );
+      }
       startActivityClockHl();
       try {
         child.stdout.setEncoding('utf8');

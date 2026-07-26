@@ -14,6 +14,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Optional: worker for multi-MB LCS; SBS hunk actions
 - Optional: wire `execution-route.reduceRouteTick` from ACP activity clock (ledger dual-bookkeep)
 
+## [1.47.11] — 2026-07-26
+
+### Fix — 「76s 无活动」文案撒谎
+
+Stream log: under `reasoningEffort=xhigh` + headless, **zero NDJSON for ~90s**,
+then thought+text burst in ~2s. Model is not idle — server-side reasoning;
+CLI has not pushed a chunk yet. UI said “等待首包/无工具” which felt like a freeze.
+
+- Wait shell / activity clock: `CLI 静默 Ns · 模型多半在服务端推理（effort=xhigh）· 尚未推送 NDJSON`
+- ≥45s + high/xhigh: tip to lower effort for faster first token
+- Live wait sub explains log pattern (not UI deadlock)
+
 ## [1.47.10] — 2026-07-26
 
 ### Fix — chat bubble stuck on static「等待首包」
@@ -21,8 +33,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 Headless TTFT is still ~60–90s (CLI/model). Host activity clock ticked, but the
 assistant bubble stayed on frozen `Grok · 等待首包` / `等待模型首包…` with no seconds.
 
-- **Local wait-shell ticker** (500ms): body + role + Live wait row show
-  `等待模型首包… Ns · 无工具事件 · headless（常见 60–90s）`
+- **Local wait-shell ticker** (500ms): body + role + Live wait row show ticking seconds
 - Prefer host phase detail when richer; clear ticker on first text/thought/done
 - Honest copy: long wait is expected under headless, not a dead UI
 
