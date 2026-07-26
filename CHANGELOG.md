@@ -14,6 +14,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Optional: worker for multi-MB LCS; SBS hunk actions
 - Optional: wire `execution-route.reduceRouteTick` from ACP activity clock (ledger dual-bookkeep)
 
+## [1.47.9] — 2026-07-26
+
+### Fix — P0/P1 transport honesty (Doctor ACP probe + sticky config)
+
+User still could not tell **auth vs stdio 403 vs paint**; sticky was hard-coded 30m;
+`getConfig()` omitted `agentTransport` so settings transport never reached agent runs.
+
+- **Bugfix:** `getConfig()` now returns `agentTransport` (+ sticky prefs)
+- **Doctor ACP probe** — initialize → auth → session/new → short prompt; verdict
+  `ok` | `auth` | `stdio_403` | `timeout` | `cold` (≠ Build 未开通)
+- UI: checkbox「探测 ACP」; actions 重试 ACP / 强制 headless; ok 自动清 sticky
+- **sticky 时长** 5/15/30/60/120 分钟（设置 + `GROKCODE_STICKY_HEADLESS_MIN`）
+- **ACP 失败后保持 headless** — 到期不自动冷试，需点「重试 ACP」
+- sticky **到期自动再试 ACP**（未勾选保持时）
+- 降级条文案固定：文本可流 · 工具/Diff 写流不可用
+- headless 静默时钟：`无工具事件 · headless`（任务条/Live 不装死）
+
 ## [1.47.8] — 2026-07-26
 
 ### Fix — 诚实「已降级 headless」（根因 UI）

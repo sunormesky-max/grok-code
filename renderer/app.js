@@ -10399,19 +10399,20 @@ function formatStickyDetail(st) {
   const en = localeIsEn();
   const reason = st.stickyReasonLabel || st.stickyReason || st.fallbackReason || '';
   const mins = st.stickyMinutes || 0;
+  const pinned = Boolean(st.stickyPinned);
   if (en) {
     return [
       reason || 'ACP path failed',
-      mins ? `sticky ~${mins}m` : '',
-      'Chat/Live text only · no tool cards · Diff needs disk/fs or ACP',
+      pinned ? 'pinned headless (Retry ACP to clear)' : mins ? `sticky ~${mins}m` : '',
+      'Text streams · no tool cards · Diff write needs ACP',
     ]
       .filter(Boolean)
       .join(' · ');
   }
   return [
     reason || 'ACP 路径失败',
-    mins ? `sticky 约 ${mins} 分钟` : '',
-    '仅文本流 · 无工具卡片 · Diff 需磁盘或 ACP',
+    pinned ? '已固定 headless（点重试 ACP 清除）' : mins ? `sticky 约 ${mins} 分钟` : '',
+    '文本可流 · 无工具卡片 · Diff 写流需 ACP',
   ]
     .filter(Boolean)
     .join(' · ');
@@ -10445,7 +10446,9 @@ function showTransportDegrade(st) {
     return;
   }
   const en = localeIsEn();
-  const tit = en ? 'Degraded to headless' : '已降级 headless';
+  const tit = en
+    ? 'Degraded headless · text OK · tools/Diff write off'
+    : '已降级 headless · 文本可流 · 工具/Diff 写流不可用';
   const det = formatStickyDetail(st);
   const dismissed = Date.now() < _degradeDismissedUntil;
   if (bar && !dismissed) {
@@ -10537,10 +10540,12 @@ function bindAgentEvents() {
       showTransportDegrade({
         stickyHeadless: Boolean(d?.stickyHeadless),
         stickyMinutes: d?.stickyMinutes || 0,
+        stickyPinned: Boolean(d?.stickyPinned),
         stickyReason: d?.stickyReason || '',
         stickyReasonLabel: d?.stickyReasonLabel || '',
         fallbackReason: d?.fallbackReason || '',
-        degrade: Boolean(d?.stickyHeadless || d?.activeRun),
+        degrade: Boolean(d?.stickyHeadless || d?.activeRun || d?.degrade),
+        noToolStream: Boolean(d?.noToolStream || d?.stickyHeadless),
       });
     }),
     window.grok.on('agent:phase', (d) => {
@@ -12917,6 +12922,7 @@ function isActivityClockDetail(detail) {
   return (
     /已静默\s*\d+\s*s/.test(s) ||
     /等待模型(首包|继续)/.test(s) ||
+    /无工具事件/.test(s) ||
     /工具执行中\s*×/.test(s) ||
     /CLI\s*段间静默/.test(s) ||
     /Waiting for (first token|model)/i.test(s) ||
@@ -13382,6 +13388,13 @@ async function refreshConfigUi() {
       ? cfg.agentTransport
       : 'auto';
   }
+  const stickyMin = document.getElementById('cfgStickyHeadlessMinutes');
+  if (stickyMin) {
+    const m = String(cfg.stickyHeadlessMinutes || 30);
+    stickyMin.value = ['5', '15', '30', '60', '120'].includes(m) ? m : '30';
+  }
+  const preferHl = document.getElementById('cfgPreferHeadlessOnAcpFail');
+  if (preferHl) preferHl.checked = Boolean(cfg.preferHeadlessOnAcpFail);
   await refreshTransportStateUi();
 
   state.model = cfg.model || '';
@@ -13410,6 +13423,12 @@ async function saveSettings() {
     alwaysApprove: $('#cfgYolo').checked,
     grokPatched: Boolean(document.getElementById('cfgGrokPatched')?.checked),
     agentTransport: document.getElementById('cfgAgentTransport')?.value || 'auto',
+    stickyHeadlessMinutes: Number(
+      document.getElementById('cfgStickyHeadlessMinutes')?.value || 30
+    ),
+    preferHeadlessOnAcpFail: Boolean(
+      document.getElementById('cfgPreferHeadlessOnAcpFail')?.checked
+    ),
     rules: $('#cfgRules').value,
     ...(window.GrokSettingsExtra?.collectPartial?.() || {}),
   };

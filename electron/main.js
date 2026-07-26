@@ -15,6 +15,7 @@ const { compressContext, buildContextPrompt } = require('./context-compress');
 const { enrichContextWithLlm } = require('./context-llm');
 const {
   runDoctor,
+  runDoctorAsync,
   exportDiagnostics,
   getPatchHelp,
   resolvePatchesDir,
@@ -118,11 +119,22 @@ const store = new Store({
     injectSkillsIndex: true,
     /**
      * Agent transport (host over open-source grok CLI):
-     * auto — ACP first, headless on Build 403
+     * auto — ACP first, headless on agent-stdio 403/auth
      * acp — always grok agent stdio
      * headless — always streaming-json (like grok -p)
      */
     agentTransport: 'auto',
+    /**
+     * After ACP stdio 403/auth, auto skips ACP for this many minutes (1–120).
+     * Default 30. Env GROKCODE_STICKY_HEADLESS_MIN overrides.
+     */
+    stickyHeadlessMinutes: 30,
+    /**
+     * When true + auto: do not cold-try ACP each sticky window —
+     * stay on headless until user clicks「重试 ACP」or switches transport.
+     * For accounts where agent stdio is known-broken but headless works.
+     */
+    preferHeadlessOnAcpFail: false,
     /**
      * User asserts custom grok binary includes tool InProgress patch
      * (patches/grok-build/0001). Also: GROKCODE_PATCHED_CLI=1 or marker file.
@@ -179,6 +191,16 @@ function getConfig() {
     trashOnDelete: store.get('trashOnDelete') !== false,
     injectSkillsIndex: store.get('injectSkillsIndex') !== false,
     grokPatched: Boolean(store.get('grokPatched')),
+    agentTransport: (() => {
+      const t = String(store.get('agentTransport') || 'auto').toLowerCase();
+      return ['auto', 'acp', 'headless'].includes(t) ? t : 'auto';
+    })(),
+    stickyHeadlessMinutes: (() => {
+      const n = Number(store.get('stickyHeadlessMinutes'));
+      if (Number.isFinite(n) && n >= 1 && n <= 120) return Math.round(n);
+      return 30;
+    })(),
+    preferHeadlessOnAcpFail: Boolean(store.get('preferHeadlessOnAcpFail')),
   };
 }
 
@@ -580,6 +602,8 @@ ipcMain.handle('config:get', () => {
     trashOnDelete: getConfig().trashOnDelete,
     injectSkillsIndex: getConfig().injectSkillsIndex,
     agentTransport: getConfig().agentTransport || 'auto',
+    stickyHeadlessMinutes: getConfig().stickyHeadlessMinutes || 30,
+    preferHeadlessOnAcpFail: Boolean(getConfig().preferHeadlessOnAcpFail),
     modes: modes.listModes(),
     styles: modes.listStyles(),
   };
@@ -595,6 +619,8 @@ const ACP_WARM_INVALIDATE_KEYS = new Set([
   'maxTurns',
   'rules',
   'agentTransport',
+  'stickyHeadlessMinutes',
+  'preferHeadlessOnAcpFail',
   'grokPatched',
   'patchedCli',
 ]);
@@ -665,6 +691,16 @@ ipcMain.handle('config:set', (_e, partial) => {
         }
       }
     }
+  }
+  if (p.stickyHeadlessMinutes !== undefined) {
+    const n = Number(p.stickyHeadlessMinutes);
+    store.set(
+      'stickyHeadlessMinutes',
+      Number.isFinite(n) && n >= 1 && n <= 120 ? Math.round(n) : 30
+    );
+  }
+  if (p.preferHeadlessOnAcpFail !== undefined) {
+    store.set('preferHeadlessOnAcpFail', Boolean(p.preferHeadlessOnAcpFail));
   }
   if (p.locale !== undefined) {
     store.set('locale', String(p.locale) === 'en' ? 'en' : 'zh');
@@ -831,10 +867,27 @@ ipcMain.handle('cli:models', () => {
 });
 
 // ── 体检 / 诊断 / 首启 ──────────────────────────────────
-ipcMain.handle('doctor:run', (_e, payload = {}) => {
-  return runDoctor(getConfig(), {
+ipcMain.handle('doctor:run', async (_e, payload = {}) => {
+  const cfg = getConfig();
+  const report = await runDoctorAsync(cfg, {
     probePrompt: Boolean(payload?.probePrompt),
+    probeAcp:
+      payload?.probeAcp === true ||
+      process.env.GROKCODE_DOCTOR_ACP === '1' ||
+      process.env.GROKCODE_DOCTOR_ACP === 'true',
   });
+  // If ACP probe succeeded, clear sticky on all agents so next send can use tools
+  try {
+    const acp = (report.checks || []).find((c) => c.id === 'acp_probe');
+    if (acp && acp.verdict === 'ok') {
+      for (const p of projects.values()) {
+        p.agent?.clearStickyHeadless?.({ by: 'doctor_acp_ok' });
+      }
+    }
+  } catch {
+    /* ignore */
+  }
+  return report;
 });
 
 /** Experimental CLI patches (InProgress) — open folder / return help text */

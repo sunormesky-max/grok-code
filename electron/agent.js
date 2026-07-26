@@ -206,7 +206,29 @@ function createAgent({ getConfig, workspaceRoot, emit, reportStreamTelemetry } =
   let stickyHeadlessUntil = 0;
   /** @type {string} acp_stdio_403 | acp_auth | acp_cold | '' */
   let stickyHeadlessReason = '';
-  const STICKY_HEADLESS_MS = 30 * 60 * 1000;
+  /** When preferHeadlessOnAcpFail: sticky stays until user clears (no auto expiry retry). */
+  let stickyPinned = false;
+
+  function stickyMsFromConfig() {
+    try {
+      const cfg = typeof getConfig === 'function' ? getConfig() || {} : {};
+      const envMin = Number(process.env.GROKCODE_STICKY_HEADLESS_MIN);
+      const n = Number.isFinite(envMin) && envMin > 0 ? envMin : Number(cfg.stickyHeadlessMinutes);
+      if (Number.isFinite(n) && n >= 1 && n <= 120) return Math.round(n) * 60 * 1000;
+    } catch {
+      /* ignore */
+    }
+    return 30 * 60 * 1000;
+  }
+
+  function preferHeadlessPinned() {
+    try {
+      const cfg = typeof getConfig === 'function' ? getConfig() || {} : {};
+      return Boolean(cfg.preferHeadlessOnAcpFail);
+    } catch {
+      return false;
+    }
+  }
 
   function stickyReasonLabel(reason) {
     const r = String(reason || '');
@@ -218,21 +240,31 @@ function createAgent({ getConfig, workspaceRoot, emit, reportStreamTelemetry } =
     }
     if (r === 'acp_cold') return 'ACP 冷启动失败';
     if (r === 'acp_sticky') return '沿用上次 ACP 失败（sticky headless）';
+    if (r === 'acp_sticky_expired_retry') return 'sticky 已到期，正在重试 ACP';
     return r || 'ACP 不可用';
   }
 
   function getTransportState() {
     const now = Date.now();
-    const sticky = stickyHeadlessUntil > now;
+    const sticky = stickyHeadlessUntil > now || (stickyPinned && Boolean(stickyHeadlessReason));
+    const minsCfg = Math.round(stickyMsFromConfig() / 60000);
     return {
       stickyHeadless: sticky,
-      stickyUntil: sticky ? stickyHeadlessUntil : 0,
-      stickyRemainingMs: sticky ? Math.max(0, stickyHeadlessUntil - now) : 0,
+      stickyUntil: sticky && !stickyPinned ? stickyHeadlessUntil : stickyPinned ? 0 : 0,
+      stickyRemainingMs:
+        sticky && !stickyPinned ? Math.max(0, stickyHeadlessUntil - now) : stickyPinned ? -1 : 0,
       stickyReason: sticky ? stickyHeadlessReason : '',
       stickyReasonLabel: sticky ? stickyReasonLabel(stickyHeadlessReason) : '',
       stickyMinutes: sticky
-        ? Math.max(1, Math.ceil((stickyHeadlessUntil - now) / 60000))
+        ? stickyPinned
+          ? minsCfg
+          : Math.max(1, Math.ceil((stickyHeadlessUntil - now) / 60000))
         : 0,
+      stickyPinned: Boolean(stickyPinned && sticky),
+      stickyConfiguredMinutes: minsCfg,
+      preferHeadlessOnAcpFail: preferHeadlessPinned(),
+      noToolStream: sticky,
+      degrade: sticky,
     };
   }
 
@@ -251,22 +283,27 @@ function createAgent({ getConfig, workspaceRoot, emit, reportStreamTelemetry } =
   }
 
   function clearStickyHeadless(opts = {}) {
-    const had = stickyHeadlessUntil > Date.now() || stickyHeadlessReason;
+    const had =
+      stickyHeadlessUntil > Date.now() || stickyHeadlessReason || stickyPinned;
     stickyHeadlessUntil = 0;
     stickyHeadlessReason = '';
-    streamDebug('sticky headless cleared', { force: true });
+    stickyPinned = false;
+    streamDebug(`sticky headless cleared by=${opts.by || 'user'}`, { force: true });
     emitTransportState({ cleared: true, by: opts.by || 'user' });
     return { ok: true, cleared: Boolean(had) };
   }
 
   function armStickyHeadless(reason) {
     stickyHeadlessReason = String(reason || 'acp_stdio_403');
-    stickyHeadlessUntil = Date.now() + STICKY_HEADLESS_MS;
+    const pin = preferHeadlessPinned();
+    stickyPinned = pin;
+    const ms = stickyMsFromConfig();
+    stickyHeadlessUntil = pin ? Date.now() + 365 * 24 * 60 * 60 * 1000 : Date.now() + ms;
     streamDebug(
-      `sticky headless armed reason=${stickyHeadlessReason} until=${new Date(stickyHeadlessUntil).toISOString()}`,
+      `sticky headless armed reason=${stickyHeadlessReason} pinned=${pin ? 1 : 0} until=${new Date(stickyHeadlessUntil).toISOString()} ms=${ms}`,
       { force: true }
     );
-    emitTransportState({ armed: true });
+    emitTransportState({ armed: true, stickyPinned: pin });
   }
   /**
    * taskIds we intentionally stopped (user stop / replace / external cleanup).
@@ -470,22 +507,52 @@ function createAgent({ getConfig, workspaceRoot, emit, reportStreamTelemetry } =
       return runHeadless(opts);
     }
     // auto + recent ACP stdio failure: go headless first (still stream chat/Live text)
+    // sticky expired → fall through to ACP (auto-retry) unless pinned prefer-headless
     if (
       transport === 'auto' &&
-      stickyHeadlessUntil > Date.now() &&
+      stickyHeadlessReason &&
+      stickyHeadlessUntil > 0 &&
+      stickyHeadlessUntil <= Date.now() &&
+      !stickyPinned &&
+      !opts?._forceAcp
+    ) {
+      streamDebug(
+        `sticky expired — auto-retry ACP (was ${stickyHeadlessReason})`,
+        { force: true }
+      );
+      stickyHeadlessUntil = 0;
+      // keep reason only for log; clear so getTransportState is clean if ACP ok
+      const prev = stickyHeadlessReason;
+      stickyHeadlessReason = '';
+      try {
+        opts?.emit?.('agent:phase', {
+          taskId: opts.taskId || 'default',
+          phase: 'boot',
+          detail: `sticky 已到期，重试 ACP（上次 ${prev}）…`,
+        });
+      } catch {
+        /* ignore */
+      }
+      emitTransportState({ expiredRetry: true, previousReason: prev });
+    }
+    if (
+      transport === 'auto' &&
+      (stickyHeadlessUntil > Date.now() || stickyPinned) &&
+      stickyHeadlessReason &&
       !opts?._forceAcp &&
       process.env.GROKCODE_FORCE_ACP !== '1'
     ) {
       streamDebug(
-        `sticky headless (ACP recently failed; until=${new Date(stickyHeadlessUntil).toISOString()})`,
+        `sticky headless (ACP recently failed; pinned=${stickyPinned ? 1 : 0} until=${new Date(stickyHeadlessUntil).toISOString()})`,
         { force: true }
       );
       try {
         opts?.emit?.('agent:phase', {
           taskId: opts.taskId || 'default',
           phase: 'boot',
-          detail:
-            '跳过 ACP（上次 agent 路径失败），直接 headless 流式…',
+          detail: stickyPinned
+            ? '跳过 ACP（已固定 headless，点「重试 ACP」可恢复）…'
+            : '跳过 ACP（上次 agent 路径失败），直接 headless 流式…',
         });
       } catch {
         /* ignore */
@@ -2136,8 +2203,8 @@ function createAgent({ getConfig, workspaceRoot, emit, reportStreamTelemetry } =
         reason === 'acp_sticky' ||
         reason === 'acp_cold';
       const headlessDetail = fromAcpPath
-        ? `已降级 headless · ${stickyReasonLabel(reason)} · 无 tool 流`
-        : 'headless 传输（无工具卡片）';
+        ? `已降级 headless · 文本可流 · 工具/Diff 写流不可用 · ${stickyReasonLabel(reason)}`
+        : 'headless 传输 · 文本可流 · 无工具卡片';
       const st = getTransportState();
       emit('agent:phase', {
         taskId,
@@ -2317,7 +2384,7 @@ function createAgent({ getConfig, workspaceRoot, emit, reportStreamTelemetry } =
           if (!firstTokenAtHl) {
             setPhase(
               'running',
-              `等待模型首包… ${silentSec}s · headless · 总 ${totalSec}s`
+              `等待模型首包… ${silentSec}s · 无工具事件 · headless · 总 ${totalSec}s`
             );
           } else if (toolDepth > 0) {
             setPhase(
@@ -2327,7 +2394,7 @@ function createAgent({ getConfig, workspaceRoot, emit, reportStreamTelemetry } =
           } else if (silentSec >= 2) {
             setPhase(
               'running',
-              `等待模型继续… ${silentSec}s（段间静默）· 总 ${totalSec}s`
+              `等待模型继续… ${silentSec}s · 无工具事件 · headless · 总 ${totalSec}s`
             );
           }
         }, 500);

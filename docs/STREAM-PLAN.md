@@ -1,7 +1,7 @@
 # Long-horizon plan: streaming output reliability
 
 **Owner:** GrokCode host (Electron) · **Upstream:** xai-org/grok-build  
-**Status:** Active (2026-07-26) · **Shipped through 1.47.0** (paint + **execution route UX**) · **Next:** upstream 3.2–3.3; route polish  
+**Status:** Active (2026-07-26) · **Shipped through 1.47.9** (paint + degrade UI + **Doctor ACP probe** + sticky config) · **Next:** upstream 3.2–3.3; route polish  
 **Goal:** Users never see a “frozen black box” during long turns; text/tools
 progress is continuous, fair across multi-task, and diagnosable when silence
 is CLI-side.

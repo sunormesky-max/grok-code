@@ -81,14 +81,21 @@
     const host = $('#doctorResults');
     if (!host) return;
     const probeEl = $('#cfgDoctorProbe');
+    const probeAcpEl = $('#cfgDoctorProbeAcp');
     const probePrompt =
       opts.probePrompt === true ||
       (probeEl ? Boolean(probeEl.checked) : false);
-    host.innerHTML = probePrompt
-      ? '<div class="muted pad">体检中…（含 grok -p 探测，可能需数十秒）</div>'
-      : '<div class="muted pad">体检中…</div>';
+    const probeAcp =
+      opts.probeAcp === true ||
+      (probeAcpEl ? Boolean(probeAcpEl.checked) : false);
+    host.innerHTML =
+      probeAcp || probePrompt
+        ? `<div class="muted pad">体检中…${probeAcp ? '（含 ACP 探测）' : ''}${
+            probePrompt ? '（含 grok -p）' : ''
+          } 可能需数十秒</div>`
+        : '<div class="muted pad">体检中…</div>';
     try {
-      const report = await window.grok.doctorRun({ probePrompt });
+      const report = await window.grok.doctorRun({ probePrompt, probeAcp });
       host.innerHTML = `
         <div class="doctor-summary ${report.ready ? 'ok' : 'bad'}">${esc(report.summary)}</div>
         ${(report.checks || [])
@@ -97,7 +104,25 @@
               c.id === 'tool_in_progress' ||
               c.id === 'in_progress' ||
               /InProgress|长工具/i.test(String(c.name || ''));
+            const isAcpProbe = c.id === 'acp_probe';
             let actions = '';
+            if (isAcpProbe && !c.skipped) {
+              const v = String(c.verdict || '');
+              if (v === 'ok') {
+                actions = `<div class="di-actions di-ok-note">${esc(
+                  'ACP 可用 — 已尝试清除 sticky；下次发送走 agent stdio'
+                )}</div>`;
+              } else if (v === 'stdio_403' || v === 'auth') {
+                actions = `<div class="di-actions">
+                  <button type="button" class="btn small primary" data-doc-act="retry-acp">${esc(
+                    '清除 sticky · 重试 ACP'
+                  )}</button>
+                  <button type="button" class="btn small ghost" data-doc-act="force-headless">${esc(
+                    '强制 headless'
+                  )}</button>
+                </div>`;
+              }
+            }
             if (isInProgress) {
               if (c.level === 'ok') {
                 actions = `<div class="di-actions di-ok-note">${esc(
@@ -131,11 +156,36 @@
           })
           .join('')}`;
       host.querySelectorAll('[data-doc-act]').forEach((btn) => {
-        btn.addEventListener('click', () => {
+        btn.addEventListener('click', async () => {
           const act = btn.getAttribute('data-doc-act');
           if (act === 'open-patches') openPatchesFolder();
           else if (act === 'copy-feedback') copyUpstreamFeedback();
           else if (act === 'mark-patched') markPatchedCliUi();
+          else if (act === 'retry-acp') {
+            try {
+              await window.grok.clearStickyHeadless?.({ by: 'doctor_ui' });
+              if (typeof window.toast === 'function') {
+                window.toast('已清除 sticky — 下次发送再试 ACP', 'ok');
+              }
+            } catch (e) {
+              if (typeof window.toast === 'function') {
+                window.toast(e?.message || String(e), 'err');
+              }
+            }
+          } else if (act === 'force-headless') {
+            try {
+              await window.grok.setConfig?.({ agentTransport: 'headless' });
+              const tr = document.getElementById('cfgAgentTransport');
+              if (tr) tr.value = 'headless';
+              if (typeof window.toast === 'function') {
+                window.toast('已设为 headless（仅文本流）', 'ok');
+              }
+            } catch (e) {
+              if (typeof window.toast === 'function') {
+                window.toast(e?.message || String(e), 'err');
+              }
+            }
+          }
         });
       });
       // 同步顶栏 CLI

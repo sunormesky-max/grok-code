@@ -212,6 +212,30 @@ function testDiagnosticsShape() {
   const autoT = diag.checkHeadlessTransport({ agentTransport: 'auto' });
   assert.equal(autoT.level, 'ok');
   assert.equal(autoT.noToolStream, false);
+  // 1.47.9 ACP probe classifier (pure)
+  assert.equal(typeof diag.classifyAcpProbeBlob, 'function');
+  assert.equal(typeof diag.runDoctorAsync, 'function');
+  assert.equal(
+    diag.classifyAcpProbeBlob(
+      'API error (status 403 Forbidden): Grok Build is coming soon. You don\'t have access now.'
+    ),
+    'stdio_403'
+  );
+  assert.equal(
+    diag.classifyAcpProbeBlob('Transport channel closed, when Auth(AuthorizationRequired)'),
+    'auth'
+  );
+  assert.equal(
+    diag.classifyAcpProbeBlob(
+      'Auth(AuthorizationRequired)\n403 Forbidden coming soon'
+    ),
+    'stdio_403'
+  );
+  assert.equal(diag.classifyAcpProbeBlob('spawn ENOENT grok'), 'cold');
+  assert.equal(diag.classifyAcpProbeBlob('request timed out'), 'timeout');
+  const skippedAcp = diag.runDoctor({}).checks.find((c) => c.id === 'acp_probe');
+  assert.ok(skippedAcp);
+  assert.equal(skippedAcp.skipped, true);
   // Env marker
   const prev = process.env.GROKCODE_PATCHED_CLI;
   process.env.GROKCODE_PATCHED_CLI = '1';
@@ -574,9 +598,22 @@ function testAgentExports() {
   const ts1 = agent.getTransportState();
   assert.equal(ts1.stickyHeadless, true);
   assert.ok(/403|ACP/i.test(ts1.stickyReasonLabel || ''));
+  assert.ok(ts1.stickyConfiguredMinutes >= 1);
   const clr = agent.clearStickyHeadless({ by: 'test' });
   assert.equal(clr.ok, true);
   assert.equal(agent.getTransportState().stickyHeadless, false);
+  // pinned sticky (prefer headless on fail)
+  const agentPin = createAgent({
+    getConfig: () => ({ preferHeadlessOnAcpFail: true, stickyHeadlessMinutes: 15 }),
+    workspaceRoot: root,
+    emit: () => {},
+  });
+  agentPin.armStickyHeadless('acp_auth');
+  const tsp = agentPin.getTransportState();
+  assert.equal(tsp.stickyHeadless, true);
+  assert.equal(tsp.stickyPinned, true);
+  agentPin.clearStickyHeadless({ by: 'test' });
+  assert.equal(agentPin.getTransportState().stickyPinned, false);
   const dual = humanizeAgentError(
     'Transport channel closed, when Auth(AuthorizationRequired)\n' +
       'API error (status 403 Forbidden): Grok Build is coming soon. You don\'t have access now.'

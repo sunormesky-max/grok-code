@@ -465,6 +465,14 @@ function checkHeadlessTransport(cfg = {}) {
   const t = String(
     process.env.GROKCODE_AGENT_TRANSPORT || cfg.agentTransport || 'auto'
   ).toLowerCase();
+  const stickyMin = (() => {
+    const n = Number(
+      process.env.GROKCODE_STICKY_HEADLESS_MIN || cfg.stickyHeadlessMinutes || 30
+    );
+    if (Number.isFinite(n) && n >= 1 && n <= 120) return Math.round(n);
+    return 30;
+  })();
+  const preferHl = Boolean(cfg.preferHeadlessOnAcpFail);
   if (t === 'headless' || t === 'streaming-json') {
     return {
       id: 'transport_tools',
@@ -499,11 +507,278 @@ function checkHeadlessTransport(cfg = {}) {
     name: '传输与工具流',
     ok: true,
     level: 'ok',
-    detail:
-      'agentTransport=auto：优先 ACP；失败 sticky headless 30 分钟（≠ Build 未开通）。界面「已降级 headless」+ 重试 ACP。',
+    detail: [
+      `agentTransport=auto：优先 ACP；失败 sticky headless ${stickyMin} 分钟（≠ Build 未开通）。`,
+      preferHl
+        ? '已开「ACP 失败后保持 headless」：到期不自动再冷试 ACP，需点重试 ACP。'
+        : 'sticky 到期后下次发送会自动再试 ACP。',
+      '界面「已降级 headless」+ 重试 ACP；Doctor 可勾选「探测 ACP」。',
+    ].join('\n'),
     transport: t || 'auto',
     noToolStream: false,
+    stickyHeadlessMinutes: stickyMin,
+    preferHeadlessOnAcpFail: preferHl,
     fix: null,
+  };
+}
+
+/**
+ * Classify ACP probe / agent-stdio failure blobs (pure — unit-tested).
+ * @returns {'ok'|'auth'|'stdio_403'|'cold'|'timeout'|'unknown'}
+ */
+function classifyAcpProbeBlob(blob, err) {
+  const b = String(blob || '');
+  const low = b.toLowerCase();
+  if (!b.trim() && !err) return 'unknown';
+  const auth =
+    /authorizationrequired|auth\(authorization|re-authentication|session expired|not authenticated|login required/i.test(
+      b
+    );
+  const stdio403 =
+    /coming soon|don't have access|do not have access|not have access/i.test(b) ||
+    ((/403/.test(b) || err?.httpStatus === 403) &&
+      /forbidden|access|grok build|cli-chat-proxy|responses/i.test(b)) ||
+    (/internal error/i.test(b) && /403|coming soon|access/i.test(b));
+  if (auth && stdio403) return 'stdio_403'; // dual: still agent-path; login may help
+  if (auth) return 'auth';
+  if (stdio403) return 'stdio_403';
+  if (/ENOENT|spawn |initialize|not writable|找不到 Grok|EPERM/i.test(b)) {
+    return 'cold';
+  }
+  if (/timeout|timed out|ETIMEDOUT/i.test(low) || err?.code === 'ETIMEDOUT') {
+    return 'timeout';
+  }
+  return 'unknown';
+}
+
+/**
+ * Live ACP agent-stdio probe: initialize → authenticate → session/new → short prompt.
+ * Classifies auth vs 403 vs ok without claiming Build closed.
+ * @param {string|null} bin
+ * @param {{ cwd?: string, timeoutMs?: number }} [opts]
+ */
+async function probeAcpAgentPath(bin, opts = {}) {
+  const id = 'acp_probe';
+  const name = 'ACP agent 路径探测';
+  if (!bin) {
+    return {
+      id,
+      name,
+      ok: false,
+      level: 'bad',
+      verdict: 'cold',
+      detail: '无 CLI 二进制，跳过 ACP 探测',
+      fix: '先修好 Grok CLI 路径',
+      skipped: false,
+    };
+  }
+  const timeoutMs = Math.min(
+    90_000,
+    Math.max(8_000, Number(opts.timeoutMs || process.env.GROKCODE_DOCTOR_ACP_MS) || 28_000)
+  );
+  const cwd =
+    (opts.cwd && fs.existsSync(opts.cwd) && opts.cwd) ||
+    os.tmpdir();
+  const t0 = Date.now();
+  let stderrAcc = '';
+  let stage = 'start';
+  /** @type {import('./acp-client').AcpClient | null} */
+  let client = null;
+  try {
+    const { AcpClient } = require('./acp-client');
+    client = new AcpClient({
+      bin,
+      args: ['agent', '--always-approve', '--no-leader', 'stdio'],
+      autoApprove: true,
+      onStderr: (s) => {
+        stderrAcc = (stderrAcc + String(s || '')).slice(-8000);
+      },
+    });
+    stage = 'initialize';
+    await client.initialize();
+    stage = 'authenticate';
+    try {
+      await client.authenticate('cached_token');
+    } catch (authErr) {
+      const blob = `${authErr?.message || authErr}\n${stderrAcc}`;
+      const verdict = classifyAcpProbeBlob(blob, authErr);
+      const elapsed = Date.now() - t0;
+      return {
+        id,
+        name,
+        ok: false,
+        level: verdict === 'auth' || verdict === 'stdio_403' ? 'warn' : 'bad',
+        verdict: verdict === 'unknown' ? 'auth' : verdict,
+        detail: [
+          `authenticate 失败 · ${elapsed}ms · stage=${stage}`,
+          `分类：${verdict === 'unknown' ? 'auth' : verdict}（≠ Build 未开通）`,
+          String(authErr?.message || authErr).slice(0, 240),
+        ].join('\n'),
+        elapsedMs: elapsed,
+        stage,
+        fix:
+          verdict === 'auth' || verdict === 'stdio_403'
+            ? '终端 grok login 后点「重试 ACP」；若仍 403 则 headless 文本-only'
+            : '检查 CLI 与网络',
+      };
+    }
+    stage = 'session/new';
+    const sess = await client.newSession(cwd);
+    const sessionId =
+      sess?.sessionId || sess?.session_id || sess?.id || null;
+    if (!sessionId) {
+      throw new Error('session/new 未返回 sessionId');
+    }
+    stage = 'prompt';
+    let gotChunk = false;
+    const prevOnUpdate = client.onUpdate;
+    client.onUpdate = (update) => {
+      try {
+        const u = update || {};
+        const st = String(u.sessionUpdate || u.session_update || u.type || '');
+        if (
+          /agent_message_chunk|agent_thought_chunk|tool_call|message/i.test(st) ||
+          u.text ||
+          u.content
+        ) {
+          gotChunk = true;
+        }
+      } catch {
+        /* ignore */
+      }
+      try {
+        prevOnUpdate?.(update);
+      } catch {
+        /* ignore */
+      }
+    };
+    const promptP = client.prompt(sessionId, 'Reply with exactly: pong', timeoutMs);
+    const result = await Promise.race([
+      promptP.then((r) => ({ kind: 'done', r })).catch((e) => ({ kind: 'err', e })),
+      new Promise((resolve) =>
+        setTimeout(() => resolve({ kind: 'timeout' }), timeoutMs)
+      ),
+    ]);
+    if (result.kind === 'timeout') {
+      try {
+        await client.cancel(sessionId);
+      } catch {
+        /* ignore */
+      }
+      const elapsed = Date.now() - t0;
+      if (gotChunk) {
+        return {
+          id,
+          name,
+          ok: true,
+          level: 'ok',
+          verdict: 'ok',
+          detail: `ACP stdio 已出 chunk · ${elapsed}ms（探测超时前已有流，路径可用）`,
+          elapsedMs: elapsed,
+          stage,
+          fix: null,
+        };
+      }
+      // Handshake OK but slow TTFT — not a hard fail
+      return {
+        id,
+        name,
+        ok: true,
+        level: 'warn',
+        verdict: 'timeout',
+        detail: [
+          `握手成功但 ${elapsed}ms 内无首包（可能 TTFT 很长，≠ 403）。`,
+          'agent stdio 路径似可用；长等待属模型/网络。',
+        ].join('\n'),
+        elapsedMs: elapsed,
+        stage,
+        fix: '可再试正式发送；若日志出现 403 再降级 headless',
+      };
+    }
+    if (result.kind === 'err') {
+      const e = result.e;
+      const blob = `${e?.message || e}\n${stderrAcc}`;
+      const verdict = classifyAcpProbeBlob(blob, e);
+      const elapsed = Date.now() - t0;
+      const soft = verdict === 'auth' || verdict === 'stdio_403' || verdict === 'timeout';
+      return {
+        id,
+        name,
+        ok: soft,
+        level: soft ? 'warn' : 'bad',
+        verdict,
+        detail: [
+          `session/prompt 失败 · ${elapsed}ms · stage=${stage}`,
+          `分类：${verdict}（≠ Build 产品未开通；headless/TUI 可能仍可用）`,
+          String(e?.message || e).slice(0, 280),
+        ].join('\n'),
+        elapsedMs: elapsed,
+        stage,
+        fix:
+          verdict === 'auth'
+            ? '终端执行 grok login，然后设置里点「重试 ACP」'
+            : verdict === 'stdio_403'
+              ? 'agent stdio API 仍 403：可强制 headless，或等服务端放行后再重试 ACP'
+              : '查看 %TEMP%\\grokcode-stream.log',
+      };
+    }
+    const elapsed = Date.now() - t0;
+    return {
+      id,
+      name,
+      ok: true,
+      level: 'ok',
+      verdict: 'ok',
+      detail: `ACP agent stdio 可用 · ${elapsed}ms · 已完成短 prompt`,
+      elapsedMs: elapsed,
+      stage: 'done',
+      fix: null,
+    };
+  } catch (err) {
+    const blob = `${err?.message || err}\n${stderrAcc}`;
+    const verdict = classifyAcpProbeBlob(blob, err);
+    const elapsed = Date.now() - t0;
+    const soft = verdict === 'auth' || verdict === 'stdio_403' || verdict === 'timeout';
+    return {
+      id,
+      name,
+      ok: soft || verdict === 'unknown',
+      level: soft || verdict === 'unknown' ? 'warn' : 'bad',
+      verdict: verdict === 'unknown' ? 'cold' : verdict,
+      detail: [
+        `ACP 探测失败 · ${elapsed}ms · stage=${stage}`,
+        `分类：${verdict === 'unknown' ? 'cold/unknown' : verdict}`,
+        String(err?.message || err).slice(0, 280),
+      ].join('\n'),
+      elapsedMs: elapsed,
+      stage,
+      fix:
+        verdict === 'auth'
+          ? 'grok login 后重试'
+          : verdict === 'stdio_403'
+            ? 'stdio 403：用 headless 或稍后重试 ACP'
+            : '检查 grok 路径与进程权限',
+    };
+  } finally {
+    try {
+      client?.kill?.();
+    } catch {
+      /* ignore */
+    }
+  }
+}
+
+function acpProbeSkippedPlaceholder() {
+  return {
+    id: 'acp_probe',
+    name: 'ACP agent 路径探测',
+    ok: true,
+    level: 'ok',
+    verdict: 'skipped',
+    detail:
+      '未运行（需网络）。体检时勾选「探测 ACP」或设 GROKCODE_DOCTOR_ACP=1 — 分类 auth / stdio_403 / ok',
+    fix: null,
+    skipped: true,
   };
 }
 
@@ -643,6 +918,12 @@ function runDoctor(cfg = {}, opts = {}) {
     process.env.GROKCODE_DOCTOR_PROBE === '1' ||
     process.env.GROKCODE_DOCTOR_PROBE === 'true';
   checks.push(checkGrokPromptProbe(bin, { run: wantProbe }));
+  // ACP probe is async — sync doctor inserts placeholder; runDoctorAsync replaces it
+  if (opts._acpCheck) {
+    checks.push(opts._acpCheck);
+  } else {
+    checks.push(acpProbeSkippedPlaceholder());
+  }
   checks.push(
     checkToolInProgressPatch({
       grokPath: cfg.grokPath,
@@ -837,8 +1118,52 @@ function exportDiagnostics(cfg = {}, extra = {}) {
   return { ok: true, dir, file: reportFile, streamLog: streamLogMeta };
 }
 
+/**
+ * Async doctor: optional live ACP agent-stdio probe (auth vs 403 vs ok).
+ * @param {object} cfg
+ * @param {{ probePrompt?: boolean, probeAcp?: boolean, acpCwd?: string }} [opts]
+ */
+async function runDoctorAsync(cfg = {}, opts = {}) {
+  let acpCheck = null;
+  const wantAcp =
+    opts.probeAcp === true ||
+    process.env.GROKCODE_DOCTOR_ACP === '1' ||
+    process.env.GROKCODE_DOCTOR_ACP === 'true';
+  if (wantAcp) {
+    const probe = probeGrok(cfg.grokPath);
+    const bin = probe.binary || resolveGrokBinary(cfg.grokPath);
+    acpCheck = await probeAcpAgentPath(bin, {
+      cwd: opts.acpCwd || process.cwd(),
+    });
+  }
+  const report = runDoctor(cfg, {
+    probePrompt: opts.probePrompt,
+    _acpCheck: acpCheck || undefined,
+  });
+  if (acpCheck) {
+    const warnExtra =
+      acpCheck.level === 'warn' || acpCheck.level === 'bad' ? 1 : 0;
+    if (warnExtra && acpCheck.level === 'warn') {
+      report.warnCount = (report.warnCount || 0) + 0; // already counted in checks
+    }
+    if (acpCheck.verdict === 'ok') {
+      report.summary = report.ready
+        ? report.warnCount
+          ? `环境可用（含 ACP ok · ${report.warnCount} 项建议）`
+          : '环境就绪 · ACP agent 路径可用'
+        : report.summary;
+    } else if (acpCheck.verdict === 'stdio_403' || acpCheck.verdict === 'auth') {
+      report.summary = report.ready
+        ? `环境可用 · ACP ${acpCheck.verdict}（≠ Build 未开通；可用 headless）`
+        : report.summary;
+    }
+  }
+  return report;
+}
+
 module.exports = {
   runDoctor,
+  runDoctorAsync,
   exportDiagnostics,
   checkEditors,
   resolvePatchesDir,
@@ -846,4 +1171,6 @@ module.exports = {
   checkToolInProgressPatch,
   checkHeadlessTransport,
   detectPatchedCli,
+  classifyAcpProbeBlob,
+  probeAcpAgentPath,
 };
