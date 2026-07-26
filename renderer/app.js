@@ -10446,16 +10446,21 @@ function bindAgentEvents() {
         task._routeFirstText = true;
         appendExecRouteStep(task, { kind: 'streaming', detail: 'speaking…' });
       }
-      // Active task: paint chat **now** (sync). StreamFair rAF alone felt like
-      // "no streaming" when tools/phase work crowded the frame or gate was quiet.
+      const paintText = (shown, streaming, t) => {
+        upsertAssistant(shown, streaming, t);
+        StreamFair.scheduleLiveMirror(t);
+      };
+      // Active: progressive reveal if big jump (CLI burst dump); else sync paint
       if (isActiveTask(task)) {
-        upsertAssistant(task.streamBuf || '', true, task);
-        // First token: paint Live mirror immediately (no 32ms throttle)
+        const reveal = window.GrokStreamReveal;
+        if (reveal?.revealTo) {
+          reveal.revealTo(task, 'text', task.streamBuf || '', paintText, { jumpMin: 36 });
+        } else {
+          paintText(task.streamBuf || '', true, task);
+        }
         if (prevLen === 0) {
           paintLiveStreamMirrors(task);
           StreamFair.lastLiveMirror = 0;
-        } else {
-          StreamFair.scheduleLiveMirror(task);
         }
         if (task.running) {
           const now = performance.now();
@@ -10466,7 +10471,6 @@ function bindAgentEvents() {
         }
       } else {
         scheduleStreamPaint(task);
-        // Background tasks still need tab strip live counts
         StreamFair.scheduleTabs();
       }
     }),
@@ -10482,13 +10486,22 @@ function bindAgentEvents() {
         task._routeFirstThought = true;
         appendExecRouteStep(task, { kind: 'thinking', detail: 'thinking…' });
       }
+      const paintThought = (shown, streaming, t) => {
+        upsertThought(shown, streaming, t);
+        StreamFair.scheduleLiveMirror(t);
+      };
       if (isActiveTask(task)) {
-        upsertThought(task.thoughtBuf || '', true, task);
+        const reveal = window.GrokStreamReveal;
+        if (reveal?.revealTo) {
+          reveal.revealTo(task, 'thought', task.thoughtBuf || '', paintThought, {
+            jumpMin: 36,
+          });
+        } else {
+          paintThought(task.thoughtBuf || '', true, task);
+        }
         if (prevLen === 0) {
           paintLiveStreamMirrors(task);
           StreamFair.lastLiveMirror = 0;
-        } else {
-          StreamFair.scheduleLiveMirror(task);
         }
         if (task.running) {
           const now = performance.now();
@@ -10930,6 +10943,12 @@ function bindAgentEvents() {
       if (isActiveTask(task)) paintExecRouteStrip(task);
       if (d?.text && d.text.length > (task.streamBuf || '').length) {
         task.streamBuf = d.text;
+      }
+      // Snap progressive reveal so finalize shows full text
+      try {
+        window.GrokStreamReveal?.snapReveal?.(task, 'both');
+      } catch {
+        /* ignore */
       }
       if (typeof d?.thought === 'string' && d.thought.length > (task.thoughtBuf || '').length) {
         task.thoughtBuf = d.thought;

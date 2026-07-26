@@ -1796,6 +1796,38 @@ function testStreamIpcCoalesceOrder() {
   console.log('ok  stream IPC ordered coalesce queue');
 }
 
+function testStreamReveal() {
+  const rev = require(path.join(root, 'renderer', 'stream-reveal.js'));
+  assert.ok(rev.shouldReveal(0, 100));
+  assert.ok(!rev.shouldReveal(0, 10));
+  assert.equal(rev.advanceReveal('', 'hello world'), 'hel');
+  assert.ok(rev.advanceReveal('hel', 'hello world').length > 3);
+  assert.ok(rev.stepForRemaining(500) >= rev.stepForRemaining(10));
+  // Snap / diverge
+  assert.equal(rev.advanceReveal('abcXYZ', 'abcDEF'), 'abcDEF');
+  // Small growth paints immediately
+  const paints = [];
+  const task = { streamBuf: 'hi', _revealText: '' };
+  rev.revealTo(task, 'text', 'hi', (shown) => paints.push(shown), { jumpMin: 36 });
+  assert.deepEqual(paints, ['hi']);
+  assert.equal(task._revealText, 'hi');
+  // Large jump schedules frames (polyfill setTimeout in Node)
+  const long = 'x'.repeat(80);
+  task.streamBuf = long;
+  rev.revealTo(task, 'text', long, (shown) => paints.push(shown), { jumpMin: 36 });
+  // At least one scheduled frame will paint more than 'hi'
+  return new Promise((resolve) => {
+    setTimeout(() => {
+      assert.ok(paints.length >= 2, 'reveal should paint progressively');
+      assert.ok(paints[paints.length - 1].length > 2);
+      rev.snapReveal(task, 'both');
+      assert.equal(task._revealText, long);
+      console.log('ok  stream progressive reveal');
+      resolve();
+    }, 80);
+  });
+}
+
 function testTelemetryStreamSummary() {
   const tel = require(path.join(root, 'electron', 'telemetry.js'));
   assert.equal(typeof tel.reportStreamSummary, 'function');
@@ -2362,6 +2394,7 @@ try {
   testThemesContrastSuggest();
   testUpdaterHelpers();
   Promise.resolve()
+    .then(() => testStreamReveal())
     .then(() => testAgentExports())
     .then(() => testSessionModeNormalize())
     .then(() => testShellSafe())

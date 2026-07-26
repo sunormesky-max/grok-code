@@ -14,6 +14,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Optional: worker for multi-MB LCS; SBS hunk actions
 - Optional: wire `execution-route.reduceRouteTick` from ACP activity clock (ledger dual-bookkeep)
 
+## [1.47.7] — 2026-07-26
+
+### Fix — “等待首包 → 整段弹出” (true mid-turn break)
+
+Root cause: headless often receives many NDJSON lines in one pipe read; host
+processed them **synchronously** with **last-write-wins coalesce**, so renderer
+only painted the final full buffer after the burst.
+
+- **Headless always-immediate IPC** for text/thought (no 16ms coalesce collapse)
+- **Async line drain + `setImmediate` yield** between stream lines so Electron
+  can deliver events and the UI can paint mid-burst
+- **Close waits for drain** so `agent:done` is not early
+- **`stream-reveal.js`** — progressive paint when buffer jumps ≥36 chars (real
+  content, drip only for burst dumps; small steps still snap)
+
 ## [1.47.6] — 2026-07-26
 
 ### Fix — dialog / task strip / Live stream feel (real gaps)

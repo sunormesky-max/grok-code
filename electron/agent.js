@@ -2347,18 +2347,18 @@ function createAgent({ getConfig, workspaceRoot, emit, reportStreamTelemetry } =
       };
 
       /**
-       * Coalesce text/thought IPC to ~60fps with enqueue-order flush.
-       * Same helper as ACP path — headless NDJSON can interleave thought/text.
+       * Headless stream path: ALWAYS immediate IPC (no 16ms last-write-wins).
+       * CLI often dumps many NDJSON lines in one pipe read; coalesce collapsed
+       * that into a single "wait then full dump" paint. Tools still flush via emitT.
        */
-      const STREAM_IPC_MS = 16;
       const streamIpcHl = createStreamIpcCoalesce(
         (channel, payload) => emitT(channel, payload),
-        { intervalMs: STREAM_IPC_MS }
+        { intervalMs: 0 }
       );
-      const emitTextStream = (payload, immediate = false) =>
-        streamIpcHl.emitText(payload, immediate);
-      const emitThoughtStream = (payload, immediate = false) =>
-        streamIpcHl.emitThought(payload, immediate);
+      const emitTextStream = (payload, _immediate = true) =>
+        streamIpcHl.emitText(payload, true);
+      const emitThoughtStream = (payload, _immediate = true) =>
+        streamIpcHl.emitThought(payload, true);
       const flushStreamIpc = () => streamIpcHl.flush();
 
       const finish = (result) => {
@@ -2498,7 +2498,9 @@ function createAgent({ getConfig, workspaceRoot, emit, reportStreamTelemetry } =
       /** Pure reducer state (agent-stream.js) — mirrors finalText/thoughtText locals. */
       streamState = createStreamState({ sessionId: newSessionId });
 
+      /** @returns {boolean} true if this action emitted text/thought (need event-loop yield) */
       const applyStreamActions = (actions) => {
+        let needYield = false;
         for (const a of actions) {
           if (a.op === 'flush') {
             flushStreamIpc();
@@ -2508,21 +2510,13 @@ function createAgent({ getConfig, workspaceRoot, emit, reportStreamTelemetry } =
             if (a.channel === 'agent:text') {
               textChunksHl += 1;
               noteFirstTokenHl();
-              // First 8 chunks + every 12th: immediate IPC so chat/Live feel live
-              // under Windows Electron IPC batching (not only chunk #1).
-              const immediateText =
-                Boolean(a.immediate) ||
-                textChunksHl <= 8 ||
-                textChunksHl % 12 === 0;
-              emitTextStream(a.payload, immediateText);
+              emitTextStream(a.payload, true);
+              needYield = true;
             } else if (a.channel === 'agent:thought') {
               thoughtChunksHl += 1;
               noteFirstTokenHl();
-              const immediateThought =
-                Boolean(a.immediate) ||
-                thoughtChunksHl <= 8 ||
-                thoughtChunksHl % 12 === 0;
-              emitThoughtStream(a.payload, immediateThought);
+              emitThoughtStream(a.payload, true);
+              needYield = true;
             } else {
               if (a.channel === 'agent:tool_start') {
                 if (a.payload?.progress) {
@@ -2544,11 +2538,12 @@ function createAgent({ getConfig, workspaceRoot, emit, reportStreamTelemetry } =
         if (streamState.usage) usage = streamState.usage;
         if (streamState.stopReason != null) stopReason = streamState.stopReason;
         if (streamState.numTurns) numTurns = streamState.numTurns;
+        return needYield;
       };
 
       const handleEvent = (ev) => {
         const { actions } = reduceHeadlessEvent(streamState, ev);
-        applyStreamActions(actions);
+        return applyStreamActions(actions);
       };
 
       let lineSeq = 0;
@@ -2556,6 +2551,9 @@ function createAgent({ getConfig, workspaceRoot, emit, reportStreamTelemetry } =
       let recognized = 0;
       let unrecognized = 0;
       let nonJson = 0;
+      /** Async line queue — yield so renderer can paint between NDJSON lines */
+      const lineQueue = [];
+      let lineDrainRunning = false;
 
       const summarizeEvent = (ev, recognizedFlag) => {
         const type = String(ev?.type || '').toLowerCase() || '(no-type)';
@@ -2581,7 +2579,7 @@ function createAgent({ getConfig, workspaceRoot, emit, reportStreamTelemetry } =
 
       const consumeLine = (line) => {
         const parsed = parseNdjsonLine(line);
-        if (parsed.kind === 'empty') return;
+        if (parsed.kind === 'empty') return false;
         lineSeq += 1;
         if (parsed.kind === 'non_json') {
           nonJson += 1;
@@ -2589,8 +2587,7 @@ function createAgent({ getConfig, workspaceRoot, emit, reportStreamTelemetry } =
             `task=${taskId} line#${lineSeq} NON_JSON len=${parsed.text.length} raw=${parsed.text.slice(0, 200)}`
           );
           const { actions } = reduceNonJsonLine(streamState, parsed.text);
-          applyStreamActions(actions);
-          return;
+          return applyStreamActions(actions);
         }
         const type = String(parsed.event?.type || '').toLowerCase();
         const known = isKnownHeadlessType(type);
@@ -2601,7 +2598,34 @@ function createAgent({ getConfig, workspaceRoot, emit, reportStreamTelemetry } =
             !known ? ` raw=${JSON.stringify(parsed.event).slice(0, 240)}` : ''
           }`
         );
-        handleEvent(parsed.event);
+        return handleEvent(parsed.event);
+      };
+
+      const yieldLoop = () =>
+        new Promise((resolve) => {
+          setImmediate(resolve);
+        });
+
+      const drainLineQueue = async () => {
+        if (lineDrainRunning) return;
+        lineDrainRunning = true;
+        try {
+          while (lineQueue.length && !settled) {
+            const line = lineQueue.shift();
+            const needYield = consumeLine(line);
+            // Let Electron deliver agent:text/thought and renderer paint
+            if (needYield) await yieldLoop();
+            // Even non-stream lines: yield every 8 so close-handler isn't starved
+            else if (lineSeq % 8 === 0) await yieldLoop();
+          }
+        } finally {
+          lineDrainRunning = false;
+          if (lineQueue.length && !settled) {
+            setImmediate(() => {
+              drainLineQueue().catch(() => {});
+            });
+          }
+        }
       };
 
       child.stdout.on('data', (chunk) => {
@@ -2617,8 +2641,13 @@ function createAgent({ getConfig, workspaceRoot, emit, reportStreamTelemetry } =
           const nl = stdoutBuf[idx] === '\r' && stdoutBuf[idx + 1] === '\n' ? 2 : 1;
           const line = stdoutBuf.slice(0, idx);
           stdoutBuf = stdoutBuf.slice(idx + nl);
-          consumeLine(line);
+          lineQueue.push(line);
         }
+        drainLineQueue().catch((err) => {
+          streamDebug(`task=${taskId} line-drain err=${err?.message || err}`, {
+            force: true,
+          });
+        });
       });
 
       child.stderr.on('data', (buf) => {
@@ -2636,16 +2665,41 @@ function createAgent({ getConfig, workspaceRoot, emit, reportStreamTelemetry } =
       });
 
       child.on('close', (code) => {
-        streamDebug(
-          `=== RUN end task=${taskId} code=${code} lines=${lineSeq} chunks=${chunkSeq} known=${recognized} unknown=${unrecognized} nonJson=${nonJson} finalTextLen=${finalText.length} thoughtLen=${thoughtText.length} pendingBuf=${stdoutBuf.length}`
-        );
-        if (stdoutBuf.trim()) {
+        // Wait until async line drain finishes so last tokens paint before done
+        const finishClose = async () => {
+          // Push any trailing unterminated buffer
+          if (stdoutBuf.trim()) {
+            streamDebug(
+              `task=${taskId} flush-pending-buf len=${stdoutBuf.length} head=${stdoutBuf.slice(0, 200).replace(/\s+/g, ' ')}`
+            );
+            lineQueue.push(stdoutBuf);
+            stdoutBuf = '';
+          }
+          // Drain remaining lines (bounded wait)
+          const tDrain0 = Date.now();
+          while ((lineQueue.length || lineDrainRunning) && Date.now() - tDrain0 < 15_000) {
+            if (lineQueue.length && !lineDrainRunning) {
+              await drainLineQueue();
+            } else {
+              await yieldLoop();
+            }
+          }
           streamDebug(
-            `task=${taskId} flush-pending-buf len=${stdoutBuf.length} head=${stdoutBuf.slice(0, 200).replace(/\s+/g, ' ')}`
+            `=== RUN end task=${taskId} code=${code} lines=${lineSeq} chunks=${chunkSeq} known=${recognized} unknown=${unrecognized} nonJson=${nonJson} finalTextLen=${finalText.length} thoughtLen=${thoughtText.length} pendingBuf=${stdoutBuf.length}`,
+            { force: true }
           );
-          consumeLine(stdoutBuf);
-        }
-        stdoutBuf = '';
+          if (settled) return;
+          onHeadlessClose(code);
+        };
+        finishClose().catch((err) => {
+          streamDebug(`task=${taskId} close-drain err=${err?.message || err}`, {
+            force: true,
+          });
+          if (!settled) onHeadlessClose(code);
+        });
+      });
+
+      const onHeadlessClose = (code) => {
         if (settled) return;
 
         // Always drop map entry for this pid/task when process exits
@@ -2832,7 +2886,7 @@ function createAgent({ getConfig, workspaceRoot, emit, reportStreamTelemetry } =
             transport: 'headless',
           });
         }
-      });
+      };
     });
   }
 
