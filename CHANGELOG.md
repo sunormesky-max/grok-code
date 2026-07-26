@@ -14,6 +14,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Optional: worker for multi-MB LCS; SBS hunk actions
 - Optional: wire `execution-route.reduceRouteTick` from ACP activity clock (ledger dual-bookkeep)
 
+## [1.48.3] — 2026-07-26
+
+### Direction — Codex-like app with Grok Build as core
+
+User: “至少具备 codex 的所有功能”，以 Grok Build（本地 grok CLI）为核心。
+
+- 新增 `docs/CODEX-FEATURE-PARITY.md`，定义 Codex 式编码代理的 15 项核心功能 + 当前审计状态。
+- 确保 UI 完整实现所有功能：Live 时间线、Diff 审查（hunk keep/reject）、Plan 批准、Ask/Inbox、多项目多任务、watcher 驱动变更等。
+- Headless 增强：运行中 agent 的 `fs:changed` 现在总是推送到 Live → 即使 CLI 无丰富 tool 事件，动作可见 + 审查功能依然完整。
+- 传输不再阻挡使用，默认可用路径，让所有 Codex 功能在当前 CLI 下可达。
+
 ## [1.48.2] — 2026-07-26
 
 ### Fix — stop stranding users on hard-fail only

@@ -5885,6 +5885,16 @@ function onFsChanged(payload) {
       if (runningHere || proj.contentCache.has(rel) || proj.changes.has(rel)) {
         // 临时切到该项目上下文记录 diff（不改变 UI 激活项）
         recordFileChangeForProject(proj, rel, { reason: 'fs' });
+        // Ensure Codex-like Live visibility even in headless (no tool events): show fs changes as agent activity
+        try {
+          pushLiveEvent({
+            kind: 'write',
+            title: `文件变更 ${rel}`,
+            sub: '由 agent 产生 (fs 观察)',
+            path: rel,
+            projectId: proj.id,
+          });
+        } catch {}
       }
     }, 350)
   );
